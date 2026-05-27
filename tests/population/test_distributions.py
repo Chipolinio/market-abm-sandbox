@@ -53,7 +53,7 @@ def test_sample_from_spec_truncnorm_returns_length_n_buyers() -> None:
 
 
 def test_sample_from_spec_truncnorm_default_beta_price_all_negative() -> None:
-    """Пресет beta_price: truncnorm с a=0 → сэмплы < 0 (коэффициенты утилиты)."""
+    """Пресет beta_price: truncnorm на (-inf, 0] → сэмплы < 0 (коэффициенты утилиты)."""
     spec = BuyerPopulationConfig.default_market().beta_price
     out = sample_from_spec(spec, size=3_000, rng=np.random.default_rng(3))
     assert np.all(out < 0)

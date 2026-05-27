@@ -15,6 +15,9 @@ _SUPPORTED_FAMILIES: frozenset[str] = frozenset(
     {"lognorm", "norm", "truncnorm", "gamma", "uniform"}
 )
 
+# Усечённая нормаль на (-inf, 0] в стандартных единицах → β < 0 после loc + scale * Z.
+_TRUNC_STD_NEGATIVE: dict[str, float] = {"a": float("-inf"), "b": 0.0}
+
 
 def _build_scipy_distribution(family: str, params: dict[str, float]) -> Any:
     """Проверяет, что scipy.stats принимает family и params (чистая валидация)."""
@@ -140,15 +143,15 @@ class BuyerPopulationConfig(BaseModel):
             ),
             beta_price=DistributionSpec(
                 family="truncnorm",
-                params={"a": 0.0, "b": float("inf"), "loc": -2.0, "scale": 0.5},
+                params={**_TRUNC_STD_NEGATIVE, "loc": -2.0, "scale": 0.5},
             ),
             beta_delivery=DistributionSpec(
                 family="truncnorm",
-                params={"a": 0.0, "b": float("inf"), "loc": -0.3, "scale": 0.1},
+                params={**_TRUNC_STD_NEGATIVE, "loc": -0.3, "scale": 0.1},
             ),
             beta_rating=DistributionSpec(
                 family="truncnorm",
-                params={"a": 0.0, "b": float("inf"), "loc": -0.5, "scale": 0.2},
+                params={**_TRUNC_STD_NEGATIVE, "loc": -0.5, "scale": 0.2},
             ),
             device_type=_categorical_from_domain(
                 DEVICE_TYPES,
