@@ -1,5 +1,3 @@
-# Тесты Pydantic-конфига покупателей: DistributionSpec, CategoricalSpec, BuyerPopulationConfig.
-
 from __future__ import annotations
 
 import math

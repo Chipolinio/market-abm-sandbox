@@ -1,5 +1,3 @@
-# Тесты доменных констант: схемы buyers/sellers, категории, платформа (spec 001 §9.1).
-
 from __future__ import annotations
 
 import polars as pl

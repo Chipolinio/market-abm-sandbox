@@ -1,6 +1,3 @@
-# Доменные константы трёх ролей (покупатель, продавец, платформа): колонки, категории, dtypes.
-# Без runtime-логики и без импорта scipy/polars — только контракты для векторного ABM.
-
 from __future__ import annotations
 
 from typing import Final
