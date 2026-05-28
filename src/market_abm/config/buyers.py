@@ -1,76 +1,24 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Literal, Self
+from typing import Literal
 
-import scipy.stats
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
+from market_abm.config.common import CategoricalSpec, DistributionSpec
 from market_abm.domain.constants import DEVICE_TYPES, PVD_SEGMENTS
 
-DistributionFamily = Literal["lognorm", "norm", "truncnorm", "gamma", "uniform"]
 ActivityHourMode = Literal["uniform_discrete"]
 
-_SUPPORTED_FAMILIES: frozenset[str] = frozenset(
-    {"lognorm", "norm", "truncnorm", "gamma", "uniform"}
-)
-
-# Усечённая нормаль на (-inf, 0] в стандартных единицах → β < 0 после loc + scale * Z.
+# Truncated normal on (-inf, 0] in standardized units.
 _TRUNC_STD_NEGATIVE: dict[str, float] = {"a": float("-inf"), "b": 0.0}
-
-
-def _build_scipy_distribution(family: str, params: dict[str, float]) -> Any:
-    """Проверяет, что scipy.stats принимает family и params (чистая валидация)."""
-    return getattr(scipy.stats, family)(**params)
-
-
-class DistributionSpec(BaseModel):
-    """Спецификация одного непрерывного распределения для векторного сэмпла."""
-
-    model_config = {"frozen": True}
-
-    family: DistributionFamily
-    params: dict[str, float]
-
-    @model_validator(mode="after")
-    def scipy_params_are_valid(self) -> Self:
-        try:
-            _build_scipy_distribution(self.family, self.params)
-        except (TypeError, ValueError, AttributeError) as exc:
-            raise ValueError(
-                f"Невалидные параметры scipy.stats.{self.family}: {self.params!r}"
-            ) from exc
-        return self
-
-
-class CategoricalSpec(BaseModel):
-    """Дискретное распределение уровней категориальной колонки buyers_df."""
-
-    model_config = {"frozen": True}
-
-    levels: tuple[str, ...]
-    probabilities: tuple[float, ...]
-
-    @model_validator(mode="after")
-    def levels_match_probabilities(self) -> Self:
-        if len(self.levels) != len(self.probabilities):
-            raise ValueError(
-                "Число levels должно совпадать с числом probabilities: "
-                f"{len(self.levels)} != {len(self.probabilities)}"
-            )
-        if any(p < 0 for p in self.probabilities):
-            raise ValueError("Вероятности не могут быть отрицательными")
-        total = sum(self.probabilities)
-        if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-6):
-            raise ValueError(f"Сумма probabilities должна быть 1.0, получено {total}")
-        return self
 
 
 def _categorical_from_domain(
     domain_levels: tuple[str, ...],
     weights: dict[str, float],
 ) -> CategoricalSpec:
-    """Собирает CategoricalSpec в порядке доменных уровней (детерминированный контракт)."""
+    """Build CategoricalSpec in deterministic domain level order."""
     levels = tuple(domain_levels)
     probabilities = tuple(weights[level] for level in levels)
     return CategoricalSpec(levels=levels, probabilities=probabilities)

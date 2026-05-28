@@ -6,7 +6,7 @@ import math
 
 from pydantic import BaseModel, Field
 
-from market_abm.config.buyers import DistributionSpec
+from market_abm.config.common import DistributionSpec
 from market_abm.domain.constants import (
     DEFAULT_DEMAND_INDEX,
     MAX_PROFIT_DEMAND_HIGH_DEFAULT,

@@ -6,7 +6,7 @@ import math
 
 from pydantic import BaseModel, Field, field_validator
 
-from market_abm.config.buyers import CategoricalSpec, DistributionSpec
+from market_abm.config.common import CategoricalSpec, DistributionSpec
 from market_abm.domain.constants import STRATEGY_TYPES
 
 
