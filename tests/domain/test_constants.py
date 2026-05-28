@@ -56,9 +56,56 @@ def test_sellers_schema_contract() -> None:
     assert set(c.STRATEGY_TYPES) == {"MaxProfit", "MaxVolume", "RatingMaximizer"}
 
 
+def test_listings_column_constants_exist_and_match_names() -> None:
+    assert c.COL_LISTING_ID == "listing_id"
+    assert c.COL_UNIT_COST == "unit_cost"
+    assert c.COL_PRICE == "price"
+    assert c.COL_DEMAND_INDEX == "demand_index"
+
+
+def test_listings_columns_contract_order_is_stable() -> None:
+    assert c.LISTINGS_COLUMNS == (
+        c.COL_LISTING_ID,
+        c.COL_SELLER_ID,
+        c.COL_UNIT_COST,
+        c.COL_PRICE,
+        c.COL_DEMAND_INDEX,
+    )
+
+
+def test_listings_schema_dtypes_match_columns_one_to_one() -> None:
+    assert tuple(c.LISTINGS_SCHEMA_DTYPES.keys()) == c.LISTINGS_COLUMNS
+    assert c.LISTINGS_SCHEMA_DTYPES == {
+        c.COL_LISTING_ID: "Int32",
+        c.COL_SELLER_ID: "Int32",
+        c.COL_UNIT_COST: "Float32",
+        c.COL_PRICE: "Float32",
+        c.COL_DEMAND_INDEX: "Float32",
+    }
+
+
 def test_platform_defaults() -> None:
     assert set(c.PLATFORM_DEFAULTS.keys()) == set(c.PLATFORM_KEYS)
     assert all(0.0 < v < 1.0 for v in c.PLATFORM_DEFAULTS.values())
+
+
+def test_market_guardrails_are_economically_consistent() -> None:
+    assert c.MARGIN_FLOOR_MIN > 0.0
+    assert c.MARGIN_FLOOR_DEFAULT_MAX <= c.MARGIN_FLOOR_HARD_MAX
+    assert c.MARGIN_FLOOR_HARD_MAX < 1.0
+    total_fees = (
+        c.PLATFORM_DEFAULTS[c.COL_BASE_COMMISSION]
+        + c.PLATFORM_DEFAULTS[c.COL_LOGISTIC_FEE]
+    )
+    assert c.MARGIN_FLOOR_HARD_MAX < (1.0 - total_fees)
+
+
+def test_repricing_speed_and_demand_defaults_are_safe() -> None:
+    assert c.REPRICING_SPEED_MIN == 1
+    assert c.REPRICING_SPEED_MAX == 255
+    assert c.DEFAULT_DEMAND_INDEX == 1.0
+    assert c.MAX_PROFIT_DEMAND_HIGH_DEFAULT > c.DEFAULT_DEMAND_INDEX
+    assert 0.0 < c.MAX_PROFIT_DEMAND_LOW_DEFAULT < c.DEFAULT_DEMAND_INDEX
 
 
 @pytest.mark.parametrize(
