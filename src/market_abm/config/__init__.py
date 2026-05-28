@@ -4,9 +4,11 @@ from market_abm.config.buyers import (
     CategoricalSpec,
     DistributionSpec,
 )
+from market_abm.config.sellers import SellerPopulationConfig
 
 __all__ = [
     "BuyerPopulationConfig",
     "CategoricalSpec",
     "DistributionSpec",
+    "SellerPopulationConfig",
 ]
