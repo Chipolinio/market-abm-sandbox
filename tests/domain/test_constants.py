@@ -98,6 +98,18 @@ def test_choices_output_columns_contract() -> None:
     )
 
 
+def test_transactions_columns_contract() -> None:
+    assert c.TRANSACTIONS_COLUMNS == (
+        c.COL_TICK_ID,
+        c.COL_BUYER_ID,
+        c.COL_LISTING_ID,
+        c.COL_SELLER_ID,
+        c.COL_PRICE_PAID,
+        c.COL_UNIT_COST,
+        c.COL_GROSS_MARGIN,
+    )
+
+
 def test_platform_defaults() -> None:
     assert set(c.PLATFORM_DEFAULTS.keys()) == set(c.PLATFORM_KEYS)
     assert all(0.0 < v < 1.0 for v in c.PLATFORM_DEFAULTS.values())

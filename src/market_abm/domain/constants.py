@@ -150,6 +150,32 @@ PRODUCTS_CHOICE_FEATURE_COLUMNS: Final[tuple[str, ...]] = (
     COL_RATING_VALUE,
 )
 
+# --- Transactions (transactions_df), slice 003 ---
+
+COL_TICK_ID: Final = "tick_id"
+COL_PRICE_PAID: Final = "price_paid"
+COL_GROSS_MARGIN: Final = "gross_margin"
+
+TRANSACTIONS_COLUMNS: Final[tuple[str, ...]] = (
+    COL_TICK_ID,
+    COL_BUYER_ID,
+    COL_LISTING_ID,
+    COL_SELLER_ID,
+    COL_PRICE_PAID,
+    COL_UNIT_COST,
+    COL_GROSS_MARGIN,
+)
+
+TRANSACTIONS_SCHEMA_DTYPES: Final[dict[str, str]] = {
+    COL_TICK_ID: "Int32",
+    COL_BUYER_ID: "Int32",
+    COL_LISTING_ID: "Int32",
+    COL_SELLER_ID: "Int32",
+    COL_PRICE_PAID: "Float32",
+    COL_UNIT_COST: "Float32",
+    COL_GROSS_MARGIN: "Float32",
+}
+
 # --- Platform scalar defaults ---
 
 COL_BASE_COMMISSION: Final = "base_commission"
