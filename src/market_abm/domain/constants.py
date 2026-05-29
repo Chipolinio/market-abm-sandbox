@@ -104,6 +104,52 @@ LISTINGS_SCHEMA_DTYPES: Final[dict[str, str]] = {
     COL_DEMAND_INDEX: "Float32",
 }
 
+# --- Products (products_df), slice 003: listings + card features for choice ---
+
+COL_DELIVERY_DAYS: Final = "delivery_days"
+COL_RATING_VALUE: Final = "rating_value"
+
+PRODUCTS_COLUMNS: Final[tuple[str, ...]] = (
+    COL_LISTING_ID,
+    COL_SELLER_ID,
+    COL_UNIT_COST,
+    COL_PRICE,
+    COL_DEMAND_INDEX,
+    COL_DELIVERY_DAYS,
+    COL_RATING_VALUE,
+)
+
+PRODUCTS_SCHEMA_DTYPES: Final[dict[str, str]] = {
+    **LISTINGS_SCHEMA_DTYPES,
+    COL_DELIVERY_DAYS: "Float32",
+    COL_RATING_VALUE: "Float32",
+}
+
+# --- Choice step output (choices_df), slice 003 ---
+
+COL_CHOICE_PROBABILITY: Final = "choice_probability"
+
+CHOICES_COLUMNS: Final[tuple[str, ...]] = (
+    COL_BUYER_ID,
+    COL_LISTING_ID,
+    COL_CHOICE_PROBABILITY,
+)
+
+BUYERS_CHOICE_INPUT_COLUMNS: Final[tuple[str, ...]] = (
+    COL_BUYER_ID,
+    COL_BUDGET,
+    COL_BETA_PRICE,
+    COL_BETA_DELIVERY,
+    COL_BETA_RATING,
+)
+
+PRODUCTS_CHOICE_FEATURE_COLUMNS: Final[tuple[str, ...]] = (
+    COL_LISTING_ID,
+    COL_PRICE,
+    COL_DELIVERY_DAYS,
+    COL_RATING_VALUE,
+)
+
 # --- Platform scalar defaults ---
 
 COL_BASE_COMMISSION: Final = "base_commission"

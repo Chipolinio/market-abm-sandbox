@@ -84,6 +84,20 @@ def test_listings_schema_dtypes_match_columns_one_to_one() -> None:
     }
 
 
+def test_products_columns_extend_listings_for_slice_003() -> None:
+    assert c.PRODUCTS_COLUMNS[: len(c.LISTINGS_COLUMNS)] == c.LISTINGS_COLUMNS
+    assert c.PRODUCTS_COLUMNS[-2:] == (c.COL_DELIVERY_DAYS, c.COL_RATING_VALUE)
+    assert set(c.PRODUCTS_SCHEMA_DTYPES.keys()) == set(c.PRODUCTS_COLUMNS)
+
+
+def test_choices_output_columns_contract() -> None:
+    assert c.CHOICES_COLUMNS == (
+        c.COL_BUYER_ID,
+        c.COL_LISTING_ID,
+        c.COL_CHOICE_PROBABILITY,
+    )
+
+
 def test_platform_defaults() -> None:
     assert set(c.PLATFORM_DEFAULTS.keys()) == set(c.PLATFORM_KEYS)
     assert all(0.0 < v < 1.0 for v in c.PLATFORM_DEFAULTS.values())
