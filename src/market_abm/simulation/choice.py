@@ -219,7 +219,7 @@ def choose_listings_for_all_buyers(
     config: ChoiceModelConfig,
     allow_choice_learn_fallback: bool = True,
 ) -> pl.DataFrame:
-    """Считае их на батчи по config.buyers_batch_size."""т выбор для всех покупателей, разбивая
+    """Считает выбор для всех покупателей, разбивая их на батчи по config.buyers_batch_size."""
     if buyers_df.height == 0:
         raise ValueError("buyers_df must be non-empty")
 
