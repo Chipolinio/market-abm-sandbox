@@ -17,6 +17,12 @@ from market_abm.domain.constants import (
     PRODUCTS_COLUMNS,
     PRODUCTS_SCHEMA_DTYPES,
 )
+from market_abm.analytics.persist import (
+    init_run_directory,
+    open_duckdb_connection,
+    persist_tick_artifacts,
+    resolve_run_id,
+)
 from market_abm.simulation.step import step
 
 PRODUCTS_RECHUNK_N_CHUNKS_THRESHOLD: Final[int] = 16
@@ -100,3 +106,52 @@ def run_simulation(
         products_next = _maybe_rechunk_products(products_next)
         products_df = products_next
         yield tick_id, products_next, transactions_df
+
+
+def run_simulation_and_persist(
+    buyers_df: pl.DataFrame,
+    sellers_df: pl.DataFrame,
+    listings_df: pl.DataFrame,
+    n_ticks: int,
+    config: SimulationRunConfig,
+) -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
+    """
+    Как run_simulation, но при persistence.enabled пишет parquet до каждого yield.
+    init_run_directory выполняется при вызове функции (до первого next).
+    Без итерации step не выполняется; tick_*.parquet не создаются.
+    """
+    if not config.persistence.enabled:
+        return run_simulation(buyers_df, sellers_df, listings_df, n_ticks, config)
+
+    if n_ticks < 1:
+        raise ValueError("n_ticks must be >= 1")
+
+    run_id = resolve_run_id(config.persistence)
+    ctx = init_run_directory(
+        config,
+        run_id=run_id,
+        buyers_df=buyers_df,
+        sellers_df=sellers_df,
+        listings_df=listings_df,
+        n_ticks=n_ticks,
+    )
+    con = open_duckdb_connection(config.persistence)
+
+    def _stream() -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
+        try:
+            for tick_id, products_next, transactions_df in run_simulation(
+                buyers_df, sellers_df, listings_df, n_ticks, config
+            ):
+                persist_tick_artifacts(
+                    ctx.run_root,
+                    tick_id=tick_id,
+                    transactions_df=transactions_df,
+                    products_df=products_next,
+                    config=config.persistence,
+                    con=con,
+                )
+                yield tick_id, products_next, transactions_df
+        finally:
+            con.close()
+
+    return _stream()

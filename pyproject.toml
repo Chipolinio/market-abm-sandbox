@@ -9,8 +9,10 @@ description = "Econometric ABM e-commerce market simulator (DOD / Polars)"
 readme = "specs/001-synthetic-population.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.5",
     "numpy>=2.0",
     "polars>=1.0",
+    "pyarrow>=15.0",
     "pydantic>=2.0",
     "scipy>=1.11",
 ]
