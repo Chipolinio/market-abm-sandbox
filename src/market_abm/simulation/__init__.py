@@ -6,6 +6,7 @@ from market_abm.simulation.choice import (
 )
 from market_abm.simulation.listings import initialize_listings, listings_polars_schema
 from market_abm.simulation.repricing import apply_repricing_tick, min_price_from_margin
+from market_abm.simulation.runner import run_simulation
 from market_abm.simulation.step import step
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "initialize_listings",
     "listings_polars_schema",
     "min_price_from_margin",
+    "run_simulation",
     "step",
 ]
