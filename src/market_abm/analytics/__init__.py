@@ -7,8 +7,10 @@ from market_abm.analytics.persist import (
     persist_tick_artifacts,
     resolve_run_id,
 )
+from market_abm.analytics.store import AnalyticsStore
 
 __all__ = [
+    "AnalyticsStore",
     "SimulationRunContext",
     "init_run_directory",
     "open_duckdb_connection",
