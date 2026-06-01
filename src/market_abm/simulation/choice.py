@@ -20,9 +20,37 @@ from market_abm.domain.constants import (
     COL_DELIVERY_DAYS,
     COL_LISTING_ID,
     COL_PRICE,
+    COL_PVD_SEGMENT,
     COL_RATING_VALUE,
     PRODUCTS_CHOICE_FEATURE_COLUMNS,
 )
+
+
+def resolve_outside_utility_bias(
+    buyers_batch_df: pl.DataFrame,
+    config: ChoiceModelConfig,
+) -> np.ndarray:
+    """
+    Возвращает вектор outside bias длины batch (float32).
+
+    Без mapping — скаляр config.outside_utility_bias на всех.
+    С mapping — значение по pvd_segment; неизвестный ключ в строке → скаляр.
+    """
+    n = buyers_batch_df.height
+    if config.outside_utility_bias_by_pvd_segment is None:
+        return np.full(n, config.outside_utility_bias, dtype=np.float32)
+
+    if COL_PVD_SEGMENT not in buyers_batch_df.columns:
+        raise ValueError(f"buyers_batch_df is missing required column: {COL_PVD_SEGMENT}")
+
+    mapping = config.outside_utility_bias_by_pvd_segment
+    scalar = config.outside_utility_bias
+    segments = buyers_batch_df[COL_PVD_SEGMENT].to_list()
+    result = np.empty(n, dtype=np.float32)
+    for i, seg in enumerate(segments):
+        key = seg if isinstance(seg, str) else str(seg)
+        result[i] = mapping.get(key, scalar)
+    return result
 
 
 def _buyer_seed(base_seed: int, buyer_id: int) -> int:
@@ -100,6 +128,7 @@ def _choose_one_buyer(
     rng: np.random.Generator,
     *,
     use_choice_learn: bool,
+    outside_utility_bias: float,
 ) -> tuple[int | None, float]:
     """Выбирает один оффер для покупателя или возвращает отказ от покупки."""
     n_products = products_df.height
@@ -132,7 +161,7 @@ def _choose_one_buyer(
         )
 
     utilities = np.concatenate(
-        [product_utils, np.array([config.outside_utility_bias], dtype=np.float32)]
+        [product_utils, np.array([outside_utility_bias], dtype=np.float32)]
     )
     probabilities = _softmax_row(utilities)
     chosen_idx = _sample_choice_index(probabilities, rng)
@@ -174,12 +203,13 @@ def choose_listings_for_buyers(
             else:
                 raise
 
+    bias_vector = resolve_outside_utility_bias(buyers_batch_df, config)
     buyer_rows = buyers_batch_df.select(list(BUYERS_CHOICE_INPUT_COLUMNS)).to_dicts()
     listing_ids: list[int | None] = []
     buyer_ids: list[int] = []
     probabilities: list[float] = []
 
-    for row in buyer_rows:
+    for i, row in enumerate(buyer_rows):
         buyer_id = int(row[COL_BUYER_ID])
         if base_seed is not None:
             row_rng = np.random.default_rng(_buyer_seed(base_seed, buyer_id))
@@ -192,6 +222,7 @@ def choose_listings_for_buyers(
             config,
             row_rng,
             use_choice_learn=use_choice_learn,
+            outside_utility_bias=float(bias_vector[i]),
         )
         buyer_ids.append(buyer_id)
         listing_ids.append(listing_id)
