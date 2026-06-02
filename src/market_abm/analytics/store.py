@@ -12,6 +12,7 @@ from market_abm.domain.constants import (
     COL_PRICE,
     COL_SELLER_ID,
     COL_TICK_ID,
+    COL_UNIT_COST,
 )
 
 _TICK_ID_FROM_FILENAME = (
@@ -144,6 +145,37 @@ class AnalyticsStore:
                 COL_PRICE: pl.Float64,
             }
         )
+
+    def products_snapshot_at_tick(self, tick_id: int) -> pl.DataFrame:
+        """Полный products-срез одного тика (operational listings для bootstrap, §5.2)."""
+        schema = {
+            COL_LISTING_ID: pl.Int32,
+            COL_SELLER_ID: pl.Int32,
+            COL_UNIT_COST: pl.Float64,
+            COL_PRICE: pl.Float64,
+            "demand_index": pl.Float64,
+        }
+        if not self._has_parquet_files("products_snapshots"):
+            return pl.DataFrame(schema=schema)
+
+        sql = f"""
+            SELECT listing_id, seller_id, unit_cost, price, demand_index FROM (
+                SELECT
+                    {_TICK_ID_FROM_FILENAME} AS tick_id,
+                    listing_id,
+                    seller_id,
+                    unit_cost::DOUBLE AS unit_cost,
+                    price::DOUBLE AS price,
+                    demand_index::DOUBLE AS demand_index
+                FROM read_parquet(?, filename=true)
+            )
+            WHERE tick_id = ?
+            ORDER BY listing_id
+        """
+        result = self._query_pl(sql, [self._products_glob(), tick_id])
+        if result.height == 0:
+            return pl.DataFrame(schema=schema)
+        return result
 
     def price_index_by_tick(self) -> pl.DataFrame:
         """Агрегированные цены по тику; nullable Float64 при пустом snapshot."""

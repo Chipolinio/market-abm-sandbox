@@ -75,6 +75,18 @@ class ExplorationConfig(BaseModel):
     zero_label_downweight: float = Field(default=0.25, ge=0.0, le=1.0)
 
 
+class BootstrapConfig(BaseModel):
+    """Параметры offline bootstrap-прогонов для сбора обучающей выборки (Spec 005 §6.2)."""
+
+    model_config = {"frozen": True}
+
+    n_runs: int = Field(default=3, ge=1)
+    n_ticks_per_run: int = Field(default=40, ge=2)
+    population_seed: int = 42
+    run_id_prefix: str = "bootstrap"
+    min_rows_per_strategy: int = Field(default=50, ge=0)
+
+
 class CatBoostRepricingConfig(BaseModel):
     """Гиперпараметры CatBoost и продуктовые пороги детектора изменений (Spec 005 §8.1)."""
 
