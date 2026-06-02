@@ -53,6 +53,24 @@ _NON_FEATURE_COLUMNS: frozenset[str] = frozenset(
 )
 
 
+def drift_reports_to_alerts(reports: list[DriftReport]) -> list[dict[str, object]]:
+    """Сериализует отчёты в JSON-совместимые записи для manifest.drift_alerts[] (§10.4)."""
+    return [
+        {
+            "as_of_tick": r.as_of_tick,
+            "feature_name": r.feature_name,
+            "status": r.status.value,
+            "metric_kind": r.metric_kind.value,
+            "score": r.score,
+            "ks_pvalue": r.ks_pvalue,
+            "n_reference": r.n_reference,
+            "n_current": r.n_current,
+            "n_unique_reference": r.n_unique_reference,
+        }
+        for r in reports
+    ]
+
+
 def should_check_drift(tick_id: int, config: DriftMonitorConfig) -> bool:
     """Проверять ли drift на данном тике: enabled и tick кратен check_every_n_ticks (§10.4)."""
     if not config.enabled:

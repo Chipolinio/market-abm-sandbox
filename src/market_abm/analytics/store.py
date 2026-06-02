@@ -2,6 +2,7 @@
 # Базовая идея: DuckDB read_parquet(glob); без pl.read_parquet и без мутации run_root.
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import duckdb
@@ -37,6 +38,11 @@ class AnalyticsStore:
     def close(self) -> None:
         """Закрывает DuckDB-соединение."""
         self._con.close()
+
+    def drift_alerts(self) -> list[dict[str, object]]:
+        """Query-сторона: читает manifest['drift_alerts'] (Spec 005 §10.4)."""
+        manifest = json.loads((self._run_root / "manifest.json").read_text(encoding="utf-8"))
+        return list(manifest.get("drift_alerts", []))
 
     def _transactions_glob(self) -> str:
         return str(self._run_root / "transactions" / "tick_*.parquet")

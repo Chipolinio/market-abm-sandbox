@@ -156,3 +156,16 @@ def persist_tick_artifacts(
     manifest["ticks_completed"] = int(manifest.get("ticks_completed", 0)) + 1
     manifest["last_tick_id"] = tick_id
     _write_manifest_atomic(run_root, manifest)
+
+
+def append_drift_alerts(run_root: Path, alerts: list[dict[str, object]]) -> None:
+    """Атомарно дописывает записи в manifest['drift_alerts'] (Spec 005 §10.4, опционально)."""
+    if not alerts:
+        return
+    run_root = Path(run_root)
+    manifest_path = run_root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    existing = list(manifest.get("drift_alerts", []))
+    existing.extend(alerts)
+    manifest["drift_alerts"] = existing
+    _write_manifest_atomic(run_root, manifest)
