@@ -2,6 +2,7 @@
 # Core idea: Use strategy-based pure transformations with hard price floor clipping.
 from __future__ import annotations
 
+import numpy as np
 import polars as pl
 
 from market_abm.config.repricing import RepricingConfig
@@ -71,5 +72,38 @@ def apply_repricing_tick(
     )
     clipped_price = pl.max_horizontal(strategy_price, p_min)
     final_price = pl.when(active).then(clipped_price).otherwise(pl.col(COL_PRICE))
+
+    return joined.with_columns(final_price.alias(COL_PRICE)).select(list(LISTINGS_COLUMNS))
+
+
+def apply_ml_repricing_tick(
+    sellers_df: pl.DataFrame,
+    listings_df: pl.DataFrame,
+    *,
+    next_prices: np.ndarray,
+    tick: int,
+    config: RepricingConfig,
+) -> pl.DataFrame:
+    """
+    Векторное применение ML next_prices (Spec 005 §4.4) — функциональное зеркало apply_repricing_tick.
+
+    next_prices выровнены по порядку строк listings_df. Маска активности и no-op RatingMaximizer
+    идентичны rule-пути (002); нижний клип — min_price_from_margin. Без row-wise цикла (V2).
+    """
+    if tick < 0:
+        raise ValueError(f"tick must be >= 0, got {tick}")
+
+    next_col = "_ml_next_price"
+    listings_with = listings_df.with_columns(
+        pl.Series(next_col, np.asarray(next_prices, dtype=np.float32))
+    )
+    joined = listings_with.join(sellers_df, on=COL_SELLER_ID, how="left")
+
+    p_min = min_price_from_margin(pl.col(COL_UNIT_COST), pl.col(COL_MARGIN_FLOOR))
+    active = (pl.lit(tick, dtype=pl.UInt32) % pl.col(COL_REPRICING_SPEED) == 0) & (
+        pl.col(COL_STRATEGY_TYPE) != pl.lit("RatingMaximizer")
+    )
+    candidate = pl.max_horizontal(pl.col(next_col), p_min)
+    final_price = pl.when(active).then(candidate).otherwise(pl.col(COL_PRICE))
 
     return joined.with_columns(final_price.alias(COL_PRICE)).select(list(LISTINGS_COLUMNS))

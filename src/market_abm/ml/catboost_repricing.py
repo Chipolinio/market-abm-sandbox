@@ -16,7 +16,15 @@ import numpy as np
 import polars as pl
 
 from market_abm.config.ml_repricing import CatBoostRepricingConfig
-from market_abm.domain.constants import COL_STRATEGY_TYPE
+from market_abm.domain.constants import (
+    COL_BASE_COMMISSION,
+    COL_LOGISTIC_FEE,
+    COL_MARGIN_FLOOR,
+    COL_STRATEGY_TYPE,
+    COL_UNIT_COST,
+    PLATFORM_DEFAULTS,
+)
+from market_abm.ml.exploration import apply_price_exploration
 
 if TYPE_CHECKING:  # импорт только для типов, без runtime-зависимости от catboost
     from catboost import CatBoostRegressor
@@ -146,6 +154,58 @@ def fit_catboost_registry(
         feature_names=feature_names,
         train_config_hash=_config_hash(config),
     )
+
+
+def predict_next_prices(
+    registry: CatBoostModelRegistry,
+    features_df: pl.DataFrame,
+    *,
+    current_prices: np.ndarray,
+    config: CatBoostRepricingConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Векторный инференс next_prices (Spec 005 §4.4).
+
+    - Ровно один CatBoost.predict на присутствующую стратегию (group mask), не на строку (V1);
+    - сырой прайс p_t * exp(y_hat); RatingMaximizer (нет модели) → next == current (no-op);
+    - p_min = min_price_from_margin (002) из unit_cost/margin_floor; p_max = max_price_multiplier * p_t;
+    - обязательный apply_price_exploration (§4.3.2) с переданным rng; выход float32 (n_rows,).
+    """
+    feature_names = list(registry.feature_names)
+    n_rows = features_df.height
+    current = np.asarray(current_prices, dtype=np.float64)
+    if current.shape[0] != n_rows:
+        raise ValueError(
+            f"current_prices length {current.shape[0]} != features_df height {n_rows}"
+        )
+
+    strategy = features_df[COL_STRATEGY_TYPE].cast(pl.String).to_numpy()
+    unit_cost = features_df[COL_UNIT_COST].to_numpy().astype(np.float64)
+    margin_floor = features_df[COL_MARGIN_FLOOR].to_numpy().astype(np.float64)
+    total_fees = (
+        PLATFORM_DEFAULTS[COL_BASE_COMMISSION] + PLATFORM_DEFAULTS[COL_LOGISTIC_FEE]
+    )
+    p_min = unit_cost / (1.0 - margin_floor - total_fees)
+    p_max = config.max_price_multiplier * current
+
+    x_all = features_df.select(feature_names).to_numpy().astype(np.float32)
+    base = current.copy()
+    for strat, model in registry.models.items():
+        mask = strategy == strat
+        if not mask.any():
+            continue
+        y_hat = np.asarray(model.predict(x_all[mask]), dtype=np.float64)
+        base[mask] = current[mask] * np.exp(y_hat)
+
+    explored = np.asarray(
+        apply_price_exploration(base, config.exploration, rng, p_min, p_max),
+        dtype=np.float64,
+    )
+
+    ml_mask = np.isin(strategy, list(registry.models.keys()))
+    next_prices = np.where(ml_mask, explored, current)
+    return next_prices.astype(np.float32)
 
 
 def save_registry(registry: CatBoostModelRegistry, *, run_root: Path) -> Path:
