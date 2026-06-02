@@ -26,8 +26,18 @@ from market_abm.domain.constants import (
     TRANSACTIONS_COLUMNS,
     TRANSACTIONS_SCHEMA_DTYPES,
 )
+from typing import TYPE_CHECKING
+
+from market_abm.analytics.features import build_repricing_feature_matrix
+from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.choice import choose_listings_for_all_buyers
-from market_abm.simulation.repricing import apply_repricing_tick
+from market_abm.simulation.repricing import apply_ml_repricing_tick, apply_repricing_tick
+
+if TYPE_CHECKING:  # только типы: избегаем цикла ml.__init__ → bootstrap → runner → step
+    from market_abm.ml.catboost_repricing import CatBoostModelRegistry
+
+# Соль потока exploration для детерминизма rng в ML-репрайсе (Spec 005 §4.5).
+_EXPLORE_SALT = 0xE5910E
 
 
 def _step_rng(config: SimulationStepConfig) -> np.random.Generator:
@@ -129,13 +139,109 @@ def _update_demand_index(
     )
 
 
+def _ml_explore_rng(config: SimulationStepConfig) -> np.random.Generator:
+    """Детерминированный rng для exploration: SeedSequence(seed, tick_id, salt) (Spec 005 §4.5)."""
+    base = 0 if config.seed is None else config.seed
+    seq = np.random.SeedSequence([base, config.tick_id, _EXPLORE_SALT])
+    return np.random.default_rng(seq)
+
+
+def _use_ml_path(
+    config: SimulationStepConfig,
+    ml_registry: CatBoostModelRegistry | None,
+) -> bool:
+    """ML-ветка активна для mode catboost/hybrid после warmup при наличии registry (§9.1)."""
+    repricing = config.repricing
+    if repricing.mode not in ("catboost", "hybrid"):
+        return False
+    if config.tick_id < repricing.warmup_ticks:
+        return False
+    return ml_registry is not None
+
+
+def _ml_reprice(
+    sellers_df: pl.DataFrame,
+    listings_df: pl.DataFrame,
+    config: SimulationStepConfig,
+    *,
+    ml_registry: CatBoostModelRegistry,
+    analytics_store: AnalyticsStore,
+) -> pl.DataFrame:
+    """Один ML-репрайс-тик: features (as_of=tick) → predict_next_prices → apply_ml_repricing_tick."""
+    from market_abm.ml.catboost_repricing import predict_next_prices
+
+    ml_config = config.repricing.ml
+    listings_sorted = listings_df.sort(COL_LISTING_ID)
+    features = build_repricing_feature_matrix(
+        analytics_store,
+        as_of_tick=config.tick_id,
+        listings_df=listings_sorted,
+        sellers_df=sellers_df,
+        spec=ml_config.feature_spec,
+        config=ml_config,
+    )
+    current_prices = features[COL_PRICE].to_numpy().astype(np.float32)
+    next_prices = predict_next_prices(
+        ml_registry,
+        features,
+        current_prices=current_prices,
+        config=ml_config,
+        rng=_ml_explore_rng(config),
+    )
+    return apply_ml_repricing_tick(
+        sellers_df,
+        listings_sorted,
+        next_prices=next_prices,
+        tick=config.tick_id,
+        config=config.repricing,
+    )
+
+
+def _reprice_to_products(
+    sellers_df: pl.DataFrame,
+    products_with_demand: pl.DataFrame,
+    config: SimulationStepConfig,
+    *,
+    ml_registry: CatBoostModelRegistry | None,
+    analytics_store: AnalyticsStore | None,
+) -> pl.DataFrame:
+    """Выбирает rules/ML-путь репрайса и пришивает карточные фичи обратно в products."""
+    listings = products_with_demand.select(list(LISTINGS_COLUMNS))
+    if _use_ml_path(config, ml_registry):
+        if analytics_store is None:
+            raise ValueError(
+                "analytics_store is required for ML repricing (mode="
+                f"{config.repricing.mode!r}, tick={config.tick_id})"
+            )
+        repriced = _ml_reprice(
+            sellers_df,
+            listings,
+            config,
+            ml_registry=ml_registry,
+            analytics_store=analytics_store,
+        )
+    else:
+        repriced = apply_repricing_tick(
+            sellers_df, listings, tick=config.tick_id, config=config.repricing
+        )
+    card_features = products_with_demand.select(
+        [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]
+    )
+    return repriced.join(card_features, on=COL_LISTING_ID, how="left").select(
+        list(PRODUCTS_COLUMNS)
+    )
+
+
 def step(
     buyers_df: pl.DataFrame,
     sellers_df: pl.DataFrame,
     products_df: pl.DataFrame,
     config: SimulationStepConfig,
+    *,
+    ml_registry: CatBoostModelRegistry | None = None,
+    analytics_store: AnalyticsStore | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Выполняет один тик: выбор покупателей, transactions, demand_index, репрайс."""
+    """Выполняет один тик: выбор покупателей, transactions, demand_index, репрайс (rules или ML)."""
     _validate_buyers_df(buyers_df)
     _validate_sellers_df(sellers_df)
     _validate_products_df(products_df)
@@ -151,17 +257,12 @@ def step(
             _empty_transactions_df(),
             active_buyers_count=0,
         )
-        repriced = apply_repricing_tick(
+        products_next = _reprice_to_products(
             sellers_df,
-            products_with_demand.select(list(LISTINGS_COLUMNS)),
-            tick=config.tick_id,
-            config=config.repricing,
-        )
-        card_features = products_with_demand.select(
-            [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]
-        )
-        products_next = repriced.join(card_features, on=COL_LISTING_ID, how="left").select(
-            list(PRODUCTS_COLUMNS)
+            products_with_demand,
+            config,
+            ml_registry=ml_registry,
+            analytics_store=analytics_store,
         )
         return products_next, _empty_transactions_df()
 
@@ -177,16 +278,11 @@ def step(
         transactions,
         active_buyers_count=active_buyers.height,
     )
-    repriced = apply_repricing_tick(
+    products_next = _reprice_to_products(
         sellers_df,
-        products_with_demand.select(list(LISTINGS_COLUMNS)),
-        tick=config.tick_id,
-        config=config.repricing,
-    )
-    card_features = products_with_demand.select(
-        [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]
-    )
-    products_next = repriced.join(card_features, on=COL_LISTING_ID, how="left").select(
-        list(PRODUCTS_COLUMNS)
+        products_with_demand,
+        config,
+        ml_registry=ml_registry,
+        analytics_store=analytics_store,
     )
     return products_next, transactions

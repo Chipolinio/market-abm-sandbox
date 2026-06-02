@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import math
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from market_abm.config.common import DistributionSpec
+from market_abm.config.ml_repricing import CatBoostRepricingConfig
 from market_abm.domain.constants import (
     DEFAULT_DEMAND_INDEX,
     MAX_PROFIT_DEMAND_HIGH_DEFAULT,
     MAX_PROFIT_DEMAND_LOW_DEFAULT,
     MAX_VOLUME_AGGRESSION_DEFAULT,
 )
+
+# Режимы репрайсинга (Spec 005 §1.4 / §8.2). Default — rules (обратная совместимость 002–004).
+RepricingMode = Literal["rules", "catboost", "hybrid"]
 
 
 class ListingInitConfig(BaseModel):
@@ -61,6 +66,23 @@ class RepricingConfig(BaseModel):
         default=MAX_VOLUME_AGGRESSION_DEFAULT,
         ge=1.0,
     )
+    mode: RepricingMode = "rules"
+    warmup_ticks: int = Field(default=15, ge=0)
+    ml: CatBoostRepricingConfig | None = None
+
+    @model_validator(mode="after")
+    def _validate_ml_mode(self) -> Self:
+        """ML-режимы требуют ml-конфиг и включённый exploration в prod-пути (Spec 005 §8.2, §13)."""
+        if self.mode in ("catboost", "hybrid"):
+            if self.ml is None:
+                raise ValueError(
+                    f"repricing.mode={self.mode!r} requires 'ml' config (CatBoostRepricingConfig)"
+                )
+            if not self.ml.exploration.enabled:
+                raise ValueError(
+                    "ML repricing requires exploration.enabled=True (anti-stagnation, §4.3.2)"
+                )
+        return self
 
     @classmethod
     def default_market(cls) -> RepricingConfig:
