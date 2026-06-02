@@ -58,6 +58,7 @@ class DriftMonitorConfig(BaseModel):
     psi_bin_epsilon: float = Field(default=1e-4, gt=0.0)
     min_samples_for_drift: int = Field(default=500, ge=50)
     fail_on_drift: bool = False
+    binary_drift_features: tuple[str, ...] = ("competitor_price_change_flag",)
 
 
 class ExplorationConfig(BaseModel):
