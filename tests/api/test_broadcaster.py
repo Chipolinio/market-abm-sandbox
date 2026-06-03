@@ -24,11 +24,6 @@ from market_abm.api.broadcaster import (
 from market_abm.api.app import create_app
 
 
-# ---------------------------------------------------------------------------
-# Мок WebSocket
-# ---------------------------------------------------------------------------
-
-
 class _FakeWebSocket:
     """Минимальный мок WebSocket для unit-тестов без реального TCP."""
 
@@ -71,11 +66,6 @@ def _make_mock_worker(tick: int = 0) -> MagicMock:
     return w
 
 
-# ---------------------------------------------------------------------------
-# Группа 1: DTO-схемы
-# ---------------------------------------------------------------------------
-
-
 class TestStreamDTOs:
     def test_market_aggregate_dto_fields(self) -> None:
         dto = MarketAggregateDTO(mean_price=100.0, total_gmv=5000.0, total_transactions=50)
@@ -111,11 +101,6 @@ class TestStreamDTOs:
 
         with pytest.raises(ValidationError):
             MarketAggregateDTO(mean_price="bad", total_gmv=0.0, total_transactions=1)
-
-
-# ---------------------------------------------------------------------------
-# Группа 2: ConnectionManager (async)
-# ---------------------------------------------------------------------------
 
 
 class TestConnectionManager:

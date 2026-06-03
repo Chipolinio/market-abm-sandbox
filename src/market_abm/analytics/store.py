@@ -54,8 +54,8 @@ class AnalyticsStore:
         return any((self._run_root / subdir).glob("tick_*.parquet"))
 
     def _query_pl(self, sql: str, params: list[object]) -> pl.DataFrame:
-        """Выполняет SQL и возвращает Polars через Arrow (не pl.read_parquet)."""
-        return self._con.execute(sql, params).pl()
+        """Выполняет SQL через изолированный cursor() — thread-safe (§1.2 Spec 006)."""
+        return self._con.cursor().execute(sql, params).pl()
 
     def gmv_by_tick(self) -> pl.DataFrame:
         """tick_id, gmv (Float64), transaction_count (Int64)."""
@@ -182,6 +182,52 @@ class AnalyticsStore:
         if result.height == 0:
             return pl.DataFrame(schema=schema)
         return result
+
+    def query_market_aggregate(self, tick_id: int) -> dict[str, object]:
+        """
+        Агрегаты одного тика для WebSocket-стрима (broadcaster_loop, §5.2 Spec 006).
+
+        Использует изолированные cursor() — безопасен при конкурентных вызовах из
+        нескольких asyncio-корутин или потоков (§1.2 Spec 006).
+        Все значения приводятся к нативным Python float/int для Pydantic (§4.3 Spec 006).
+        При отсутствии данных возвращает нули — исключения не бросает.
+        """
+        total_gmv = 0.0
+        total_transactions = 0
+
+        if self._has_parquet_files("transactions"):
+            sql_tx = """
+                SELECT
+                    COALESCE(SUM(price_paid)::DOUBLE, 0.0) AS total_gmv,
+                    COALESCE(COUNT(*)::BIGINT, 0)          AS total_transactions
+                FROM read_parquet(?)
+                WHERE tick_id = ?
+            """
+            row = self._con.cursor().execute(sql_tx, [self._transactions_glob(), tick_id]).fetchone()
+            if row is not None:
+                total_gmv = float(row[0])
+                total_transactions = int(row[1])
+
+        mean_price = 0.0
+
+        if self._has_parquet_files("products_snapshots"):
+            sql_price = f"""
+                SELECT COALESCE(AVG(price)::DOUBLE, 0.0) AS mean_price
+                FROM (
+                    SELECT {_TICK_ID_FROM_FILENAME} AS tick_id, price
+                    FROM read_parquet(?, filename=true)
+                )
+                WHERE tick_id = ?
+            """
+            row = self._con.cursor().execute(sql_price, [self._products_glob(), tick_id]).fetchone()
+            if row is not None:
+                mean_price = float(row[0])
+
+        return {
+            "mean_price": mean_price,
+            "total_gmv": total_gmv,
+            "total_transactions": total_transactions,
+        }
 
     def price_index_by_tick(self) -> pl.DataFrame:
         """Агрегированные цены по тику; nullable Float64 при пустом snapshot."""
