@@ -20,10 +20,6 @@ from market_abm.worker.process import (
 )
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 _POLL_INTERVAL = 0.02
 
 
@@ -125,11 +121,6 @@ def _make_simulation_worker(tmp_path: Path) -> SimulationWorker:
     )
 
 
-# ---------------------------------------------------------------------------
-# Перечисления и типы (чистые юнит-тесты, без процессов)
-# ---------------------------------------------------------------------------
-
-
 def test_worker_state_has_all_required_states() -> None:
     required = {"IDLE", "RUNNING", "PAUSED", "STOPPED", "FAILED"}
     actual = {s.name for s in WorkerState}
@@ -152,11 +143,6 @@ def test_worker_command_string_values_are_lowercase() -> None:
         assert cmd.value == cmd.value.lower(), f"{cmd.name} value должен быть lowercase"
 
 
-# ---------------------------------------------------------------------------
-# Инициализация _WorkerLoop (без запуска потока)
-# ---------------------------------------------------------------------------
-
-
 def test_worker_loop_initial_state_is_idle(tmp_path: Path) -> None:
     _, _, _, state_value, _ = _make_loop(tmp_path=tmp_path)
     assert WorkerState(state_value.value) == WorkerState.IDLE
@@ -171,11 +157,6 @@ def test_worker_loop_initial_last_error_is_empty(tmp_path: Path) -> None:
     _, _, _, _, last_error_array = _make_loop(tmp_path=tmp_path)
     msg = last_error_array.raw.rstrip(b"\x00").decode("utf-8")
     assert msg == ""
-
-
-# ---------------------------------------------------------------------------
-# Переходы стейт-машины (loop через threading)
-# ---------------------------------------------------------------------------
 
 
 def test_start_command_transitions_to_running(tmp_path: Path) -> None:
@@ -259,11 +240,6 @@ def test_stop_terminates_loop_thread(tmp_path: Path) -> None:
 
     t.join(timeout=3.0)
     assert not t.is_alive()
-
-
-# ---------------------------------------------------------------------------
-# Команда STEP и атомарность счётчика тиков
-# ---------------------------------------------------------------------------
 
 
 def test_step_from_paused_increments_tick_by_one(tmp_path: Path) -> None:
@@ -364,11 +340,6 @@ def test_step_ignored_when_running(tmp_path: Path) -> None:
     t.join(timeout=3.0)
 
 
-# ---------------------------------------------------------------------------
-# Обработка исключений и FAILED
-# ---------------------------------------------------------------------------
-
-
 def test_exception_in_step_transitions_to_failed(tmp_path: Path) -> None:
     loop, cmd_queue, _, state_value, _ = _make_raising_loop(tmp_path)
     t = _run_loop_in_thread(loop)
@@ -420,11 +391,6 @@ def test_reset_after_failed_restores_idle(tmp_path: Path) -> None:
     assert new_error.raw.rstrip(b"\x00").decode("utf-8") == ""
 
 
-# ---------------------------------------------------------------------------
-# Атомарная запись manifest.json
-# ---------------------------------------------------------------------------
-
-
 def test_manifest_written_on_failed_state(tmp_path: Path) -> None:
     """При переходе в FAILED воркер записывает manifest.json в artifacts_dir."""
     def _raising_step() -> None:
@@ -474,11 +440,6 @@ def test_manifest_no_tmp_file_left_after_write(tmp_path: Path) -> None:
     assert not (tmp_path / "manifest.json.tmp").exists(), (
         "manifest.json.tmp не должен оставаться на диске"
     )
-
-
-# ---------------------------------------------------------------------------
-# SimulationWorker — процессная обёртка
-# ---------------------------------------------------------------------------
 
 
 def test_simulation_worker_process_is_daemon(tmp_path: Path) -> None:

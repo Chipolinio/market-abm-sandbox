@@ -14,11 +14,6 @@ from market_abm.api.app import create_app
 from market_abm.worker.process import WorkerCommand, WorkerState
 
 
-# ---------------------------------------------------------------------------
-# Вспомогательные фабрики
-# ---------------------------------------------------------------------------
-
-
 def _make_mock_worker(
     state: WorkerState = WorkerState.IDLE,
     tick: int = 0,
@@ -68,11 +63,6 @@ def failed_worker() -> MagicMock:
     return _make_mock_worker(WorkerState.FAILED, tick=5, last_error="OOM: boom")
 
 
-# ---------------------------------------------------------------------------
-# DTO-схемы (чистые юнит-тесты, без HTTP)
-# ---------------------------------------------------------------------------
-
-
 def test_simulation_start_request_defaults() -> None:
     req = SimulationStartRequest()
     assert req.n_buyers == 1000
@@ -117,11 +107,6 @@ def test_simulation_status_response_invalid_state() -> None:
             current_tick=0,
             elapsed_time_seconds=0.0,
         )
-
-
-# ---------------------------------------------------------------------------
-# POST /api/v1/simulation/start
-# ---------------------------------------------------------------------------
 
 
 def test_start_from_idle_returns_202(idle_worker: MagicMock) -> None:
@@ -177,11 +162,6 @@ def test_start_response_body_contains_state(idle_worker: MagicMock) -> None:
     assert "state" in body or "message" in body
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/simulation/pause
-# ---------------------------------------------------------------------------
-
-
 def test_pause_from_running_returns_202(running_worker: MagicMock) -> None:
     client = _make_client(running_worker)
     resp = client.post("/api/v1/simulation/pause")
@@ -206,11 +186,6 @@ def test_pause_queue_full_returns_429(running_worker: MagicMock) -> None:
     client = _make_client(running_worker)
     resp = client.post("/api/v1/simulation/pause")
     assert resp.status_code == 429
-
-
-# ---------------------------------------------------------------------------
-# POST /api/v1/simulation/step
-# ---------------------------------------------------------------------------
 
 
 def test_step_from_paused_returns_202(paused_worker: MagicMock) -> None:
@@ -246,11 +221,6 @@ def test_step_queue_full_returns_429(paused_worker: MagicMock) -> None:
     assert resp.status_code == 429
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/simulation/reset
-# ---------------------------------------------------------------------------
-
-
 def test_reset_from_stopped_returns_202(stopped_worker: MagicMock) -> None:
     client = _make_client(stopped_worker)
     resp = client.post("/api/v1/simulation/reset")
@@ -275,11 +245,6 @@ def test_reset_queue_full_returns_429(stopped_worker: MagicMock) -> None:
     client = _make_client(stopped_worker)
     resp = client.post("/api/v1/simulation/reset")
     assert resp.status_code == 429
-
-
-# ---------------------------------------------------------------------------
-# GET /api/v1/simulation/status
-# ---------------------------------------------------------------------------
 
 
 def test_status_returns_200(idle_worker: MagicMock) -> None:

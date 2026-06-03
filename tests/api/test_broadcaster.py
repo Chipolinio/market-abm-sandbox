@@ -24,11 +24,6 @@ from market_abm.api.broadcaster import (
 from market_abm.api.app import create_app
 
 
-# ---------------------------------------------------------------------------
-# Вспомогательные типы и фабрики
-# ---------------------------------------------------------------------------
-
-
 class _FakeWebSocket:
     """Минимальный мок WebSocket для unit-тестов без реального TCP."""
 
@@ -77,11 +72,6 @@ def _make_ws_client() -> TestClient:
     return TestClient(app)
 
 
-# ---------------------------------------------------------------------------
-# DTO-схемы
-# ---------------------------------------------------------------------------
-
-
 def test_market_aggregate_dto_fields() -> None:
     dto = MarketAggregateDTO(mean_price=100.0, total_gmv=5000.0, total_transactions=50)
     assert dto.mean_price == 100.0
@@ -119,11 +109,6 @@ def test_market_aggregate_dto_int_type_validation() -> None:
 
     with pytest.raises(ValidationError):
         MarketAggregateDTO(mean_price="bad", total_gmv=0.0, total_transactions=1)
-
-
-# ---------------------------------------------------------------------------
-# ConnectionManager (async)
-# ---------------------------------------------------------------------------
 
 
 async def test_connect_accepts_websocket_and_adds_to_pool() -> None:
@@ -196,11 +181,6 @@ async def test_broadcast_serializes_payload_as_string() -> None:
     assert not hasattr(ws, "send_json_called"), "send_json не должен использоваться"
 
 
-# ---------------------------------------------------------------------------
-# _safely_send_text (async)
-# ---------------------------------------------------------------------------
-
-
 async def test_safely_send_text_sends_string_to_websocket() -> None:
     manager = ConnectionManager()
     ws = _FakeWebSocket()
@@ -258,11 +238,6 @@ async def test_safely_send_text_does_not_raise_on_failure() -> None:
     await _safely_send_text(ws, "data", manager)
 
 
-# ---------------------------------------------------------------------------
-# compute_sleep_duration (чистая функция, sync)
-# ---------------------------------------------------------------------------
-
-
 def test_compute_sleep_no_elapsed_returns_target() -> None:
     assert compute_sleep_duration(elapsed=0.0, target=1.0) == pytest.approx(1.0)
 
@@ -282,11 +257,6 @@ def test_compute_sleep_elapsed_exactly_target_returns_zero() -> None:
 
 def test_compute_sleep_never_returns_negative() -> None:
     assert compute_sleep_duration(elapsed=999.0, target=1.0) >= 0.0
-
-
-# ---------------------------------------------------------------------------
-# broadcaster_loop (async — короткий прогон с мок-данными)
-# ---------------------------------------------------------------------------
 
 
 async def test_broadcaster_sends_payload_to_connected_socket() -> None:
@@ -353,11 +323,6 @@ async def test_broadcaster_uses_single_serialization_per_cycle() -> None:
         assert ws1.sent[0] == ws2.sent[0], (
             "Обе ws должны получить идентичный payload (единственная сериализация)"
         )
-
-
-# ---------------------------------------------------------------------------
-# WebSocket эндпоинт (TestClient)
-# ---------------------------------------------------------------------------
 
 
 def test_ws_endpoint_accepts_connection() -> None:
