@@ -27,6 +27,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+asyncio_mode = "auto"
 markers = [
     "slow: long-run stability tests (50 ticks, tracemalloc)",
     "ml: ML-repricing slice tests (Spec 005); may require optional 'ml' extra",
