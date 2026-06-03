@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import queue
-import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -14,9 +13,6 @@ from market_abm.api.schemas import SimulationStartRequest, SimulationStatusRespo
 from market_abm.worker.process import WorkerCommand, WorkerState
 
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
-
-# Метка времени старта приложения для elapsed_time_seconds
-_APP_START_TIME: float = time.monotonic()
 
 
 def _get_worker(request: Request) -> Any:
@@ -132,6 +128,8 @@ async def get_status(
         run_id=getattr(worker, "run_id", "default"),
         state=state.name,
         current_tick=worker.tick_counter.value,
-        elapsed_time_seconds=round(time.monotonic() - _APP_START_TIME, 3),
+        elapsed_time_seconds=round(
+            getattr(worker, "elapsed_simulation_seconds", 0.0), 3
+        ),
         last_error=worker.last_error,
     )

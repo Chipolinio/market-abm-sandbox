@@ -10,7 +10,7 @@ import os
 import queue
 import time
 from collections.abc import Callable
-from enum import IntEnum, auto
+from enum import IntEnum
 from enum import Enum
 from pathlib import Path
 from typing import Final
@@ -68,6 +68,8 @@ class _WorkerLoop:
         last_error_array: mp.Array,
         artifacts_dir: str,
         step_fn: Callable[[], None],
+        running_since: mp.Value | None = None,
+        elapsed_total: mp.Value | None = None,
     ) -> None:
         self._cmd_queue = command_queue
         self._tick_counter = tick_counter
@@ -75,6 +77,8 @@ class _WorkerLoop:
         self._last_error_array = last_error_array
         self._artifacts_dir = Path(artifacts_dir)
         self._step_fn = step_fn
+        self._running_since: mp.Value = running_since or mp.Value("d", 0.0)
+        self._elapsed_total: mp.Value = elapsed_total or mp.Value("d", 0.0)
 
 
     def run(self) -> None:
@@ -129,16 +133,49 @@ class _WorkerLoop:
             self._set_state(WorkerState.FAILED)
             self._write_manifest_atomic()
 
+    @property
+    def elapsed_simulation_seconds(self) -> float:
+        """
+        Реальное время симуляции в секундах (только RUNNING-периоды).
+        Не растёт в PAUSED/IDLE/STOPPED. Сбрасывается командой RESET.
+        """
+        since = self._running_since.value
+        base = self._elapsed_total.value
+        if since > 0.0:
+            return base + (time.monotonic() - since)
+        return base
+
+    def _start_timer(self) -> None:
+        with self._running_since.get_lock():
+            self._running_since.value = time.monotonic()
+
+    def _stop_timer(self) -> None:
+        """Фиксирует накопленное время и сбрасывает метку старта."""
+        with self._running_since.get_lock():
+            since = self._running_since.value
+            if since > 0.0:
+                with self._elapsed_total.get_lock():
+                    self._elapsed_total.value += time.monotonic() - since
+                self._running_since.value = 0.0
+
+    def _reset_timer(self) -> None:
+        with self._running_since.get_lock():
+            self._running_since.value = 0.0
+        with self._elapsed_total.get_lock():
+            self._elapsed_total.value = 0.0
+
     def _handle_command(self, cmd: WorkerCommand) -> None:
         """Диспетчеризация команд в зависимости от текущего состояния."""
         state = WorkerState(self._state_value.value)
 
         if cmd == WorkerCommand.START:
             if state in (WorkerState.IDLE, WorkerState.PAUSED):
+                self._start_timer()
                 self._set_state(WorkerState.RUNNING)
 
         elif cmd == WorkerCommand.PAUSE:
             if state == WorkerState.RUNNING:
+                self._stop_timer()
                 self._set_state(WorkerState.PAUSED)
 
         elif cmd == WorkerCommand.STEP:
@@ -152,10 +189,12 @@ class _WorkerLoop:
             # В RUNNING — игнорируем (не ломаем)
 
         elif cmd == WorkerCommand.STOP:
+            self._stop_timer()
             self._set_state(WorkerState.STOPPED)
 
         elif cmd == WorkerCommand.RESET:
             self._reset_tick()
+            self._reset_timer()
             self._set_last_error("")
             self._set_state(WorkerState.IDLE)
 
@@ -201,6 +240,8 @@ def _worker_entry(
     state_value: mp.Value,
     last_error_array: mp.Array,
     step_fn_qualname: str | None,
+    running_since: mp.Value,
+    elapsed_total: mp.Value,
 ) -> None:
     """
     Функция-мишень для multiprocessing.Process.
@@ -223,6 +264,8 @@ def _worker_entry(
         last_error_array=last_error_array,
         artifacts_dir=artifacts_dir,
         step_fn=step_fn,
+        running_since=running_since,
+        elapsed_total=elapsed_total,
     )
     loop.run()
 
@@ -252,6 +295,8 @@ class SimulationWorker:
         self.tick_counter: mp.Value = ctx.Value("i", 0)
         self._state_value: mp.Value = ctx.Value("i", WorkerState.IDLE.value)
         self._last_error_array: mp.Array = ctx.Array("c", _LAST_ERROR_ARRAY_SIZE)
+        self._running_since: mp.Value = ctx.Value("d", 0.0)
+        self._elapsed_total: mp.Value = ctx.Value("d", 0.0)
 
         self.process: mp.Process = ctx.Process(
             target=_worker_entry,
@@ -262,6 +307,8 @@ class SimulationWorker:
                 self._state_value,
                 self._last_error_array,
                 _step_fn_qualname,
+                self._running_since,
+                self._elapsed_total,
             ),
             daemon=True,
         )
@@ -277,3 +324,15 @@ class SimulationWorker:
         with self._last_error_array.get_lock():
             msg = self._last_error_array.raw.rstrip(b"\x00").decode("utf-8")
         return msg if msg else None
+
+    @property
+    def elapsed_simulation_seconds(self) -> float:
+        """
+        Реальное время симуляции в секундах (только RUNNING-периоды).
+        Не растёт в PAUSED/IDLE/STOPPED. Сбрасывается командой RESET.
+        """
+        since = self._running_since.value
+        base = self._elapsed_total.value
+        if since > 0.0:
+            return base + (time.monotonic() - since)
+        return base

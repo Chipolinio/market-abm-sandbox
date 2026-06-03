@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import queue
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -15,6 +16,36 @@ from market_abm.api.broadcaster import ConnectionManager, broadcaster_loop
 from market_abm.api.routers.control import router as control_router
 from market_abm.api.routers.stream import router as stream_router
 from market_abm.api.schemas import MarketAggregateDTO, TickStreamPayload
+from market_abm.worker.process import WorkerCommand
+
+
+def _shutdown_worker(worker: Any) -> None:
+    """
+    Штатный шатдаун воркера (Spec 006 §3.5).
+    Порядок: STOP → join(5s) → queue.close() / join_thread().
+    Все шаги защищены от исключений — не блокируют остановку FastAPI.
+    """
+    try:
+        worker.command_queue.put_nowait(WorkerCommand.STOP)
+    except queue.Full:
+        pass
+    except Exception:
+        pass
+
+    try:
+        worker.process.join(timeout=5.0)
+    except Exception:
+        pass
+
+    try:
+        worker.command_queue.close()
+    except Exception:
+        pass
+
+    try:
+        worker.command_queue.join_thread()
+    except Exception:
+        pass
 
 
 def _default_payload_fn(tick_id: int) -> TickStreamPayload:
@@ -35,17 +66,21 @@ def create_app(
     *,
     worker: Any,
     get_payload_fn: Callable[[int], TickStreamPayload] | None = None,
+    start_worker: bool = False,
 ) -> FastAPI:
     """
     Фабрика приложения.
     - worker: SimulationWorker (или мок) — инжектируется без синглтона
     - get_payload_fn: функция tick_id → TickStreamPayload (None → stub)
+    - start_worker: если True, lifespan вызывает worker.process.start() при старте
     """
     payload_fn = get_payload_fn or _default_payload_fn
     ws_manager = ConnectionManager()
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        if start_worker:
+            worker.process.start()
         task = asyncio.create_task(
             broadcaster_loop(ws_manager, worker.tick_counter, payload_fn)
         )
@@ -54,6 +89,7 @@ def create_app(
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            _shutdown_worker(worker)
 
     app = FastAPI(
         title="Market ABM Simulation API",

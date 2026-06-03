@@ -442,6 +442,94 @@ def test_manifest_no_tmp_file_left_after_write(tmp_path: Path) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# elapsed_simulation_seconds — трекинг реального времени симуляции
+# ---------------------------------------------------------------------------
+
+
+def test_worker_elapsed_simulation_seconds_is_zero_before_start(tmp_path: Path) -> None:
+    worker = _make_simulation_worker(tmp_path)
+    assert worker.elapsed_simulation_seconds == pytest.approx(0.0)
+
+
+def test_worker_elapsed_simulation_seconds_grows_while_running(tmp_path: Path) -> None:
+    loop, cmd_queue, _, state_value, _ = _make_loop(tmp_path=tmp_path)
+    _run_loop_in_thread(loop)
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    time.sleep(0.1)
+    elapsed = loop.elapsed_simulation_seconds
+
+    assert elapsed > 0.05, f"expected > 0.05s, got {elapsed}"
+
+
+def test_worker_elapsed_simulation_seconds_stops_growing_when_paused(
+    tmp_path: Path,
+) -> None:
+    loop, cmd_queue, _, state_value, _ = _make_loop(tmp_path=tmp_path)
+    _run_loop_in_thread(loop)
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    time.sleep(0.05)
+
+    cmd_queue.put(WorkerCommand.PAUSE)
+    _wait_for_state(state_value, WorkerState.PAUSED)
+
+    snapshot = loop.elapsed_simulation_seconds
+    time.sleep(0.1)
+    after_wait = loop.elapsed_simulation_seconds
+
+    assert after_wait == pytest.approx(snapshot, abs=0.01), (
+        "elapsed не должен расти в PAUSED"
+    )
+
+
+def test_worker_elapsed_simulation_seconds_accumulates_across_pause_resume(
+    tmp_path: Path,
+) -> None:
+    loop, cmd_queue, _, state_value, _ = _make_loop(tmp_path=tmp_path)
+    _run_loop_in_thread(loop)
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    time.sleep(0.05)
+
+    cmd_queue.put(WorkerCommand.PAUSE)
+    _wait_for_state(state_value, WorkerState.PAUSED)
+    first_elapsed = loop.elapsed_simulation_seconds
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    time.sleep(0.05)
+
+    second_elapsed = loop.elapsed_simulation_seconds
+    assert second_elapsed > first_elapsed, "elapsed должен продолжать накапливаться после resume"
+
+
+def test_worker_elapsed_simulation_seconds_resets_on_reset_command(
+    tmp_path: Path,
+) -> None:
+    loop, cmd_queue, _, state_value, _ = _make_loop(tmp_path=tmp_path)
+    _run_loop_in_thread(loop)
+
+    _go_to_paused(cmd_queue, state_value)
+    assert loop.elapsed_simulation_seconds > 0.0
+
+    cmd_queue.put(WorkerCommand.RESET)
+    _wait_for_state(state_value, WorkerState.IDLE)
+
+    assert loop.elapsed_simulation_seconds == pytest.approx(0.0, abs=0.01)
+
+
+def test_simulation_worker_has_elapsed_simulation_seconds_property(tmp_path: Path) -> None:
+    worker = _make_simulation_worker(tmp_path)
+    val = worker.elapsed_simulation_seconds
+    assert isinstance(val, float)
+    assert val == pytest.approx(0.0)
+
+
 def test_simulation_worker_process_is_daemon(tmp_path: Path) -> None:
     worker = _make_simulation_worker(tmp_path)
     assert worker.process.daemon is True
