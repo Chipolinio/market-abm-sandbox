@@ -1,12 +1,10 @@
-# Тесты REST Control API (Slice 6.2, RED-фаза).
+# Тесты REST Control API (Slice 6.2).
 # Стратегия: FastAPI TestClient с мок-воркером (SimulationWorker подменяется фикстурой).
 # asyncio.to_thread тестируется через инжектирование реального Queue (sync → async bridge).
 from __future__ import annotations
 
 import multiprocessing as mp
-import queue
-from typing import Any
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +15,7 @@ from market_abm.worker.process import WorkerCommand, WorkerState
 
 
 # ---------------------------------------------------------------------------
-# Фикстуры
+# Вспомогательные фабрики
 # ---------------------------------------------------------------------------
 
 
@@ -37,6 +35,12 @@ def _make_mock_worker(
     worker.last_error = last_error
     worker.run_id = "test-run"
     return worker
+
+
+def _make_client(worker: MagicMock) -> TestClient:
+    """Создаёт TestClient с подменённым воркером через dependency override."""
+    app = create_app(worker=worker)
+    return TestClient(app, raise_server_exceptions=True)
 
 
 @pytest.fixture()
@@ -64,259 +68,264 @@ def failed_worker() -> MagicMock:
     return _make_mock_worker(WorkerState.FAILED, tick=5, last_error="OOM: boom")
 
 
-def _make_client(worker: MagicMock) -> TestClient:
-    """Создаёт TestClient с подменённым воркером через dependency override."""
-    app = create_app(worker=worker)
-    return TestClient(app, raise_server_exceptions=True)
-
-
 # ---------------------------------------------------------------------------
-# Группа 1: DTO-схемы (чистые юнит-тесты, без HTTP)
+# DTO-схемы (чистые юнит-тесты, без HTTP)
 # ---------------------------------------------------------------------------
 
 
-class TestSchemas:
-    def test_simulation_start_request_defaults(self) -> None:
-        req = SimulationStartRequest()
-        assert req.n_buyers == 1000
-        assert req.n_sellers == 50
-        assert req.repricing_mode == "rules"
-        assert req.force_clear is False
-        assert req.run_id is None
-
-    def test_simulation_start_request_validation_n_buyers_limit(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            SimulationStartRequest(n_buyers=200_000)
-
-    def test_simulation_start_request_validation_repricing_mode(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            SimulationStartRequest(repricing_mode="unknown_mode")
-
-    def test_simulation_status_response_all_states_valid(self) -> None:
-        for state in ("IDLE", "RUNNING", "PAUSED", "STOPPED", "FAILED"):
-            resp = SimulationStatusResponse(
-                run_id="test-run",
-                state=state,
-                current_tick=0,
-                elapsed_time_seconds=0.0,
-            )
-            assert resp.state == state
-
-    def test_simulation_status_response_invalid_state(self) -> None:
-        from pydantic import ValidationError
-
-        with pytest.raises(ValidationError):
-            SimulationStatusResponse(
-                run_id="x",
-                state="UNKNOWN",
-                current_tick=0,
-                elapsed_time_seconds=0.0,
-            )
+def test_simulation_start_request_defaults() -> None:
+    req = SimulationStartRequest()
+    assert req.n_buyers == 1000
+    assert req.n_sellers == 50
+    assert req.repricing_mode == "rules"
+    assert req.force_clear is False
+    assert req.run_id is None
 
 
-# ---------------------------------------------------------------------------
-# Группа 2: POST /api/v1/simulation/start
-# ---------------------------------------------------------------------------
+def test_simulation_start_request_validation_n_buyers_limit() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        SimulationStartRequest(n_buyers=200_000)
 
 
-class TestStartEndpoint:
-    def test_start_from_idle_returns_202(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.post("/api/v1/simulation/start")
-        assert resp.status_code == 202
+def test_simulation_start_request_validation_repricing_mode() -> None:
+    from pydantic import ValidationError
 
-    def test_start_enqueues_start_command(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        client.post("/api/v1/simulation/start")
-        cmd = idle_worker.command_queue.get_nowait()
-        assert cmd == WorkerCommand.START
+    with pytest.raises(ValidationError):
+        SimulationStartRequest(repricing_mode="unknown_mode")
 
-    def test_start_from_running_returns_400(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        resp = client.post("/api/v1/simulation/start")
-        assert resp.status_code == 400
-        assert "already running" in resp.json()["detail"].lower()
 
-    def test_start_from_stopped_without_force_clear_returns_400(
-        self, stopped_worker: MagicMock
-    ) -> None:
-        client = _make_client(stopped_worker)
-        resp = client.post("/api/v1/simulation/start", json={"force_clear": False})
-        assert resp.status_code == 400
-        assert "force_clear" in resp.json()["detail"].lower()
+def test_simulation_status_response_all_states_valid() -> None:
+    for state in ("IDLE", "RUNNING", "PAUSED", "STOPPED", "FAILED"):
+        resp = SimulationStatusResponse(
+            run_id="test-run",
+            state=state,
+            current_tick=0,
+            elapsed_time_seconds=0.0,
+        )
+        assert resp.state == state
 
-    def test_start_from_stopped_with_force_clear_returns_202(
-        self, stopped_worker: MagicMock
-    ) -> None:
-        client = _make_client(stopped_worker)
-        resp = client.post("/api/v1/simulation/start", json={"force_clear": True})
-        assert resp.status_code == 202
 
-    def test_start_from_failed_with_force_clear_returns_202(
-        self, failed_worker: MagicMock
-    ) -> None:
-        client = _make_client(failed_worker)
-        resp = client.post("/api/v1/simulation/start", json={"force_clear": True})
-        assert resp.status_code == 202
+def test_simulation_status_response_invalid_state() -> None:
+    from pydantic import ValidationError
 
-    def test_start_queue_full_returns_429(self, idle_worker: MagicMock) -> None:
-        # Заполняем очередь вручную, чтобы симулировать "спам команд"
-        idle_worker.command_queue.put_nowait(WorkerCommand.PAUSE)
-        client = _make_client(idle_worker)
-        resp = client.post("/api/v1/simulation/start")
-        assert resp.status_code == 429
-
-    def test_start_response_body_contains_state(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.post("/api/v1/simulation/start")
-        body = resp.json()
-        assert "state" in body or "message" in body
+    with pytest.raises(ValidationError):
+        SimulationStatusResponse(
+            run_id="x",
+            state="UNKNOWN",
+            current_tick=0,
+            elapsed_time_seconds=0.0,
+        )
 
 
 # ---------------------------------------------------------------------------
-# Группа 3: POST /api/v1/simulation/pause
+# POST /api/v1/simulation/start
 # ---------------------------------------------------------------------------
 
 
-class TestPauseEndpoint:
-    def test_pause_from_running_returns_202(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        resp = client.post("/api/v1/simulation/pause")
-        assert resp.status_code == 202
-
-    def test_pause_enqueues_pause_command(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        client.post("/api/v1/simulation/pause")
-        cmd = running_worker.command_queue.get_nowait()
-        assert cmd == WorkerCommand.PAUSE
-
-    def test_pause_from_idle_returns_400(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.post("/api/v1/simulation/pause")
-        assert resp.status_code == 400
-
-    def test_pause_queue_full_returns_429(self, running_worker: MagicMock) -> None:
-        running_worker.command_queue.put_nowait(WorkerCommand.START)
-        client = _make_client(running_worker)
-        resp = client.post("/api/v1/simulation/pause")
-        assert resp.status_code == 429
+def test_start_from_idle_returns_202(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post("/api/v1/simulation/start")
+    assert resp.status_code == 202
 
 
-# ---------------------------------------------------------------------------
-# Группа 4: POST /api/v1/simulation/step
-# ---------------------------------------------------------------------------
+def test_start_enqueues_start_command(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    client.post("/api/v1/simulation/start")
+    cmd = idle_worker.command_queue.get_nowait()
+    assert cmd == WorkerCommand.START
 
 
-class TestStepEndpoint:
-    def test_step_from_paused_returns_202(self, paused_worker: MagicMock) -> None:
-        client = _make_client(paused_worker)
-        resp = client.post("/api/v1/simulation/step")
-        assert resp.status_code == 202
+def test_start_from_running_returns_400(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.post("/api/v1/simulation/start")
+    assert resp.status_code == 400
+    assert "already running" in resp.json()["detail"].lower()
 
-    def test_step_enqueues_step_command(self, paused_worker: MagicMock) -> None:
-        client = _make_client(paused_worker)
-        client.post("/api/v1/simulation/step")
-        cmd = paused_worker.command_queue.get_nowait()
-        assert cmd == WorkerCommand.STEP
 
-    def test_step_from_running_returns_400(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        resp = client.post("/api/v1/simulation/step")
-        assert resp.status_code == 400
-        assert "pause first" in resp.json()["detail"].lower()
+def test_start_from_stopped_without_force_clear_returns_400(stopped_worker: MagicMock) -> None:
+    client = _make_client(stopped_worker)
+    resp = client.post("/api/v1/simulation/start", json={"force_clear": False})
+    assert resp.status_code == 400
+    assert "force_clear" in resp.json()["detail"].lower()
 
-    def test_step_from_idle_returns_400(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.post("/api/v1/simulation/step")
-        assert resp.status_code == 400
 
-    def test_step_queue_full_returns_429(self, paused_worker: MagicMock) -> None:
-        paused_worker.command_queue.put_nowait(WorkerCommand.START)
-        client = _make_client(paused_worker)
-        resp = client.post("/api/v1/simulation/step")
-        assert resp.status_code == 429
+def test_start_from_stopped_with_force_clear_returns_202(stopped_worker: MagicMock) -> None:
+    client = _make_client(stopped_worker)
+    resp = client.post("/api/v1/simulation/start", json={"force_clear": True})
+    assert resp.status_code == 202
+
+
+def test_start_from_failed_with_force_clear_returns_202(failed_worker: MagicMock) -> None:
+    client = _make_client(failed_worker)
+    resp = client.post("/api/v1/simulation/start", json={"force_clear": True})
+    assert resp.status_code == 202
+
+
+def test_start_queue_full_returns_429(idle_worker: MagicMock) -> None:
+    idle_worker.command_queue.put_nowait(WorkerCommand.PAUSE)
+    client = _make_client(idle_worker)
+    resp = client.post("/api/v1/simulation/start")
+    assert resp.status_code == 429
+
+
+def test_start_response_body_contains_state(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post("/api/v1/simulation/start")
+    body = resp.json()
+    assert "state" in body or "message" in body
 
 
 # ---------------------------------------------------------------------------
-# Группа 5: POST /api/v1/simulation/reset
+# POST /api/v1/simulation/pause
 # ---------------------------------------------------------------------------
 
 
-class TestResetEndpoint:
-    def test_reset_from_stopped_returns_202(self, stopped_worker: MagicMock) -> None:
-        client = _make_client(stopped_worker)
-        resp = client.post("/api/v1/simulation/reset")
-        assert resp.status_code == 202
+def test_pause_from_running_returns_202(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.post("/api/v1/simulation/pause")
+    assert resp.status_code == 202
 
-    def test_reset_from_failed_returns_202(self, failed_worker: MagicMock) -> None:
-        client = _make_client(failed_worker)
-        resp = client.post("/api/v1/simulation/reset")
-        assert resp.status_code == 202
 
-    def test_reset_from_running_returns_400(self, running_worker: MagicMock) -> None:
-        """RESET во время RUNNING — опасная операция, запрещена."""
-        client = _make_client(running_worker)
-        resp = client.post("/api/v1/simulation/reset")
-        assert resp.status_code == 400
+def test_pause_enqueues_pause_command(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    client.post("/api/v1/simulation/pause")
+    cmd = running_worker.command_queue.get_nowait()
+    assert cmd == WorkerCommand.PAUSE
 
-    def test_reset_queue_full_returns_429(self, stopped_worker: MagicMock) -> None:
-        stopped_worker.command_queue.put_nowait(WorkerCommand.STOP)
-        client = _make_client(stopped_worker)
-        resp = client.post("/api/v1/simulation/reset")
-        assert resp.status_code == 429
+
+def test_pause_from_idle_returns_400(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post("/api/v1/simulation/pause")
+    assert resp.status_code == 400
+
+
+def test_pause_queue_full_returns_429(running_worker: MagicMock) -> None:
+    running_worker.command_queue.put_nowait(WorkerCommand.START)
+    client = _make_client(running_worker)
+    resp = client.post("/api/v1/simulation/pause")
+    assert resp.status_code == 429
 
 
 # ---------------------------------------------------------------------------
-# Группа 6: GET /api/v1/simulation/status
+# POST /api/v1/simulation/step
 # ---------------------------------------------------------------------------
 
 
-class TestStatusEndpoint:
-    def test_status_returns_200(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.get("/api/v1/simulation/status")
-        assert resp.status_code == 200
+def test_step_from_paused_returns_202(paused_worker: MagicMock) -> None:
+    client = _make_client(paused_worker)
+    resp = client.post("/api/v1/simulation/step")
+    assert resp.status_code == 202
 
-    def test_status_response_schema(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.get("/api/v1/simulation/status")
-        body = resp.json()
-        assert "state" in body
-        assert "current_tick" in body
-        assert "elapsed_time_seconds" in body
-        assert "run_id" in body
 
-    def test_status_reflects_worker_state(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        resp = client.get("/api/v1/simulation/status")
-        assert resp.json()["state"] == "RUNNING"
+def test_step_enqueues_step_command(paused_worker: MagicMock) -> None:
+    client = _make_client(paused_worker)
+    client.post("/api/v1/simulation/step")
+    cmd = paused_worker.command_queue.get_nowait()
+    assert cmd == WorkerCommand.STEP
 
-    def test_status_reflects_tick_counter(self, running_worker: MagicMock) -> None:
-        client = _make_client(running_worker)
-        resp = client.get("/api/v1/simulation/status")
-        assert resp.json()["current_tick"] == 42
 
-    def test_status_returns_last_error_when_failed(self, failed_worker: MagicMock) -> None:
-        client = _make_client(failed_worker)
-        resp = client.get("/api/v1/simulation/status")
-        body = resp.json()
-        assert body["state"] == "FAILED"
-        assert body["last_error"] == "OOM: boom"
+def test_step_from_running_returns_400(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.post("/api/v1/simulation/step")
+    assert resp.status_code == 400
+    assert "pause first" in resp.json()["detail"].lower()
 
-    def test_status_last_error_none_when_healthy(self, idle_worker: MagicMock) -> None:
-        client = _make_client(idle_worker)
-        resp = client.get("/api/v1/simulation/status")
-        assert resp.json()["last_error"] is None
 
-    def test_status_validates_response_schema_via_pydantic(
-        self, idle_worker: MagicMock
-    ) -> None:
-        client = _make_client(idle_worker)
-        resp = client.get("/api/v1/simulation/status")
-        # Убеждаемся, что тело полностью разбирается Pydantic без ошибок
-        parsed = SimulationStatusResponse.model_validate(resp.json())
-        assert parsed.state == "IDLE"
+def test_step_from_idle_returns_400(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post("/api/v1/simulation/step")
+    assert resp.status_code == 400
+
+
+def test_step_queue_full_returns_429(paused_worker: MagicMock) -> None:
+    paused_worker.command_queue.put_nowait(WorkerCommand.START)
+    client = _make_client(paused_worker)
+    resp = client.post("/api/v1/simulation/step")
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/simulation/reset
+# ---------------------------------------------------------------------------
+
+
+def test_reset_from_stopped_returns_202(stopped_worker: MagicMock) -> None:
+    client = _make_client(stopped_worker)
+    resp = client.post("/api/v1/simulation/reset")
+    assert resp.status_code == 202
+
+
+def test_reset_from_failed_returns_202(failed_worker: MagicMock) -> None:
+    client = _make_client(failed_worker)
+    resp = client.post("/api/v1/simulation/reset")
+    assert resp.status_code == 202
+
+
+def test_reset_from_running_returns_400(running_worker: MagicMock) -> None:
+    """RESET во время RUNNING — опасная операция, запрещена."""
+    client = _make_client(running_worker)
+    resp = client.post("/api/v1/simulation/reset")
+    assert resp.status_code == 400
+
+
+def test_reset_queue_full_returns_429(stopped_worker: MagicMock) -> None:
+    stopped_worker.command_queue.put_nowait(WorkerCommand.STOP)
+    client = _make_client(stopped_worker)
+    resp = client.post("/api/v1/simulation/reset")
+    assert resp.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/simulation/status
+# ---------------------------------------------------------------------------
+
+
+def test_status_returns_200(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.get("/api/v1/simulation/status")
+    assert resp.status_code == 200
+
+
+def test_status_response_schema(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.get("/api/v1/simulation/status")
+    body = resp.json()
+    assert "state" in body
+    assert "current_tick" in body
+    assert "elapsed_time_seconds" in body
+    assert "run_id" in body
+
+
+def test_status_reflects_worker_state(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.get("/api/v1/simulation/status")
+    assert resp.json()["state"] == "RUNNING"
+
+
+def test_status_reflects_tick_counter(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.get("/api/v1/simulation/status")
+    assert resp.json()["current_tick"] == 42
+
+
+def test_status_returns_last_error_when_failed(failed_worker: MagicMock) -> None:
+    client = _make_client(failed_worker)
+    resp = client.get("/api/v1/simulation/status")
+    body = resp.json()
+    assert body["state"] == "FAILED"
+    assert body["last_error"] == "OOM: boom"
+
+
+def test_status_last_error_none_when_healthy(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.get("/api/v1/simulation/status")
+    assert resp.json()["last_error"] is None
+
+
+def test_status_validates_response_schema_via_pydantic(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.get("/api/v1/simulation/status")
+    parsed = SimulationStatusResponse.model_validate(resp.json())
+    assert parsed.state == "IDLE"
