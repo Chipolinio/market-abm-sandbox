@@ -346,3 +346,76 @@ def test_make_lazy_payload_fn_is_callable() -> None:
 
     fn = make_lazy_payload_fn("/tmp/any_dir")
     assert callable(fn)
+
+
+def test_create_app_with_worker_factory_calls_factory_on_lifespan_start() -> None:
+    from fastapi.testclient import TestClient
+
+    from market_abm.api.app import create_app
+
+    created: list[object] = []
+
+    def _factory() -> object:
+        w = _make_mock_worker()
+        created.append(w)
+        return w
+
+    app = create_app(worker_factory=_factory)
+
+    with TestClient(app):
+        pass
+
+    assert len(created) == 1, "factory должна быть вызвана ровно один раз"
+
+
+def test_create_app_worker_factory_wires_worker_into_app_state() -> None:
+    from fastapi.testclient import TestClient
+
+    from market_abm.api.app import create_app
+
+    produced_worker = _make_mock_worker()
+
+    app = create_app(worker_factory=lambda: produced_worker)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/simulation/status")
+        assert resp.status_code == 200
+
+
+def test_create_app_worker_factory_starts_process_when_start_worker_true() -> None:
+    from fastapi.testclient import TestClient
+
+    from market_abm.api.app import create_app
+
+    worker = _make_mock_worker()
+
+    app = create_app(worker_factory=lambda: worker, start_worker=True)
+
+    with TestClient(app):
+        pass
+
+    worker.process.start.assert_called_once()
+
+
+def test_create_app_worker_factory_sends_stop_on_shutdown() -> None:
+    from fastapi.testclient import TestClient
+
+    from market_abm.api.app import create_app
+
+    worker = _make_mock_worker()
+
+    app = create_app(worker_factory=lambda: worker)
+
+    with TestClient(app):
+        pass
+
+    worker.command_queue.put_nowait.assert_called_with(WorkerCommand.STOP)
+
+
+def test_module_level_app_uses_worker_factory_not_module_level_worker() -> None:
+    """Модульный app не должен хранить воркер как глобальную переменную."""
+    import market_abm.main as main_mod
+
+    assert not hasattr(main_mod, "_worker"), (
+        "_worker не должен существовать как модульная переменная — утечка семафоров при --reload"
+    )

@@ -64,32 +64,38 @@ def _default_payload_fn(tick_id: int) -> TickStreamPayload:
 
 def create_app(
     *,
-    worker: Any,
+    worker: Any = None,
+    worker_factory: Callable[[], Any] | None = None,
     get_payload_fn: Callable[[int], TickStreamPayload] | None = None,
     start_worker: bool = False,
 ) -> FastAPI:
     """
     Фабрика приложения.
-    - worker: SimulationWorker (или мок) — инжектируется без синглтона
+    - worker: SimulationWorker (или мок) — передаётся напрямую (для тестов)
+    - worker_factory: callable () → worker — создаётся внутри lifespan (для prod/--reload)
+      Устраняет утечку POSIX-семафоров при uvicorn --reload: IPC-примитивы живут
+      ровно в рамках одного lifespan-цикла и корректно освобождаются при shutdown.
     - get_payload_fn: функция tick_id → TickStreamPayload (None → stub)
     - start_worker: если True, lifespan вызывает worker.process.start() при старте
     """
-    payload_fn = get_payload_fn or _default_payload_fn
     ws_manager = ConnectionManager()
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+        w = worker_factory() if worker_factory is not None else worker
+        payload_fn = get_payload_fn or _default_payload_fn
+        app.state.worker = w
         if start_worker:
-            worker.process.start()
+            w.process.start()
         task = asyncio.create_task(
-            broadcaster_loop(ws_manager, worker.tick_counter, payload_fn)
+            broadcaster_loop(ws_manager, w.tick_counter, payload_fn)
         )
         try:
             yield
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-            _shutdown_worker(worker)
+            _shutdown_worker(w)
 
     app = FastAPI(
         title="Market ABM Simulation API",
@@ -97,7 +103,8 @@ def create_app(
         version="0.1.0",
         lifespan=_lifespan,
     )
-    app.state.worker = worker
+    if worker is not None:
+        app.state.worker = worker
     app.state.ws_manager = ws_manager
     app.include_router(control_router)
     app.include_router(stream_router)

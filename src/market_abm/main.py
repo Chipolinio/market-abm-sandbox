@@ -81,10 +81,8 @@ def make_lazy_payload_fn(artifacts_dir: str) -> Callable[[int], TickStreamPayloa
 
 configure_multiprocessing()
 
-_worker = SimulationWorker(artifacts_dir=_ARTIFACTS_DIR)
-
 app = create_app(
-    worker=_worker,
+    worker_factory=lambda: SimulationWorker(artifacts_dir=_ARTIFACTS_DIR),
     get_payload_fn=make_lazy_payload_fn(_ARTIFACTS_DIR),
     start_worker=True,
 )
