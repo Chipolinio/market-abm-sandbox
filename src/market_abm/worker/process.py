@@ -15,6 +15,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Final
 
+_SHOCK_QUEUE_MAXSIZE: Final[int] = 32
+
 __all__ = [
     "SimulationWorker",
     "WorkerCommand",
@@ -294,6 +296,7 @@ class SimulationWorker:
         ctx = mp.get_context("spawn")
 
         self.command_queue: mp.Queue = ctx.Queue(maxsize=1)
+        self.shock_queue: mp.Queue = ctx.Queue(maxsize=_SHOCK_QUEUE_MAXSIZE)
         self.tick_counter: mp.Value = ctx.Value("i", 0)
         self._state_value: mp.Value = ctx.Value("i", WorkerState.IDLE.value)
         self._last_error_array: mp.Array = ctx.Array("c", _LAST_ERROR_ARRAY_SIZE)

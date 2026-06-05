@@ -1,0 +1,82 @@
+# Назначение файла: SimulationContext и IPC-команды шоков (Slice 8.1).
+# Базовая идея: dataclass-контекст тика; merge/drain — чистые функции.
+from __future__ import annotations
+
+import queue
+import time
+from dataclasses import dataclass, replace
+
+from market_abm.domain.constants import PLATFORM_DEFAULTS, COL_BASE_COMMISSION
+from market_abm.domain.shocks import ActiveShock, ShockType
+
+
+@dataclass(frozen=True)
+class ShockCommand:
+    """Pickle-safe DTO для shock_queue (enum + scalars)."""
+
+    shock_type: ShockType
+    intensity: float
+    duration_ticks: int
+
+
+@dataclass
+class SimulationContext:
+    """Снимок контекста симуляции на тик (не Pydantic)."""
+
+    tick_id: int
+    active_shocks: tuple[ActiveShock, ...]
+    platform_fee_rate: float
+
+
+def default_simulation_context(*, tick_id: int = 0) -> SimulationContext:
+    """Контекст с дефолтной комиссией платформы."""
+    return SimulationContext(
+        tick_id=tick_id,
+        active_shocks=(),
+        platform_fee_rate=PLATFORM_DEFAULTS[COL_BASE_COMMISSION],
+    )
+
+
+def merge_shock(ctx: SimulationContext, cmd: ShockCommand) -> SimulationContext:
+    """Добавляет ActiveShock; исходный ctx не мутируется."""
+    shock = ActiveShock(
+        shock_type=cmd.shock_type,
+        intensity=cmd.intensity,
+        remaining_ticks=cmd.duration_ticks,
+        applied_at_tick=ctx.tick_id,
+    )
+    return replace(ctx, active_shocks=ctx.active_shocks + (shock,))
+
+
+_DRAIN_IDLE_SEC: float = 0.05
+
+
+def drain_shock_queue(shock_queue: queue.Queue, ctx: SimulationContext) -> SimulationContext:
+    """
+    Сливает все команды из очереди в active_shocks.
+    macOS: mp.Queue.get_nowait() может вернуть Empty при непустой очереди (feeder thread);
+    после первого успешного get ждём короткий idle-timeout перед выходом.
+    """
+    ctx_next = ctx
+    got_any = False
+    idle_deadline: float | None = None
+
+    while True:
+        try:
+            cmd = shock_queue.get_nowait()
+        except queue.Empty:
+            if not got_any:
+                break
+            now = time.monotonic()
+            if idle_deadline is None:
+                idle_deadline = now + _DRAIN_IDLE_SEC
+            elif now >= idle_deadline:
+                break
+            time.sleep(0.005)
+            continue
+
+        ctx_next = merge_shock(ctx_next, cmd)
+        got_any = True
+        idle_deadline = None
+
+    return ctx_next

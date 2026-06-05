@@ -9,7 +9,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from market_abm.api.schemas import SimulationStartRequest, SimulationStatusResponse
+from market_abm.api.schemas import (
+    SimulationShockRequest,
+    SimulationShockResponse,
+    SimulationStartRequest,
+    SimulationStatusResponse,
+)
+from market_abm.domain.shocks import ShockType
+from market_abm.simulation.context import ShockCommand
 from market_abm.worker.process import WorkerCommand, WorkerState
 
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
@@ -17,6 +24,29 @@ router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
 
 def _get_worker(request: Request) -> Any:
     return request.app.state.worker
+
+
+async def _enqueue_shock(shock_queue: Any, command: ShockCommand) -> int:
+    """
+    Ставит ShockCommand в shock_queue через asyncio.to_thread.
+    Возвращает queue_depth после put. HTTP 429 при переполнении.
+    """
+
+    def _put() -> int:
+        shock_queue.put_nowait(command)
+        try:
+            return shock_queue.qsize()
+        except NotImplementedError:
+            # macOS: mp.Queue.qsize() недоступен (sem_getvalue)
+            return 1
+
+    try:
+        return await asyncio.to_thread(_put)
+    except queue.Full:
+        raise HTTPException(
+            status_code=429,
+            detail="Shock queue is full. Worker is busy processing previous shocks.",
+        )
 
 
 async def _enqueue_command(cmd_queue: Any, command: WorkerCommand) -> None:
@@ -39,6 +69,30 @@ async def _enqueue_command(cmd_queue: Any, command: WorkerCommand) -> None:
             status_code=429,
             detail="Command queue is full. Worker is busy processing previous command.",
         )
+
+
+@router.post("/shock", status_code=202, response_model=SimulationShockResponse)
+async def post_shock(
+    body: SimulationShockRequest,
+    worker: Any = Depends(_get_worker),
+) -> SimulationShockResponse:
+    shock_queue = getattr(worker, "shock_queue", None)
+    if shock_queue is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Worker does not expose shock_queue.",
+        )
+
+    cmd = ShockCommand(
+        shock_type=ShockType(body.shock_type),
+        intensity=body.intensity,
+        duration_ticks=body.duration_ticks,
+    )
+    depth = await _enqueue_shock(shock_queue, cmd)
+    return SimulationShockResponse(
+        shock_type=body.shock_type,
+        queue_depth=depth,
+    )
 
 
 @router.post("/start", status_code=202)

@@ -7,6 +7,10 @@ from market_abm.api.schemas.analytics import (
     PriceIndexResponse,
 )
 from market_abm.api.schemas.health import HealthResponse
+from market_abm.api.schemas.shock import (
+    SimulationShockRequest,
+    SimulationShockResponse,
+)
 from market_abm.api.schemas.simulation import (
     SimulationStartRequest,
     SimulationStatusResponse,
@@ -25,6 +29,8 @@ __all__ = [
     "PriceIndexPointDTO",
     "PriceIndexResponse",
     "PriceQuantilesDTO",
+    "SimulationShockRequest",
+    "SimulationShockResponse",
     "SimulationStartRequest",
     "SimulationStatusResponse",
     "TickStreamPayload",
