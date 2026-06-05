@@ -160,5 +160,5 @@ export function hasPlottablePriceData(rows: PriceChartRow[]): boolean {
 
 /** True when at least one point has GMV or transaction activity. */
 export function hasPlottableGmvData(points: GmvTickPoint[]): boolean {
-  return points.some((p) => p.gmv > 0 || p.transaction_count > 0);
+  return points.some((p) => p.gmv > 0 || (p.transaction_count ?? 0) > 0);
 }

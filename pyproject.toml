@@ -35,4 +35,5 @@ markers = [
     "slow: long-run stability tests (50 ticks, tracemalloc)",
     "ml: ML-repricing slice tests (Spec 005); may require optional 'ml' extra",
     "worker: integration tests that spawn real multiprocessing.Process (Spec 006)",
+    "docker: Docker Compose smoke tests (Spec 007); require docker CLI",
 ]

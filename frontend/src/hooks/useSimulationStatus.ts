@@ -10,7 +10,7 @@ export type UseSimulationStatusResult = {
   status: SimulationStatus | null;
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<SimulationStatus | null>;
 };
 
 export function useSimulationStatus(poll = true): UseSimulationStatusResult {

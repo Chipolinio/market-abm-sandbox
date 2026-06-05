@@ -1,0 +1,38 @@
+# Production-like Compose stack (Spec 007 §7.1).
+# Usage: cd docker && docker compose up --build
+
+services:
+  market_abm_backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+    container_name: market_abm_backend
+    environment:
+      SIMULATION_ARTIFACTS_DIR: /data/runs/default
+    volumes:
+      - market_abm_runs:/data/runs
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  market_abm_frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+    container_name: market_abm_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      market_abm_backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  market_abm_runs:
+    name: market_abm_runs

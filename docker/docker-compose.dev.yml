@@ -1,0 +1,7 @@
+# Dev override: bind-mount runs/ for host inspection (Spec 007 §7.2).
+# Usage: cd docker && docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+services:
+  market_abm_backend:
+    volumes:
+      - ../runs:/data/runs

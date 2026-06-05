@@ -1,0 +1,16 @@
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.git/
+.gitignore
+.cursor/
+frontend/node_modules/
+frontend/dist/
+runs/
+*.parquet
+snaps/
+agent-transcripts/
+**/.DS_Store
