@@ -20,6 +20,14 @@ _TICK_ID_FROM_FILENAME = (
     "CAST(regexp_extract(filename, 'tick_([0-9]+)', 1) AS INTEGER)"
 )
 
+# Общий SQL-фрагмент квантилей цен (Spec 007 §4.1): approx_quantile, не MEDIAN.
+_PRICE_QUANTILES_AGG = """
+    AVG(price)::DOUBLE AS mean_price,
+    approx_quantile(price, 0.5)::DOUBLE AS median_price,
+    approx_quantile(price, 0.1)::DOUBLE AS p10_price,
+    approx_quantile(price, 0.9)::DOUBLE AS p90_price
+"""
+
 
 class AnalyticsStore:
     """
@@ -183,6 +191,37 @@ class AnalyticsStore:
             return pl.DataFrame(schema=schema)
         return result
 
+    def _run_id_from_manifest(self) -> str:
+        manifest = json.loads((self._run_root / "manifest.json").read_text(encoding="utf-8"))
+        return str(manifest.get("run_id", self._run_root.name))
+
+    def query_price_quantiles(self, tick_id: int) -> dict[str, float] | None:
+        """
+        Квантили цен одного тика для WS/REST (approx_quantile).
+        None — если snapshot пуст или тик отсутствует.
+        """
+        if not self._has_parquet_files("products_snapshots"):
+            return None
+
+        sql = f"""
+            SELECT
+                {_PRICE_QUANTILES_AGG}
+            FROM (
+                SELECT {_TICK_ID_FROM_FILENAME} AS tick_id, price
+                FROM read_parquet(?, filename=true)
+            )
+            WHERE tick_id = ?
+        """
+        row = self._con.cursor().execute(sql, [self._products_glob(), tick_id]).fetchone()
+        if row is None or row[0] is None:
+            return None
+
+        p10, p50, p90 = row[2], row[1], row[3]
+        if p10 is None or p50 is None or p90 is None:
+            return None
+
+        return {"p10": float(p10), "p50": float(p50), "p90": float(p90)}
+
     def query_market_aggregate(self, tick_id: int) -> dict[str, object]:
         """
         Агрегаты одного тика для WebSocket-стрима (broadcaster_loop, §5.2 Spec 006).
@@ -223,10 +262,13 @@ class AnalyticsStore:
             if row is not None:
                 mean_price = float(row[0])
 
+        price_quantiles = self.query_price_quantiles(tick_id)
+
         return {
             "mean_price": mean_price,
             "total_gmv": total_gmv,
             "total_transactions": total_transactions,
+            "price_quantiles": price_quantiles,
         }
 
     def price_index_by_tick(self) -> pl.DataFrame:
@@ -244,10 +286,7 @@ class AnalyticsStore:
         sql = f"""
             SELECT
                 {_TICK_ID_FROM_FILENAME} AS tick_id,
-                AVG(price)::DOUBLE AS mean_price,
-                MEDIAN(price)::DOUBLE AS median_price,
-                quantile_cont(price, 0.10)::DOUBLE AS p10_price,
-                quantile_cont(price, 0.90)::DOUBLE AS p90_price
+                {_PRICE_QUANTILES_AGG}
             FROM read_parquet(?, filename=true)
             GROUP BY tick_id
             ORDER BY tick_id

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from market_abm.api.app import _default_payload_fn, create_app
-from market_abm.api.schemas import MarketAggregateDTO, TickStreamPayload
+from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO, TickStreamPayload
 from market_abm.worker.process import SimulationWorker
 
 __all__ = [
@@ -40,6 +40,14 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
     def _payload(tick_id: int) -> TickStreamPayload:
         agg: dict = store.query_market_aggregate(tick_id)  # type: ignore[union-attr]
         alerts: list[dict] = store.drift_alerts()  # type: ignore[union-attr]
+        raw_q = agg.get("price_quantiles")
+        quantiles: PriceQuantilesDTO | None = None
+        if isinstance(raw_q, dict):
+            quantiles = PriceQuantilesDTO(
+                p10=float(raw_q["p10"]),
+                p50=float(raw_q["p50"]),
+                p90=float(raw_q["p90"]),
+            )
         return TickStreamPayload(
             tick_id=tick_id,
             timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
@@ -47,6 +55,7 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
                 mean_price=float(agg["mean_price"]),
                 total_gmv=float(agg["total_gmv"]),
                 total_transactions=int(agg["total_transactions"]),
+                price_quantiles=quantiles,
             ),
             active_drift_alerts=alerts,
         )
@@ -85,6 +94,7 @@ app = create_app(
     worker_factory=lambda: SimulationWorker(artifacts_dir=_ARTIFACTS_DIR),
     get_payload_fn=make_lazy_payload_fn(_ARTIFACTS_DIR),
     start_worker=True,
+    artifacts_dir=_ARTIFACTS_DIR,
 )
 
 

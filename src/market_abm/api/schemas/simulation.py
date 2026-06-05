@@ -1,5 +1,4 @@
-# Назначение файла: Pydantic DTO для REST API симуляции (Slice 6.2).
-# Базовая идея: Pydantic используется ИСКЛЮЧИТЕЛЬНО здесь и в routers/ — не в бизнес-логике.
+# Назначение файла: DTO управления симуляцией (REST Control, Slice 6.2).
 from __future__ import annotations
 
 from typing import Literal
@@ -28,20 +27,3 @@ class SimulationStatusResponse(BaseModel):
     current_tick: int
     elapsed_time_seconds: float
     last_error: str | None = None
-
-
-class MarketAggregateDTO(BaseModel):
-    """Агрегированные рыночные метрики за один тик."""
-
-    mean_price: float
-    total_gmv: float
-    total_transactions: int
-
-
-class TickStreamPayload(BaseModel):
-    """Фрейм WebSocket-стрима (1Hz)."""
-
-    tick_id: int
-    timestamp_utc: str
-    market_summary: MarketAggregateDTO
-    active_drift_alerts: list[dict]

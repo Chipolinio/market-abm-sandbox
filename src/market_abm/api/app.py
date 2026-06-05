@@ -13,9 +13,11 @@ from typing import Any
 from fastapi import FastAPI
 
 from market_abm.api.broadcaster import ConnectionManager, broadcaster_loop
+from market_abm.api.routers.analytics import router as analytics_router
 from market_abm.api.routers.control import router as control_router
+from market_abm.api.routers.health import router as health_router
 from market_abm.api.routers.stream import router as stream_router
-from market_abm.api.schemas import MarketAggregateDTO, TickStreamPayload
+from market_abm.api.schemas.stream import MarketAggregateDTO, TickStreamPayload
 from market_abm.worker.process import WorkerCommand
 
 
@@ -68,6 +70,8 @@ def create_app(
     worker_factory: Callable[[], Any] | None = None,
     get_payload_fn: Callable[[int], TickStreamPayload] | None = None,
     start_worker: bool = False,
+    artifacts_dir: str | None = None,
+    analytics_store: Any = None,
 ) -> FastAPI:
     """
     Фабрика приложения.
@@ -77,6 +81,8 @@ def create_app(
       ровно в рамках одного lifespan-цикла и корректно освобождаются при shutdown.
     - get_payload_fn: функция tick_id → TickStreamPayload (None → stub)
     - start_worker: если True, lifespan вызывает worker.process.start() при старте
+    - artifacts_dir: корень Parquet-артефактов для analytics router (prod)
+    - analytics_store: инжектированный AnalyticsStore (тесты)
     """
     ws_manager = ConnectionManager()
 
@@ -106,6 +112,10 @@ def create_app(
     if worker is not None:
         app.state.worker = worker
     app.state.ws_manager = ws_manager
+    app.state.artifacts_dir = artifacts_dir
+    app.state.analytics_store = analytics_store
+    app.include_router(health_router)
     app.include_router(control_router)
+    app.include_router(analytics_router)
     app.include_router(stream_router)
     return app
