@@ -34,3 +34,27 @@ class GmvByTickResponse(BaseModel):
 
     run_id: str
     points: list[GmvPointDTO]
+
+
+class ListingMetricPointDTO(BaseModel):
+    """Метрики одного listing на тик (dense charts, Slice 7.7)."""
+
+    tick_id: int
+    price: float | None
+    gmv: float
+    volume: int
+
+
+class ListingSeriesDTO(BaseModel):
+    """Временной ряд одного SKU из топ-N."""
+
+    listing_id: int
+    seller_id: int
+    points: list[ListingMetricPointDTO]
+
+
+class TopListingsResponse(BaseModel):
+    """Ответ GET /api/v1/analytics/top-listings."""
+
+    run_id: str
+    listings: list[ListingSeriesDTO]

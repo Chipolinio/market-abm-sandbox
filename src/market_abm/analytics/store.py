@@ -271,6 +271,86 @@ class AnalyticsStore:
             "price_quantiles": price_quantiles,
         }
 
+    def top_listings_metrics(self, limit: int = 10) -> pl.DataFrame:
+        """
+        Топ-N listing_id по суммарному GMV; per-tick price, gmv, volume (Slice 7.7).
+        Пустой DataFrame при отсутствии Parquet.
+        """
+        schema = {
+            COL_TICK_ID: pl.Int32,
+            COL_LISTING_ID: pl.Int32,
+            COL_SELLER_ID: pl.Int32,
+            COL_PRICE: pl.Float64,
+            "gmv": pl.Float64,
+            "volume": pl.Int64,
+        }
+        if not self._has_parquet_files("transactions") or not self._has_parquet_files(
+            "products_snapshots"
+        ):
+            return pl.DataFrame(schema=schema)
+
+        sql = f"""
+            WITH listing_rank AS (
+                SELECT
+                    listing_id,
+                    MAX(seller_id)::INTEGER AS seller_id,
+                    SUM(price_paid)::DOUBLE AS total_gmv
+                FROM read_parquet(?)
+                GROUP BY listing_id
+                ORDER BY total_gmv DESC
+                LIMIT ?
+            ),
+            tx_tick AS (
+                SELECT
+                    tick_id,
+                    listing_id,
+                    SUM(price_paid)::DOUBLE AS gmv,
+                    COUNT(*)::BIGINT AS volume
+                FROM read_parquet(?)
+                GROUP BY tick_id, listing_id
+            ),
+            prices AS (
+                SELECT
+                    {_TICK_ID_FROM_FILENAME} AS tick_id,
+                    listing_id,
+                    price::DOUBLE AS price
+                FROM read_parquet(?, filename=true)
+            )
+            SELECT
+                p.tick_id,
+                lr.listing_id,
+                lr.seller_id,
+                p.price,
+                COALESCE(t.gmv, 0.0) AS gmv,
+                COALESCE(t.volume, 0)::BIGINT AS volume
+            FROM listing_rank lr
+            INNER JOIN prices p ON p.listing_id = lr.listing_id
+            LEFT JOIN tx_tick t
+                ON t.tick_id = p.tick_id AND t.listing_id = lr.listing_id
+            ORDER BY lr.listing_id, p.tick_id
+        """
+        result = self._query_pl(
+            sql,
+            [
+                self._transactions_glob(),
+                limit,
+                self._transactions_glob(),
+                self._products_glob(),
+            ],
+        )
+        if result.height == 0:
+            return pl.DataFrame(schema=schema)
+        return result.cast(
+            {
+                COL_TICK_ID: pl.Int32,
+                COL_LISTING_ID: pl.Int32,
+                COL_SELLER_ID: pl.Int32,
+                COL_PRICE: pl.Float64,
+                "gmv": pl.Float64,
+                "volume": pl.Int64,
+            }
+        )
+
     def price_index_by_tick(self) -> pl.DataFrame:
         """Агрегированные цены по тику; nullable Float64 при пустом snapshot."""
         schema = {

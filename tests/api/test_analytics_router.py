@@ -266,3 +266,37 @@ def test_price_index_uses_approx_quantile() -> None:
     assert "approx_quantile" in source
     assert "MEDIAN(price)" not in source
     assert "quantile_cont(price" not in source
+
+
+def test_top_listings_endpoint_returns_ranked_series(tmp_path: Path) -> None:
+    store = _persist_mini_run(tmp_path)
+    try:
+        client = _make_client(store)
+        response = client.get("/api/v1/analytics/top-listings", params={"limit": 10})
+    finally:
+        store.close()
+
+    assert response.status_code == 200
+    body = response.json()
+    listings = body["listings"]
+    assert len(listings) == 2
+    assert listings[0]["listing_id"] == 0
+    assert listings[1]["listing_id"] == 1
+    tick0 = listings[0]["points"][0]
+    assert tick0["tick_id"] == 0
+    assert tick0["gmv"] == pytest.approx(100.0)
+    assert tick0["volume"] == 1
+    assert tick0["price"] == pytest.approx(100.0, rel=0.02)
+
+
+def test_top_listings_empty_when_no_store() -> None:
+    client = _make_client(None)
+    response = client.get("/api/v1/analytics/top-listings")
+    assert response.status_code == 200
+    assert response.json()["listings"] == []
+
+
+def test_top_listings_limit_validation() -> None:
+    client = _make_client(None)
+    response = client.get("/api/v1/analytics/top-listings", params={"limit": 11})
+    assert response.status_code == 422

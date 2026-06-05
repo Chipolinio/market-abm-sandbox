@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
-import type { GmvPoint, PriceIndexPoint } from "./types";
+import type { GmvPoint, ListingSeries, PriceIndexPoint } from "./types";
+import { DEFAULT_TOP_LISTINGS_LIMIT } from "@/state/listingSeries";
 
 type PriceIndexResponse = {
   run_id: string;
@@ -17,4 +18,15 @@ export function fetchPriceIndex(): Promise<PriceIndexResponse> {
 
 export function fetchGmvByTick(): Promise<GmvByTickResponse> {
   return apiFetch<GmvByTickResponse>("/api/v1/analytics/gmv-by-tick");
+}
+
+type TopListingsResponse = {
+  run_id: string;
+  listings: ListingSeries[];
+};
+
+export function fetchTopListings(
+  limit: number = DEFAULT_TOP_LISTINGS_LIMIT,
+): Promise<TopListingsResponse> {
+  return apiFetch<TopListingsResponse>(`/api/v1/analytics/top-listings?limit=${limit}`);
 }

@@ -45,6 +45,19 @@ export type GmvPoint = {
   transaction_count: number;
 };
 
+export type ListingMetricPoint = {
+  tick_id: number;
+  price: number | null;
+  gmv: number;
+  volume: number;
+};
+
+export type ListingSeries = {
+  listing_id: number;
+  seller_id: number;
+  points: ListingMetricPoint[];
+};
+
 export type ApiErrorBody = {
   detail?: string | Array<{ msg: string }>;
 };

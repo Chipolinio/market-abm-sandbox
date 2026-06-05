@@ -181,3 +181,31 @@ body {
 .backfill-status.error {
   color: #c62828;
 }
+
+.dense-section {
+  margin-bottom: 1rem;
+}
+
+.dense-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.dense-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .dense-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dense-chart-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #37474f;
+}

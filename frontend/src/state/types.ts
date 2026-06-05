@@ -29,3 +29,26 @@ export type PriceChartRow = {
 };
 
 export type TickSeries = Map<number, TickPoint>;
+
+/** Per-listing dense metrics (Slice 7.7). */
+export type ListingMetricPoint = TickPoint & {
+  price: number | null;
+  gmv: number;
+  volume: number;
+};
+
+export type ListingSeriesData = {
+  listing_id: number;
+  seller_id: number;
+  points: ListingMetricPoint[];
+};
+
+export type ListingMetricKey = "price" | "gmv" | "volume";
+
+/** Wide row for Recharts multi-line dense chart. */
+export type ListingWideRow = {
+  tick_id: number;
+  [seriesKey: string]: number | null;
+};
+
+export type ListingMetricSeries = Map<number, ListingMetricPoint>;

@@ -4,17 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
+import polars as pl
 from fastapi import APIRouter, Depends, Query, Request
 
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.api.schemas.analytics import (
     GmvByTickResponse,
     GmvPointDTO,
+    ListingMetricPointDTO,
+    ListingSeriesDTO,
     PriceIndexPointDTO,
     PriceIndexResponse,
+    TopListingsResponse,
 )
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO
-from market_abm.domain.constants import COL_TICK_ID
+from market_abm.domain.constants import COL_LISTING_ID, COL_SELLER_ID, COL_TICK_ID
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
@@ -104,6 +108,43 @@ async def get_gmv_by_tick(
         for row in df.iter_rows(named=True)
     ]
     return GmvByTickResponse(run_id=_run_id_from_store(store), points=points)
+
+
+@router.get("/top-listings", response_model=TopListingsResponse)
+async def get_top_listings(
+    limit: int = Query(10, ge=1, le=10),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> TopListingsResponse:
+    """Топ-N SKU по GMV: price / gmv / volume per tick (dense backfill, §7.7)."""
+    if store is None:
+        return TopListingsResponse(run_id=_DEFAULT_RUN_ID, listings=[])
+
+    df = store.top_listings_metrics(limit=limit)
+    if df.height == 0:
+        return TopListingsResponse(run_id=_run_id_from_store(store), listings=[])
+
+    listings: list[ListingSeriesDTO] = []
+    for listing_id in df[COL_LISTING_ID].unique().sort().to_list():
+        part = df.filter(pl.col(COL_LISTING_ID) == listing_id)
+        seller_id = int(part[COL_SELLER_ID][0])
+        points = [
+            ListingMetricPointDTO(
+                tick_id=int(row[COL_TICK_ID]),
+                price=row["price"],
+                gmv=float(row["gmv"]),
+                volume=int(row["volume"]),
+            )
+            for row in part.iter_rows(named=True)
+        ]
+        listings.append(
+            ListingSeriesDTO(
+                listing_id=int(listing_id),
+                seller_id=seller_id,
+                points=points,
+            )
+        )
+
+    return TopListingsResponse(run_id=_run_id_from_store(store), listings=listings)
 
 
 @router.get("/market-summary", response_model=MarketAggregateDTO)

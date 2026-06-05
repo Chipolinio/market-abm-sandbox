@@ -3,9 +3,11 @@ import { DriftAlerts } from "@/components/DriftAlerts";
 import { GmvChart } from "@/components/GmvChart";
 import { PriceQuantileChart } from "@/components/PriceQuantileChart";
 import { StatusBar } from "@/components/StatusBar";
+import { TopListingsSection } from "@/components/TopListingsSection";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
 import { useSimulationStatus } from "@/hooks/useSimulationStatus";
 import { useTickStream } from "@/hooks/useTickStream";
+import { useTopListingsSeries } from "@/hooks/useTopListingsSeries";
 
 export default function App() {
   const { status, refresh } = useSimulationStatus();
@@ -19,6 +21,9 @@ export default function App() {
     handlePayload,
     reloadBackfill,
   } = useDashboardSeries();
+
+  const { listings: topListings, loading: topListingsLoading, error: topListingsError, reload: reloadTopListings } =
+    useTopListingsSeries();
 
   const { connectionState, reconnectAttempt, lastPayload } = useTickStream({
     onPayload: handlePayload,
@@ -39,6 +44,7 @@ export default function App() {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     void reloadBackfill();
+    void reloadTopListings();
   };
 
   return (
@@ -60,6 +66,9 @@ export default function App() {
       {backfillError !== null ? (
         <p className="backfill-status error">Backfill: {backfillError}</p>
       ) : null}
+      {topListingsError !== null ? (
+        <p className="backfill-status error">Top listings: {topListingsError}</p>
+      ) : null}
 
       <ControlPanel
         state={workerState}
@@ -77,6 +86,8 @@ export default function App() {
           <GmvChart data={gmvChartData} />
         </div>
       </div>
+
+      <TopListingsSection listings={topListings} loading={topListingsLoading} />
 
       <DriftAlerts alerts={driftAlerts} />
     </div>

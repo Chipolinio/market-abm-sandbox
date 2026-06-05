@@ -359,3 +359,46 @@ def test_price_index_null_on_empty_snapshot(tmp_path: Path) -> None:
 def test_analytics_store_missing_run_root_raises(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         AnalyticsStore(tmp_path / "nonexistent")
+
+
+def test_top_listings_metrics_ranked_by_total_gmv(tmp_path: Path) -> None:
+    tick0 = _tx_rows(
+        [
+            {
+                COL_TICK_ID: 0,
+                COL_BUYER_ID: 0,
+                COL_LISTING_ID: 0,
+                COL_SELLER_ID: 0,
+                COL_PRICE_PAID: 100.0,
+                COL_UNIT_COST: 20.0,
+                COL_GROSS_MARGIN: 80.0,
+            },
+            {
+                COL_TICK_ID: 0,
+                COL_BUYER_ID: 0,
+                COL_LISTING_ID: 1,
+                COL_SELLER_ID: 1,
+                COL_PRICE_PAID: 50.0,
+                COL_UNIT_COST: 20.0,
+                COL_GROSS_MARGIN: 30.0,
+            },
+        ]
+    )
+    run_root = _persist_run(
+        tmp_path,
+        run_id="top-listings-run",
+        ticks=[(tick0, _products_snapshot(2, prices=[100.0, 200.0]))],
+    )
+    store = AnalyticsStore(run_root)
+    try:
+        df = store.top_listings_metrics(limit=10)
+    finally:
+        store.close()
+
+    assert df.height == 2
+    listing_ids = df[COL_LISTING_ID].unique().sort().to_list()
+    assert listing_ids == [0, 1]
+    row0 = df.filter(pl.col(COL_LISTING_ID) == 0).row(0, named=True)
+    assert row0["gmv"] == pytest.approx(100.0)
+    assert row0["volume"] == 1
+    assert row0["price"] == pytest.approx(100.0)

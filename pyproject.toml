@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "market-abm"
 version = "0.1.0"
 description = "Econometric ABM e-commerce market simulator (DOD / Polars)"
-readme = "specs/001-synthetic-population.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.5",
