@@ -1,0 +1,15 @@
+# Test override: изолированные порты/volume/container names (Spec 007 §7.5).
+services:
+  market_abm_backend:
+    container_name: market_abm_backend_pytest
+    ports:
+      - "18000:8000"
+
+  market_abm_frontend:
+    container_name: market_abm_frontend_pytest
+    ports:
+      - "13000:80"
+
+volumes:
+  market_abm_runs:
+    name: market_abm_runs_pytest

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime
 import multiprocessing as mp
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -328,9 +329,7 @@ def test_app_module_level_object_is_fastapi_instance() -> None:
     assert isinstance(module_app, FastAPI)
 
 
-def test_make_lazy_payload_fn_returns_zero_dto_before_manifest_exists(
-    tmp_path: "pytest.TempPathFactory",
-) -> None:
+def test_make_lazy_payload_fn_returns_zero_dto_before_manifest_exists(tmp_path: Path) -> None:
     from market_abm.main import make_lazy_payload_fn
 
     payload_fn = make_lazy_payload_fn(str(tmp_path / "nonexistent"))
@@ -339,6 +338,39 @@ def test_make_lazy_payload_fn_returns_zero_dto_before_manifest_exists(
     assert isinstance(payload, TickStreamPayload)
     assert payload.market_summary.mean_price == pytest.approx(0.0)
     assert payload.market_summary.total_transactions == 0
+    assert payload.market_summary.price_quantiles is None
+
+
+def test_make_lazy_payload_fn_returns_stub_when_manifest_without_parquet(tmp_path: Path) -> None:
+    import json
+
+    from market_abm.main import make_lazy_payload_fn
+
+    run_root = tmp_path / "stub-run"
+    (run_root / "transactions").mkdir(parents=True)
+    (run_root / "products_snapshots").mkdir()
+    (run_root / "manifest.json").write_text(
+        json.dumps({"run_id": "stub-run", "drift_alerts": []}),
+        encoding="utf-8",
+    )
+
+    payload = make_lazy_payload_fn(str(run_root))(3)
+
+    assert payload.market_summary.mean_price != pytest.approx(0.0)
+    assert payload.market_summary.price_quantiles is not None
+
+
+def test_make_lazy_payload_fn_reads_store_when_parquet_exists(tmp_path: Path) -> None:
+    from market_abm.main import make_lazy_payload_fn
+
+    from tests.helpers.mini_run import build_mini_run
+
+    run_root = build_mini_run(tmp_path, run_id="lazy-e2e")
+    payload = make_lazy_payload_fn(str(run_root))(0)
+
+    assert payload.market_summary.mean_price == pytest.approx(150.0, rel=0.02)
+    assert payload.market_summary.price_quantiles is not None
+    assert payload.market_summary.total_transactions == 1
 
 
 def test_make_lazy_payload_fn_is_callable() -> None:

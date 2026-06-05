@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from market_abm.api.app import create_app
-from market_abm.api.stub_telemetry import stub_tick_payload
+from market_abm.api.stub_telemetry import stub_tick_payload, zero_tick_payload
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO, TickStreamPayload
 from market_abm.worker.process import SimulationWorker
 
@@ -91,7 +91,7 @@ def make_lazy_payload_fn(artifacts_dir: str) -> Callable[[int], TickStreamPayloa
                 _store = AnalyticsStore(run_root=artifacts_dir)
 
         if _store is None:
-            return stub_tick_payload(tick_id)
+            return zero_tick_payload(tick_id)
 
         return make_payload_fn(_store)(tick_id)
 

@@ -28,6 +28,21 @@ def stub_market_summary(tick_id: int) -> MarketAggregateDTO:
     )
 
 
+def zero_tick_payload(tick_id: int) -> TickStreamPayload:
+    """Нулевые агрегаты до появления manifest.json (Spec 007 §4.1)."""
+    return TickStreamPayload(
+        tick_id=tick_id,
+        timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
+        market_summary=MarketAggregateDTO(
+            mean_price=0.0,
+            total_gmv=0.0,
+            total_transactions=0,
+            price_quantiles=None,
+        ),
+        active_drift_alerts=[],
+    )
+
+
 def stub_tick_payload(tick_id: int) -> TickStreamPayload:
     return TickStreamPayload(
         tick_id=tick_id,
