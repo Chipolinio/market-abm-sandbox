@@ -1,6 +1,9 @@
 # Назначение файла: точка входа приложения (Slice 6.5 — E2E Integration).
 # Базовая идея: configure_multiprocessing() → инициализация воркера и стора → create_app → uvicorn.
-# Запуск: uvicorn market_abm.main:app --reload
+# Запуск (из корня репо, интерпретатор .venv):
+#   ENABLE_CORS=1 .venv/bin/uvicorn market_abm.main:app --reload
+# ENABLE_CORS=1 обязателен для vite dev (:5173). В Docker/Nginx CORS не нужен.
+# Системный uvicorn без pip install -e . → ModuleNotFoundError: market_abm
 from __future__ import annotations
 
 import datetime
@@ -9,7 +12,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from market_abm.api.app import _default_payload_fn, create_app
+from market_abm.api.app import create_app
+from market_abm.api.stub_telemetry import stub_tick_payload
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO, TickStreamPayload
 from market_abm.worker.process import SimulationWorker
 
@@ -38,6 +42,12 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
     """
 
     def _payload(tick_id: int) -> TickStreamPayload:
+        if not (
+            store._has_parquet_files("transactions")  # type: ignore[union-attr]
+            or store._has_parquet_files("products_snapshots")
+        ):
+            return stub_tick_payload(tick_id)
+
         agg: dict = store.query_market_aggregate(tick_id)  # type: ignore[union-attr]
         alerts: list[dict] = store.drift_alerts()  # type: ignore[union-attr]
         raw_q = agg.get("price_quantiles")
@@ -81,7 +91,7 @@ def make_lazy_payload_fn(artifacts_dir: str) -> Callable[[int], TickStreamPayloa
                 _store = AnalyticsStore(run_root=artifacts_dir)
 
         if _store is None:
-            return _default_payload_fn(tick_id)
+            return stub_tick_payload(tick_id)
 
         return make_payload_fn(_store)(tick_id)
 

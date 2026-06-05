@@ -3,6 +3,7 @@
  * Map<tick_id, Point> — single source of truth; no React imports.
  */
 import type {
+  GmvTickPoint,
   PriceChartRow,
   PriceTickPoint,
   SeriesTier,
@@ -144,4 +145,20 @@ export function downsampleForRender<T extends { tick_id: number }>(
 
 export function renderCapForTier(tier: SeriesTier): number {
   return tier === "macro" ? MACRO_RENDER_MAX : DENSE_RENDER_MAX;
+}
+
+/** True when at least one point has a non-null, non-zero price signal. */
+export function hasPlottablePriceData(rows: PriceChartRow[]): boolean {
+  return rows.some(
+    (r) =>
+      (r.p50 !== null && r.p50 !== 0) ||
+      (r.p10 !== null && r.p10 !== 0) ||
+      (r.p90 !== null && r.p90 !== 0) ||
+      (r.mean_price !== null && r.mean_price !== 0),
+  );
+}
+
+/** True when at least one point has GMV or transaction activity. */
+export function hasPlottableGmvData(points: GmvTickPoint[]): boolean {
+  return points.some((p) => p.gmv > 0 || p.transaction_count > 0);
 }

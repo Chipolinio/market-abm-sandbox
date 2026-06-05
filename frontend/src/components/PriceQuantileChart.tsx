@@ -1,0 +1,98 @@
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { hasPlottablePriceData } from "@/state/chartSeries";
+import type { PriceChartRow } from "@/state/types";
+
+export const EMPTY_PRICE_MESSAGE = "Waiting for simulation data…";
+
+type Props = {
+  data: PriceChartRow[];
+};
+
+function warnIfQuantileOrderBroken(row: PriceChartRow): void {
+  if (row.p10 === null || row.p50 === null || row.p90 === null) {
+    return;
+  }
+  if (row.p10 > row.p50 || row.p50 > row.p90) {
+    console.warn(`Quantile order violated at tick ${row.tick_id}`, row);
+  }
+}
+
+export function PriceQuantileChart({ data }: Props) {
+  if (data.length === 0 || !hasPlottablePriceData(data)) {
+    return <p className="chart-empty">{EMPTY_PRICE_MESSAGE}</p>;
+  }
+
+  data.forEach(warnIfQuantileOrderBroken);
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <ComposedChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+        <XAxis dataKey="tick_id" tick={{ fontSize: 12 }} />
+        <YAxis tick={{ fontSize: 12 }} domain={["auto", "auto"]} />
+        <Tooltip />
+        <Legend />
+        <Area
+          type="monotone"
+          dataKey="p90"
+          stackId="band"
+          stroke="none"
+          fill="#90caf9"
+          fillOpacity={0.35}
+          isAnimationActive={false}
+          dot={false}
+          name="p90 (band top)"
+        />
+        <Area
+          type="monotone"
+          dataKey="p10"
+          stackId="band"
+          stroke="none"
+          fill="#ffffff"
+          fillOpacity={1}
+          isAnimationActive={false}
+          dot={false}
+          name="p10 (band bottom)"
+        />
+        <Line
+          type="monotone"
+          dataKey="p50"
+          stroke="#1565c0"
+          strokeWidth={2}
+          isAnimationActive={false}
+          dot={false}
+          name="p50"
+        />
+        <Line
+          type="monotone"
+          dataKey="p10"
+          stroke="#42a5f5"
+          strokeDasharray="4 4"
+          isAnimationActive={false}
+          dot={false}
+          name="p10"
+        />
+        <Line
+          type="monotone"
+          dataKey="p90"
+          stroke="#42a5f5"
+          strokeDasharray="4 4"
+          isAnimationActive={false}
+          dot={false}
+          name="p90"
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}

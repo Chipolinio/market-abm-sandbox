@@ -24,6 +24,7 @@ __all__ = [
 ]
 
 _LOOP_CMD_TIMEOUT: Final[float] = 0.05   # секунд ожидания команды в PAUSED/IDLE
+_RUNNING_STEP_YIELD_SEC: Final[float] = 0.05  # noop-stub: не крутить миллионы тиков/сек
 _MANIFEST_FILENAME: Final[str] = "manifest.json"
 _MANIFEST_TMP_SUFFIX: Final[str] = ".tmp"
 _LAST_ERROR_ARRAY_SIZE: Final[int] = 2048
@@ -97,6 +98,7 @@ class _WorkerLoop:
                 if WorkerState(self._state_value.value) != WorkerState.RUNNING:
                     continue
                 self._safe_execute_step()
+                time.sleep(_RUNNING_STEP_YIELD_SEC)
 
             elif state == WorkerState.PAUSED:
                 self._wait_for_command()

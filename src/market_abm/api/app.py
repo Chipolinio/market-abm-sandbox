@@ -4,21 +4,48 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
+import os
 import queue
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from market_abm.api.broadcaster import ConnectionManager, broadcaster_loop
 from market_abm.api.routers.analytics import router as analytics_router
 from market_abm.api.routers.control import router as control_router
 from market_abm.api.routers.health import router as health_router
 from market_abm.api.routers.stream import router as stream_router
-from market_abm.api.schemas.stream import MarketAggregateDTO, TickStreamPayload
-from market_abm.worker.process import WorkerCommand
+from market_abm.api.schemas.stream import TickStreamPayload
+from market_abm.api.stub_telemetry import stub_tick_payload
+from market_abm.worker.process import WorkerCommand, WorkerState
+
+_DEFAULT_CORS_ORIGINS: tuple[str, ...] = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
+
+
+def _cors_origins_from_env() -> list[str]:
+    raw = os.getenv("CORS_ORIGINS", "")
+    if raw.strip():
+        return [o.strip() for o in raw.split(",") if o.strip()]
+    return list(_DEFAULT_CORS_ORIGINS)
+
+
+def _maybe_add_cors(app: FastAPI, *, enable: bool) -> None:
+    """Dev-only CORS для vite :5173 → api :8000 (Spec 007 §7.6)."""
+    if not enable:
+        return
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins_from_env(),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 def _shutdown_worker(worker: Any) -> None:
@@ -50,18 +77,23 @@ def _shutdown_worker(worker: Any) -> None:
         pass
 
 
+def _wrap_payload_with_worker_state(
+    base_fn: Callable[[int], TickStreamPayload],
+    worker: Any,
+) -> Callable[[int], TickStreamPayload]:
+    """Добавляет актуальный worker_state в каждый WS-кадр (Spec 007 §4.1)."""
+
+    def _payload(tick_id: int) -> TickStreamPayload:
+        payload = base_fn(tick_id)
+        state: WorkerState = worker.state
+        return payload.model_copy(update={"worker_state": state.name})
+
+    return _payload
+
+
 def _default_payload_fn(tick_id: int) -> TickStreamPayload:
-    """Stub-функция для получения фрейма телеметрии (заменяется в Slice 6.4 на DuckDB)."""
-    return TickStreamPayload(
-        tick_id=tick_id,
-        timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
-        market_summary=MarketAggregateDTO(
-            mean_price=0.0,
-            total_gmv=0.0,
-            total_transactions=0,
-        ),
-        active_drift_alerts=[],
-    )
+    """Stub-телеметрия до появления Parquet (заменяется DuckDB при реальной симуляции)."""
+    return stub_tick_payload(tick_id)
 
 
 def create_app(
@@ -72,6 +104,7 @@ def create_app(
     start_worker: bool = False,
     artifacts_dir: str | None = None,
     analytics_store: Any = None,
+    enable_cors: bool | None = None,
 ) -> FastAPI:
     """
     Фабрика приложения.
@@ -83,13 +116,18 @@ def create_app(
     - start_worker: если True, lifespan вызывает worker.process.start() при старте
     - artifacts_dir: корень Parquet-артефактов для analytics router (prod)
     - analytics_store: инжектированный AnalyticsStore (тесты)
+    - enable_cors: True при ENABLE_CORS=1 (vite dev); в Docker/Nginx — False
     """
+    if enable_cors is None:
+        enable_cors = os.getenv("ENABLE_CORS", "0") == "1"
+
     ws_manager = ConnectionManager()
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         w = worker_factory() if worker_factory is not None else worker
-        payload_fn = get_payload_fn or _default_payload_fn
+        base_payload_fn = get_payload_fn or _default_payload_fn
+        payload_fn = _wrap_payload_with_worker_state(base_payload_fn, w)
         app.state.worker = w
         if start_worker:
             w.process.start()
@@ -109,6 +147,7 @@ def create_app(
         version="0.1.0",
         lifespan=_lifespan,
     )
+    _maybe_add_cors(app, enable=enable_cors)
     if worker is not None:
         app.state.worker = worker
     app.state.ws_manager = ws_manager

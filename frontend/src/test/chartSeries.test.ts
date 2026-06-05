@@ -6,6 +6,8 @@ import {
   MACRO_RENDER_MAX,
   MACRO_SERIES_CAP,
   downsampleForRender,
+  hasPlottableGmvData,
+  hasPlottablePriceData,
   renderCapForTier,
   seriesToSortedArray,
   toPriceChartData,
@@ -135,6 +137,30 @@ describe("downsampleForRender", () => {
   it("renderCapForTier matches spec", () => {
     expect(renderCapForTier("macro")).toBe(MACRO_RENDER_MAX);
     expect(renderCapForTier("dense")).toBe(DENSE_RENDER_MAX);
+  });
+});
+
+describe("hasPlottablePriceData", () => {
+  it("rejects all-null zero rows", () => {
+    expect(
+      hasPlottablePriceData([
+        { tick_id: 1, p10: null, p50: null, p90: null, mean_price: 0 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("accepts rows with quantiles", () => {
+    expect(hasPlottablePriceData(toPriceChartData([pricePoint(1)]))).toBe(true);
+  });
+});
+
+describe("hasPlottableGmvData", () => {
+  it("rejects zero gmv series", () => {
+    expect(hasPlottableGmvData([{ tick_id: 1, gmv: 0, transaction_count: 0 }])).toBe(false);
+  });
+
+  it("accepts positive gmv", () => {
+    expect(hasPlottableGmvData([{ tick_id: 1, gmv: 12.5, transaction_count: 2 }])).toBe(true);
   });
 });
 
