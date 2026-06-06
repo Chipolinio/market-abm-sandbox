@@ -275,6 +275,7 @@ def append_system_events(
     con.register("_new_events", arrow_table)
     try:
         if final_path.is_file():
+            # DuckDB binds COPY destination (TO ?) before read_parquet(?) in the subquery.
             con.execute(
                 """
                 COPY (
@@ -283,7 +284,7 @@ def append_system_events(
                     SELECT * FROM _new_events
                 ) TO ? (FORMAT PARQUET, COMPRESSION ZSTD)
                 """,
-                [str(final_path), str(tmp_path)],
+                [str(tmp_path), str(final_path)],
             )
         else:
             con.execute(

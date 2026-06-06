@@ -101,17 +101,56 @@ def wait_healthy(*, timeout_sec: float = 120.0) -> None:
     raise TimeoutError(msg)
 
 
+def stop_and_reset_simulation() -> None:
+    """PAUSE (если RUNNING) → RESET: освобождает DuckDB/Parquet перед wipe volume."""
+    status, body = http_get(f"{API_BASE}/api/v1/simulation/status")
+    if status == 200:
+        payload = json.loads(body)
+        if payload.get("state") == "RUNNING":
+            http_post(f"{API_BASE}/api/v1/simulation/pause")
+            time.sleep(0.5)
+    http_post(f"{API_BASE}/api/v1/simulation/reset")
+    time.sleep(1.0)
+
+
 def wait_tick_at_least(min_tick: int, *, timeout_sec: float = 30.0) -> int:
     deadline = time.monotonic() + timeout_sec
+    last_payload: dict | None = None
     while time.monotonic() < deadline:
         status, body = http_get(f"{API_BASE}/api/v1/simulation/status")
         if status == 200:
             payload = json.loads(body)
+            last_payload = payload
+            if payload.get("state") == "FAILED":
+                err = payload.get("last_error") or "unknown"
+                raise AssertionError(f"worker FAILED before tick {min_tick}: {err}")
             tick = int(payload["current_tick"])
             if tick >= min_tick:
                 return tick
         time.sleep(0.5)
-    raise TimeoutError(f"current_tick did not reach {min_tick}")
+    detail = ""
+    if last_payload is not None:
+        detail = (
+            f" last_state={last_payload.get('state')!r}"
+            f" current_tick={last_payload.get('current_tick')}"
+            f" last_error={last_payload.get('last_error')!r}"
+        )
+    raise TimeoutError(f"current_tick did not reach {min_tick}.{detail}")
+
+
+def wait_container_file(
+    session: ComposeSession,
+    path: str,
+    *,
+    timeout_sec: float = 120.0,
+) -> None:
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        result = docker_exec(session, "test", "-f", path)
+        if result.returncode == 0:
+            return
+        time.sleep(1.0)
+    raise TimeoutError(f"file not found in container: {path}")
 
 
 def docker_exec(

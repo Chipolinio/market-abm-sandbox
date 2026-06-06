@@ -1,6 +1,7 @@
 # Назначение файла: live simulation session для worker subprocess (Slice 8.4).
 from __future__ import annotations
 
+import os
 import queue
 from collections.abc import Callable
 from dataclasses import replace
@@ -31,19 +32,28 @@ from market_abm.simulation.extended_runtime import (
 from market_abm.simulation.listings import initialize_listings
 from market_abm.simulation.runner import _bootstrap_products_from_listings, _bootstrap_rng
 from market_abm.simulation.step import step
-_WORKER_N_BUYERS: Final[int] = 300
-_WORKER_N_SELLERS: Final[int] = 30
 _WORKER_SEED: Final[int] = 42
 
 
+def _worker_n_buyers() -> int:
+    return int(os.environ.get("WORKER_N_BUYERS", "300"))
+
+
+def _worker_n_sellers() -> int:
+    return int(os.environ.get("WORKER_N_SELLERS", "30"))
+
+
 def _worker_run_config(run_root: Path) -> SimulationRunConfig:
+    n_buyers = _worker_n_buyers()
+    # ChoiceModelConfig: buyers_batch_size gt=100 (config/simulation.py).
+    buyers_batch_size = min(max(n_buyers, 101), 300)
     return SimulationRunConfig(
         seed=_WORKER_SEED,
         runtime_mode="extended",
         choice=ChoiceModelConfig(
             engine="numpy_softmax",
             max_products_per_choice_set=50,
-            buyers_batch_size=300,
+            buyers_batch_size=buyers_batch_size,
             outside_utility_bias=-50.0,
         ),
         repricing=RepricingConfig.default_market(),
@@ -117,10 +127,10 @@ class LiveSimulationSession:
             (self._run_root / sub).mkdir(parents=True, exist_ok=True)
 
         self._buyers_df = generate_buyers(
-            BuyerPopulationConfig.default_market(n_buyers=_WORKER_N_BUYERS, seed=_WORKER_SEED)
+            BuyerPopulationConfig.default_market(n_buyers=_worker_n_buyers(), seed=_WORKER_SEED)
         )
         self._sellers_df = generate_sellers(
-            SellerPopulationConfig.default_market(n_sellers=_WORKER_N_SELLERS, seed=_WORKER_SEED)
+            SellerPopulationConfig.default_market(n_sellers=_worker_n_sellers(), seed=_WORKER_SEED)
         )
         listings = initialize_listings(
             self._sellers_df,

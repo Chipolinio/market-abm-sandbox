@@ -2,6 +2,9 @@
 services:
   market_abm_backend:
     container_name: market_abm_backend_pytest
+    environment:
+      WORKER_N_BUYERS: "120"
+      WORKER_N_SELLERS: "10"
     ports:
       - "18000:8000"
 

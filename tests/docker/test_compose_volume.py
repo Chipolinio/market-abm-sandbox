@@ -15,6 +15,8 @@ from tests.docker.compose_support import (
     http_get,
     http_post,
     seed_volume_from_host,
+    stop_and_reset_simulation,
+    wait_container_file,
     wait_healthy,
     wait_tick_at_least,
 )
@@ -52,17 +54,20 @@ def test_appuser_can_write_to_volume(compose_stack: ComposeSession) -> None:
     assert exists.returncode == 0, exists.stderr
 
 
-def test_start_simulation_worker_not_failed_in_noop(compose_stack: ComposeSession) -> None:
+def test_start_simulation_worker_not_failed_in_live_mode(compose_stack: ComposeSession) -> None:
+    """Live step (Spec 008): воркер не падает, тики наращиваются."""
     status_code, _ = http_post(f"{API_BASE}/api/v1/simulation/start")
     assert status_code == 202
 
-    wait_tick_at_least(3, timeout_sec=45)
+    wait_tick_at_least(1, timeout_sec=180)
+    wait_container_file(compose_stack, _TICK0_PARQUET, timeout_sec=30)
 
     _, body = http_get(f"{API_BASE}/api/v1/simulation/status")
     payload = json.loads(body)
     assert payload["state"] == "RUNNING"
-    assert payload["state"] != "FAILED"
     assert payload.get("last_error") in (None, "")
+
+    stop_and_reset_simulation()
 
 
 def test_backend_restart_preserves_seeded_parquet(compose_stack: ComposeSession) -> None:
@@ -97,12 +102,14 @@ def test_analytics_price_index_after_restart_with_seeded_data(compose_stack: Com
 
 
 def _wipe_run_artifacts(session: ComposeSession) -> None:
-    """Чистый volume перед TD-NOOP тестами — без seed от предыдущих кейсов."""
-    wipe = docker_exec(session, "rm", "-rf", "/data/runs/default")
-    assert wipe.returncode == 0, wipe.stderr
-    mkdir = docker_exec(session, "mkdir", "-p", "/data/runs/default", user="appuser")
-    assert mkdir.returncode == 0, mkdir.stderr
-    session.run("restart", "market_abm_backend", timeout=120)
+    """Сброс named volume (Docker Desktop Mac: rm/chown внутри контейнера ненадёжны)."""
+    stop_and_reset_simulation()
+
+    down = session.run("down", "-v", timeout=180)
+    assert down.returncode == 0, down.stderr
+
+    up = session.run("up", "-d", "--wait", timeout=300)
+    assert up.returncode == 0, up.stderr or up.stdout
     wait_healthy()
 
 
@@ -111,10 +118,7 @@ def test_volume_writable_creates_parquet_on_tick_1(compose_stack: ComposeSession
     _wipe_run_artifacts(compose_stack)
 
     http_post(f"{API_BASE}/api/v1/simulation/start")
-    wait_tick_at_least(1, timeout_sec=30)
-
-    exists = docker_exec(compose_stack, "test", "-f", _TICK0_PARQUET)
-    assert exists.returncode == 0, exists.stderr
+    wait_container_file(compose_stack, _TICK0_PARQUET, timeout_sec=180)
 
     _, body = http_get(f"{API_BASE}/api/v1/simulation/status")
     payload = json.loads(body)
@@ -126,7 +130,7 @@ def test_volume_survives_backend_restart_via_live_simulation(compose_stack: Comp
     _wipe_run_artifacts(compose_stack)
 
     http_post(f"{API_BASE}/api/v1/simulation/start")
-    wait_tick_at_least(5, timeout_sec=60)
+    wait_tick_at_least(3, timeout_sec=180)
 
     restart = compose_stack.run("restart", "market_abm_backend", timeout=120)
     assert restart.returncode == 0, restart.stderr

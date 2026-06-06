@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import duckdb
 import polars as pl
 import pytest
 
@@ -166,6 +167,40 @@ def test_append_system_events_readable(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0]["display_code"] == "DEMAND_SHOCK"
     assert rows[0]["tick_id"] == 3
+
+
+def test_append_system_events_merges_existing_file(tmp_path: Path) -> None:
+    """Два append подряд (cmd + detector на одном тике) не ломают merge."""
+    run_root = tmp_path / "events-run"
+    (run_root / "system_events").mkdir(parents=True)
+    con = open_duckdb_connection(_run_config(tmp_path).persistence)
+    try:
+        first = build_demand_shock_event(
+            run_id="events-run",
+            tick_id=0,
+            seq=0,
+            pct_drop=10.0,
+            shock_type=ShockType.DEMAND_CRASH,
+        )
+        append_system_events(run_root, pl.DataFrame([first]), con)
+        second = build_demand_shock_event(
+            run_id="events-run",
+            tick_id=0,
+            seq=1,
+            pct_drop=20.0,
+            shock_type=ShockType.DEMAND_BOOM,
+        )
+        append_system_events(run_root, pl.DataFrame([second]), con)
+    finally:
+        con.close()
+
+    events_path = run_root / "system_events" / "events.parquet"
+    assert events_path.is_file()
+    row_count = duckdb.sql(
+        "SELECT COUNT(*) FROM read_parquet(?)",
+        params=[str(events_path)],
+    ).fetchone()[0]
+    assert row_count == 2
 
 
 def test_demand_shock_emits_system_event() -> None:
