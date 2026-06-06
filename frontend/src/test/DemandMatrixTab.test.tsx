@@ -79,7 +79,7 @@ describe("DemandMatrixTab", () => {
     );
 
     render(<DemandMatrixTab asOfTick={5} />);
-    expect(screen.getByText(/Loading demand matrix/)).toBeTruthy();
+    expect(screen.getByText(/Загрузка матрицы/)).toBeTruthy();
   });
 
   it("shows_error_state", async () => {

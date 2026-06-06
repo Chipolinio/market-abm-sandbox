@@ -13,7 +13,9 @@ from collections.abc import Callable
 from enum import IntEnum
 from enum import Enum
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
+
+from market_abm.analytics.persist import clear_run_tick_artifacts
 
 _SHOCK_QUEUE_MAXSIZE: Final[int] = 32
 
@@ -23,6 +25,7 @@ __all__ = [
     "WorkerState",
     "_WorkerLoop",
     "_noop_step",
+    "shutdown_simulation_worker",
 ]
 
 _LOOP_CMD_TIMEOUT: Final[float] = 0.05   # секунд ожидания команды в PAUSED/IDLE
@@ -46,6 +49,7 @@ class WorkerCommand(str, Enum):
     """Команды управления воркером через IPC-очередь."""
 
     START = "start"
+    START_FORCE_CLEAR = "start_force_clear"
     PAUSE = "pause"
     STEP = "step"
     STOP = "stop"
@@ -87,26 +91,34 @@ class _WorkerLoop:
     def run(self) -> None:
         """
         Главный цикл воркера. Запускается единожды (Process.run или Thread.run).
-        Завершается при переходе в STOPPED или FAILED.
+        Завершается при переходе в STOPPED. В FAILED ожидает RESET или STOP.
         """
-        while True:
-            state = WorkerState(self._state_value.value)
+        try:
+            while True:
+                state = WorkerState(self._state_value.value)
 
-            if state == WorkerState.IDLE:
-                self._wait_for_command()
+                if state == WorkerState.IDLE:
+                    self._wait_for_command()
 
-            elif state == WorkerState.RUNNING:
-                self._consume_pending_command_non_blocking()
-                if WorkerState(self._state_value.value) != WorkerState.RUNNING:
-                    continue
-                self._safe_execute_step()
-                time.sleep(_RUNNING_STEP_YIELD_SEC)
+                elif state == WorkerState.RUNNING:
+                    self._consume_pending_command_non_blocking()
+                    if WorkerState(self._state_value.value) != WorkerState.RUNNING:
+                        continue
+                    self._safe_execute_step()
+                    time.sleep(_RUNNING_STEP_YIELD_SEC)
 
-            elif state == WorkerState.PAUSED:
-                self._wait_for_command()
+                elif state == WorkerState.PAUSED:
+                    self._wait_for_command()
 
-            elif state in (WorkerState.STOPPED, WorkerState.FAILED):
-                break
+                elif state == WorkerState.STOPPED:
+                    break
+
+                elif state == WorkerState.FAILED:
+                    self._wait_for_command()
+        except KeyboardInterrupt:
+            # Ctrl+C / SIGINT родителя (uvicorn --reload) — выход без traceback.
+            self._stop_timer()
+            self._set_state(WorkerState.STOPPED)
 
 
     def _set_state(self, new_state: WorkerState) -> None:
@@ -168,12 +180,27 @@ class _WorkerLoop:
         with self._elapsed_total.get_lock():
             self._elapsed_total.value = 0.0
 
+    def _apply_session_reset(self) -> None:
+        """Сбрасывает tick, таймер, ошибку, in-memory сессию и Parquet-артефакты."""
+        self._reset_tick()
+        self._reset_timer()
+        self._set_last_error("")
+        reset_session = getattr(self._step_fn, "reset_session", None)
+        if reset_session is not None:
+            reset_session()
+        else:
+            clear_run_tick_artifacts(self._artifacts_dir)
+
     def _handle_command(self, cmd: WorkerCommand) -> None:
         """Диспетчеризация команд в зависимости от текущего состояния."""
         state = WorkerState(self._state_value.value)
 
-        if cmd == WorkerCommand.START:
-            if state in (WorkerState.IDLE, WorkerState.PAUSED):
+        if cmd == WorkerCommand.START_FORCE_CLEAR:
+            self._apply_session_reset()
+            state = WorkerState.IDLE
+
+        if cmd in (WorkerCommand.START, WorkerCommand.START_FORCE_CLEAR):
+            if state in (WorkerState.IDLE, WorkerState.PAUSED, WorkerState.FAILED):
                 self._start_timer()
                 self._set_state(WorkerState.RUNNING)
 
@@ -197,10 +224,9 @@ class _WorkerLoop:
             self._set_state(WorkerState.STOPPED)
 
         elif cmd == WorkerCommand.RESET:
-            self._reset_tick()
-            self._reset_timer()
-            self._set_last_error("")
+            self._apply_session_reset()
             self._set_state(WorkerState.IDLE)
+            self._write_manifest_atomic()
 
     def _wait_for_command(self) -> None:
         """Блокирующее ожидание команды с таймаутом (не сжигает CPU)."""
@@ -275,7 +301,17 @@ def _worker_entry(
         running_since=running_since,
         elapsed_total=elapsed_total,
     )
-    loop.run()
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        close_session = getattr(step_fn, "close_session", None)
+        if close_session is not None:
+            try:
+                close_session()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 class SimulationWorker:
@@ -352,3 +388,71 @@ class SimulationWorker:
         if since > 0.0:
             return base + (time.monotonic() - since)
         return base
+
+    def shutdown(self, *, join_timeout: float = 5.0) -> None:
+        """Штатный shutdown: STOP → join → terminate → закрытие IPC-очередей."""
+        shutdown_simulation_worker(self, join_timeout=join_timeout)
+
+
+def _close_worker_queues(worker: Any) -> None:
+    for name in ("command_queue", "shock_queue"):
+        q = getattr(worker, name, None)
+        if q is None:
+            continue
+        try:
+            q.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            q.join_thread()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def shutdown_simulation_worker(
+    worker: Any,
+    *,
+    join_timeout: float = 5.0,
+    terminate_timeout: float = 2.0,
+) -> None:
+    """
+    Корректное завершение SimulationWorker.
+    Порядок: STOP → join → terminate (если завис) → close IPC.
+    Все шаги защищены от исключений.
+    """
+    proc = worker.process
+    if not proc.is_alive():
+        _close_worker_queues(worker)
+        try:
+            proc.close()
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
+    try:
+        worker.command_queue.put_nowait(WorkerCommand.STOP)
+    except queue.Full:
+        pass
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        proc.join(timeout=join_timeout)
+    except Exception:  # noqa: BLE001
+        pass
+
+    if proc.is_alive():
+        try:
+            proc.terminate()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            proc.join(timeout=terminate_timeout)
+        except Exception:  # noqa: BLE001
+            pass
+
+    _close_worker_queues(worker)
+    try:
+        proc.close()
+    except Exception:  # noqa: BLE001
+        pass

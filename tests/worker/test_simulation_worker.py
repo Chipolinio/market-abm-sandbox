@@ -347,8 +347,9 @@ def test_exception_in_step_transitions_to_failed(tmp_path: Path) -> None:
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
 
+    assert t.is_alive()
+    cmd_queue.put(WorkerCommand.STOP)
     t.join(timeout=3.0)
-    assert not t.is_alive()
 
 
 def test_failed_state_captures_error_message(tmp_path: Path) -> None:
@@ -358,10 +359,12 @@ def test_failed_state_captures_error_message(tmp_path: Path) -> None:
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
     captured = last_error_array.raw.rstrip(b"\x00").decode("utf-8")
     assert error_msg in captured
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 def test_failed_state_is_terminal_without_reset(tmp_path: Path) -> None:
@@ -371,24 +374,30 @@ def test_failed_state_is_terminal_without_reset(tmp_path: Path) -> None:
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
-    assert not t.is_alive()
+    assert t.is_alive()
+    cmd_queue.put(WorkerCommand.START)
+    time.sleep(0.2)
     assert WorkerState(state_value.value) == WorkerState.FAILED
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 def test_reset_after_failed_restores_idle(tmp_path: Path) -> None:
-    loop, cmd_queue, _, state_value, _ = _make_raising_loop(tmp_path)
+    loop, cmd_queue, tick_counter, state_value, last_error_array = _make_raising_loop(tmp_path)
     t = _run_loop_in_thread(loop)
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
-    new_loop, new_cmd_queue, new_tick, new_state, new_error = _make_loop(tmp_path=tmp_path)
-    assert WorkerState(new_state.value) == WorkerState.IDLE
-    assert new_tick.value == 0
-    assert new_error.raw.rstrip(b"\x00").decode("utf-8") == ""
+    cmd_queue.put(WorkerCommand.RESET)
+    _wait_for_state(state_value, WorkerState.IDLE)
+    assert tick_counter.value == 0
+    assert last_error_array.raw.rstrip(b"\x00").decode("utf-8") == ""
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 def test_manifest_written_on_failed_state(tmp_path: Path) -> None:
@@ -401,10 +410,12 @@ def test_manifest_written_on_failed_state(tmp_path: Path) -> None:
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
     manifest_path = tmp_path / "manifest.json"
     assert manifest_path.exists(), "manifest.json должен существовать после FAILED"
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 def test_manifest_json_is_valid_after_failed(tmp_path: Path) -> None:
@@ -417,12 +428,14 @@ def test_manifest_json_is_valid_after_failed(tmp_path: Path) -> None:
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
     data = json.loads((tmp_path / "manifest.json").read_text())
     assert "state" in data
     assert "last_error" in data
     assert data["state"] == "FAILED"
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 def test_manifest_no_tmp_file_left_after_write(tmp_path: Path) -> None:
@@ -435,11 +448,13 @@ def test_manifest_no_tmp_file_left_after_write(tmp_path: Path) -> None:
 
     cmd_queue.put(WorkerCommand.START)
     _wait_for_state(state_value, WorkerState.FAILED)
-    t.join(timeout=3.0)
 
     assert not (tmp_path / "manifest.json.tmp").exists(), (
         "manifest.json.tmp не должен оставаться на диске"
     )
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=3.0)
 
 
 # ---------------------------------------------------------------------------
@@ -575,3 +590,29 @@ def test_simulation_worker_process_terminates_after_stop_command(tmp_path: Path)
     worker.process.join(timeout=5.0)
 
     assert not worker.process.is_alive()
+
+
+def test_worker_loop_keyboard_interrupt_exits_to_stopped(tmp_path: Path) -> None:
+    """Ctrl+C в subprocess не должен пробрасывать traceback — переход в STOPPED."""
+    loop, cmd_queue, _, state_value, _ = _make_loop(tmp_path=tmp_path)
+
+    def _interrupting_get(**kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    loop._cmd_queue.get = _interrupting_get  # type: ignore[method-assign]
+
+    loop.run()
+
+    assert WorkerState(state_value.value) == WorkerState.STOPPED
+
+
+@pytest.mark.worker
+def test_simulation_worker_shutdown_closes_queues(tmp_path: Path) -> None:
+    import os
+
+    worker = _make_simulation_worker(tmp_path)
+    worker.process.start()
+    pid = worker.process.pid
+    worker.shutdown()
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)

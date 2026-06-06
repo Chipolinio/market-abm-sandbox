@@ -15,26 +15,61 @@ export type UseCyberLogResult = {
   reset: () => void;
 };
 
+const LIVE_POLL_MS = 3_000;
+
+type UseCyberLogOptions = {
+  /** Poll REST while simulation is RUNNING (WS batch may lag behind Parquet append). */
+  pollWhileRunning?: boolean;
+  /** Current stream tick — re-process WS batch when it advances. */
+  streamTickId?: number;
+};
+
 /**
- * Cyber-log state: REST backfill on mount/reconnect + WS prepend (Spec 009 §4.8 / P-3).
- *
- * @param wsEvents — `TickStreamPayload.events` from 1 Hz stream
- * @param reconnectKey — increment (e.g. `reconnectAttempt`) to trigger REST backfill again
+ * Cyber-log: REST backfill on mount/reconnect/refresh + WS prepend + live poll while RUNNING.
  */
 export function useCyberLog(
   wsEvents: SystemEventDTO[] | undefined,
   reconnectKey: number = 0,
+  backfillKey: number = 0,
+  options: UseCyberLogOptions = {},
 ): UseCyberLogResult {
+  const { pollWhileRunning = false, streamTickId = 0 } = options;
   const [lines, setLines] = useState<CyberLogLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef(new Set<string>());
+
+  const mergeEvents = useCallback((incoming: SystemEventDTO[]) => {
+    if (incoming.length === 0) {
+      return;
+    }
+    setLines((prev) =>
+      prependEvents(prev, incoming, CYBER_LOG_MAX_LINES, seenIdsRef.current),
+    );
+  }, []);
 
   const reset = useCallback(() => {
     setLines([]);
     seenIdsRef.current.clear();
     setError(null);
   }, []);
+
+  const pullFromRest = useCallback(async (showLoading: boolean) => {
+    if (showLoading) {
+      setLoading(true);
+    }
+    try {
+      const response = await fetchSystemEvents(50);
+      mergeEvents(response.events);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "System events backfill failed");
+    } finally {
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }, [mergeEvents]);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,9 +81,7 @@ export function useCyberLog(
         if (cancelled) {
           return;
         }
-        setLines((prev) =>
-          prependEvents(prev, response.events, CYBER_LOG_MAX_LINES, seenIdsRef.current),
-        );
+        mergeEvents(response.events);
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -66,17 +99,28 @@ export function useCyberLog(
     return () => {
       cancelled = true;
     };
-  }, [reconnectKey]);
+  }, [reconnectKey, backfillKey, mergeEvents]);
 
   useEffect(() => {
     if (wsEvents === undefined || wsEvents.length === 0) {
       return;
     }
+    mergeEvents(wsEvents);
+  }, [wsEvents, streamTickId, mergeEvents]);
 
-    setLines((prev) =>
-      prependEvents(prev, wsEvents, CYBER_LOG_MAX_LINES, seenIdsRef.current),
-    );
-  }, [wsEvents]);
+  useEffect(() => {
+    if (!pollWhileRunning) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void pullFromRest(false);
+    }, LIVE_POLL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [pollWhileRunning, pullFromRest]);
 
   return { lines, loading, error, reset };
 }

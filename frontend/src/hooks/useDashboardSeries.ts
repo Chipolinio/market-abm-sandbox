@@ -76,9 +76,20 @@ export type UseDashboardSeriesResult = {
 
 /** noop-step воркер шлёт миллионы тиков/сек — не засоряем графики. */
 const NOOP_TICK_JUMP_THRESHOLD = 1000;
+const SYNC_DEBOUNCE_MS = 2_000;
+
+function downsampleIfNeeded<T extends { tick_id: number }>(data: T[]): T[] {
+  const cap = renderCapForTier("macro");
+  if (data.length <= cap) {
+    return data;
+  }
+  return downsampleForRender(data, cap);
+}
 
 export function useDashboardSeries(): UseDashboardSeriesResult {
   const lastWsTickRef = useRef(-1);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const initialLoadDoneRef = useRef(false);
   const [priceSeries, setPriceSeries] = useState<TickSeries>(new Map());
   const [gmvSeries, setGmvSeries] = useState<TickSeries>(new Map());
   const [driftAlerts, setDriftAlerts] = useState<Array<Record<string, unknown>>>([]);
@@ -87,13 +98,48 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
 
   const clearSeries = useCallback(() => {
     lastWsTickRef.current = -1;
+    initialLoadDoneRef.current = false;
     setPriceSeries(new Map());
     setGmvSeries(new Map());
     setDriftAlerts([]);
   }, []);
 
+  const syncBackfill = useCallback(async () => {
+    try {
+      const [priceRes, gmvRes] = await Promise.all([fetchPriceIndex(), fetchGmvByTick()]);
+      const pricePoints = priceRes.points.map(priceFromIndex);
+      const gmvPoints = gmvRes.points.map(gmvFromIndex);
+
+      setPriceSeries((prev) =>
+        capSeries(upsertMergeByTickId(prev, pricePoints), "macro"),
+      );
+      setGmvSeries((prev) => capSeries(upsertMergeByTickId(prev, gmvPoints), "macro"));
+
+      const maxTick = pricePoints.reduce((max, point) => Math.max(max, point.tick_id), -1);
+      if (maxTick >= 0) {
+        lastWsTickRef.current = Math.max(lastWsTickRef.current, maxTick);
+      }
+      setBackfillError(null);
+    } catch (err) {
+      setBackfillError(err instanceof Error ? err.message : "Backfill failed");
+    }
+  }, []);
+
+  const scheduleSyncBackfill = useCallback(() => {
+    if (syncTimerRef.current !== undefined) {
+      clearTimeout(syncTimerRef.current);
+    }
+    syncTimerRef.current = setTimeout(() => {
+      syncTimerRef.current = undefined;
+      void syncBackfill();
+    }, SYNC_DEBOUNCE_MS);
+  }, [syncBackfill]);
+
   const reloadBackfill = useCallback(async () => {
-    setBackfillLoading(true);
+    const showLoading = !initialLoadDoneRef.current;
+    if (showLoading) {
+      setBackfillLoading(true);
+    }
     try {
       const [priceRes, gmvRes] = await Promise.all([fetchPriceIndex(), fetchGmvByTick()]);
 
@@ -106,32 +152,49 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
       lastWsTickRef.current =
         pricePoints.length > 0 ? Math.max(...pricePoints.map((point) => point.tick_id)) : -1;
 
+      initialLoadDoneRef.current = true;
       setBackfillError(null);
     } catch (err) {
       setBackfillError(err instanceof Error ? err.message : "Backfill failed");
     } finally {
-      setBackfillLoading(false);
+      if (showLoading) {
+        setBackfillLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void reloadBackfill();
+    return () => {
+      if (syncTimerRef.current !== undefined) {
+        clearTimeout(syncTimerRef.current);
+      }
+    };
   }, [reloadBackfill]);
 
-  const handlePayload = useCallback((payload: TickStreamPayload) => {
-    const prev = lastWsTickRef.current;
-    if (prev >= 0 && payload.tick_id - prev > NOOP_TICK_JUMP_THRESHOLD) {
-      return;
-    }
-    lastWsTickRef.current = payload.tick_id;
+  const handlePayload = useCallback(
+    (payload: TickStreamPayload) => {
+      const prev = lastWsTickRef.current;
+      if (prev >= 0 && payload.tick_id - prev > NOOP_TICK_JUMP_THRESHOLD) {
+        return;
+      }
+      const gap = prev >= 0 ? payload.tick_id - prev : 0;
+      lastWsTickRef.current = payload.tick_id;
 
-    const pricePoint = priceFromPayload(payload);
-    if (pricePoint !== null) {
-      setPriceSeries((prev) => upsertTickPoint(prev, pricePoint, "macro"));
-    }
-    setGmvSeries((prev) => upsertTickPoint(prev, gmvFromPayload(payload), "macro"));
-    setDriftAlerts(payload.active_drift_alerts);
-  }, []);
+      if (gap > 1) {
+        scheduleSyncBackfill();
+        return;
+      }
+
+      const pricePoint = priceFromPayload(payload);
+      if (pricePoint !== null) {
+        setPriceSeries((prevSeries) => upsertTickPoint(prevSeries, pricePoint, "macro"));
+      }
+      setGmvSeries((prevSeries) => upsertTickPoint(prevSeries, gmvFromPayload(payload), "macro"));
+      setDriftAlerts(payload.active_drift_alerts);
+    },
+    [scheduleSyncBackfill],
+  );
 
   const priceSorted = useMemo(
     () => seriesToSortedArray(priceSeries) as PriceTickPoint[],
@@ -143,13 +206,12 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
   );
 
   const priceChartData = useMemo(
-    () =>
-      downsampleForRender(toPriceChartData(priceSorted), renderCapForTier("macro")),
+    () => downsampleIfNeeded(toPriceChartData(priceSorted)),
     [priceSorted],
   );
 
   const gmvChartData = useMemo(
-    () => downsampleForRender(gmvSorted, renderCapForTier("macro")),
+    () => downsampleIfNeeded(gmvSorted),
     [gmvSorted],
   );
 

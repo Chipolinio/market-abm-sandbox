@@ -6,7 +6,7 @@ function formatMoney(value: number): string {
 }
 
 function statusLabel(isBankrupt: boolean): string {
-  return isBankrupt ? "BANKRUPT" : "ACTIVE";
+  return isBankrupt ? "БАНКРОТ" : "АКТИВЕН";
 }
 
 export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] }) {
@@ -14,12 +14,12 @@ export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] 
     <table className="w-full border-collapse text-xs">
       <thead className="sticky top-0 bg-slate-900">
         <tr className="border-b border-slate-700 text-left text-slate-500">
-          <th className="px-2 py-1.5">Rank</th>
-          <th className="px-2 py-1.5">Seller ID</th>
-          <th className="px-2 py-1.5">Working Capital</th>
-          <th className="px-2 py-1.5">Tick Revenue</th>
-          <th className="px-2 py-1.5">Cumulative</th>
-          <th className="px-2 py-1.5">Status</th>
+          <th className="px-2 py-1.5">Место</th>
+          <th className="px-2 py-1.5">ID селлера</th>
+          <th className="px-2 py-1.5">Капитал</th>
+          <th className="px-2 py-1.5">Выручка за тик</th>
+          <th className="px-2 py-1.5">Накопленная</th>
+          <th className="px-2 py-1.5">Статус</th>
         </tr>
       </thead>
       <tbody>
@@ -57,13 +57,16 @@ export function MarketLeadersTab({ asOfTick }: Props) {
       className="h-full rounded border border-slate-800 bg-slate-900/60 p-4"
     >
       <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Market Leaders
+        Лидеры рынка
       </h2>
       {loading && leaders.length === 0 ? (
-        <p className="text-xs text-slate-500">Loading leaders…</p>
+        <p className="text-xs text-slate-500">Загрузка лидеров…</p>
       ) : null}
       {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
       {leaders.length > 0 ? <MarketLeadersTable leaders={leaders} /> : null}
+      {!loading && leaders.length === 0 && error === null ? (
+        <p className="text-xs text-slate-500">Нет данных — запустите симуляцию</p>
+      ) : null}
     </div>
   );
 }

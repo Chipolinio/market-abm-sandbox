@@ -45,6 +45,9 @@ def _make_mock_worker(
 ) -> MagicMock:
     worker = MagicMock()
     worker.command_queue = MagicMock()
+    worker.shock_queue = MagicMock()
+    worker.process = MagicMock()
+    worker.process.is_alive.side_effect = [True, False]
     worker.tick_counter = mp.Value("i", tick)
     worker.state = state
     worker.last_error = None
@@ -237,6 +240,22 @@ def test_lifespan_closes_command_queue_on_shutdown() -> None:
         pass
 
     worker.command_queue.close.assert_called_once()
+
+
+def test_lifespan_closes_shock_queue_on_shutdown() -> None:
+    from fastapi.testclient import TestClient
+
+    from market_abm.api.app import create_app
+    from market_abm.main import make_payload_fn
+
+    worker = _make_mock_worker()
+    store = _make_mock_store()
+    app = create_app(worker=worker, get_payload_fn=make_payload_fn(store))
+
+    with TestClient(app):
+        pass
+
+    worker.shock_queue.close.assert_called_once()
 
 
 def test_lifespan_calls_join_thread_on_command_queue_shutdown() -> None:

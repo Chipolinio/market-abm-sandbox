@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CYBER_LOG_MAX_LINES,
+  collapseCyberLogLines,
   formatCyberLine,
   prependEvents,
   resolveEventMessage,
@@ -67,8 +68,33 @@ describe("formatCyberLine", () => {
     };
 
     expect(formatCyberLine(line)).toBe(
-      "[Tick 42] DEMAND_SHOCK: Buyer budgets cut by 30%",
+      "[Тик 42] DEMAND_SHOCK: Buyer budgets cut by 30%",
     );
+  });
+});
+
+describe("collapseCyberLogLines", () => {
+  it("collapses_four_or_more_bankruptcies_on_same_tick", () => {
+    const lines: CyberLogLine[] = [
+      { event_id: "b4", tick_id: 10, display_code: "BANKRUPTCY", message: "s4", severity: "info" },
+      { event_id: "b3", tick_id: 10, display_code: "BANKRUPTCY", message: "s3", severity: "info" },
+      { event_id: "b2", tick_id: 10, display_code: "BANKRUPTCY", message: "s2", severity: "info" },
+      { event_id: "b1", tick_id: 10, display_code: "BANKRUPTCY", message: "s1", severity: "info" },
+    ];
+
+    const collapsed = collapseCyberLogLines(lines);
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]?.message).toContain("Массовое выбывание алгоритмов (4 игроков)");
+  });
+
+  it("keeps_three_or_fewer_bankruptcies_separate", () => {
+    const lines: CyberLogLine[] = [
+      { event_id: "b3", tick_id: 10, display_code: "BANKRUPTCY", message: "s3", severity: "info" },
+      { event_id: "b2", tick_id: 10, display_code: "BANKRUPTCY", message: "s2", severity: "info" },
+      { event_id: "b1", tick_id: 10, display_code: "BANKRUPTCY", message: "s1", severity: "info" },
+    ];
+
+    expect(collapseCyberLogLines(lines)).toHaveLength(3);
   });
 });
 

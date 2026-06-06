@@ -140,7 +140,12 @@ async def start_simulation(
             ),
         )
 
-    await _enqueue_command(worker.command_queue, WorkerCommand.START)
+    start_cmd = (
+        WorkerCommand.START_FORCE_CLEAR
+        if body.force_clear and state != WorkerState.RUNNING
+        else WorkerCommand.START
+    )
+    await _enqueue_command(worker.command_queue, start_cmd)
     return {"state": "accepted", "message": "START command enqueued"}
 
 

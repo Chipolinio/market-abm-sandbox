@@ -5,15 +5,15 @@ import type { MarketLeaderRowDTO } from "@/types/leaders";
 
 const POLL_INTERVAL_MS = 5_000;
 
-export type UseMarketLeadersResult = {
-  leaders: MarketLeaderRowDTO[];
+export type UseTopSellersResult = {
+  sellers: MarketLeaderRowDTO[];
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
 };
 
-export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLeadersResult {
-  const [leaders, setLeaders] = useState<MarketLeaderRowDTO[]>([]);
+/** Top-3 sellers for Zone D ribbon (polls while mounted). */
+export function useTopSellers(tickId: number): UseTopSellersResult {
+  const [sellers, setSellers] = useState<MarketLeaderRowDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tickIdRef = useRef(tickId);
@@ -22,32 +22,27 @@ export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLea
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(tickIdRef.current, 5);
+      const response = await fetchMarketLeaders(tickIdRef.current, 3);
       if (response.leaders.length > 0) {
-        setLeaders(response.leaders);
+        setSellers(response.leaders);
       }
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Market leaders fetch failed");
+      setError(err instanceof Error ? err.message : "Top sellers fetch failed");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!enabled) {
-      return undefined;
-    }
-
     void refresh();
     const intervalId = window.setInterval(() => {
       void refresh();
     }, POLL_INTERVAL_MS);
-
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [enabled, refresh]);
+  }, [refresh, tickId]);
 
-  return { leaders, loading, error, refresh };
+  return { sellers, loading, error };
 }

@@ -65,6 +65,13 @@ STRATEGY_TYPES: Final[tuple[str, ...]] = (
     "RatingMaximizer",
 )
 
+# Top-sellers ribbon mapping (Zone D UI).
+ALGORITHM_TYPES: Final[tuple[str, ...]] = ("CB", "REPR", "RULE")
+LOGIC_STATUS_BANKRUPT: Final = "bankrupt"
+LOGIC_STATUS_ROI: Final = "roi_optimization"
+LOGIC_STATUS_DUMPING: Final = "aggressive_dumping"
+LOGIC_STATUS_RULE: Final = "rule_based"
+
 SELLERS_COLUMNS: Final[tuple[str, ...]] = (
     COL_SELLER_ID,
     COL_STRATEGY_TYPE,

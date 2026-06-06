@@ -11,9 +11,12 @@ import { useTickStream } from "@/hooks/useTickStream";
 import type { SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
+import { toLastCompletedTick } from "@/utils/analyticsTick";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
+  const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
+  const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
   const { status, refresh } = useSimulationStatus();
   const {
     priceChartData,
@@ -44,20 +47,27 @@ export default function App() {
     onPayload: handleDynamicsPayload,
   });
 
+  const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
+  const nextTick =
+    lastPayload?.tick_id ??
+    lastPayload?.ticker_metrics?.current_tick ??
+    status?.current_tick ??
+    0;
+  const asOfTick = toLastCompletedTick(nextTick);
+
   const { lines: cyberLogLines, reset: resetCyberLog } = useCyberLog(
     lastPayload?.events,
     reconnectAttempt,
+    cyberLogBackfillKey,
+    {
+      pollWhileRunning: workerState === "RUNNING",
+      streamTickId: lastPayload?.tick_id ?? 0,
+    },
   );
 
   const priceIndexDelta = usePriceIndexDelta(lastPayload?.ticker_metrics?.market_price_index);
   const flashCrashActive = useFlashCrashAlarm(lastPayload?.events);
 
-  const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
-  const asOfTick =
-    lastPayload?.tick_id ??
-    lastPayload?.ticker_metrics?.current_tick ??
-    status?.current_tick ??
-    0;
   const showFailed =
     workerState === "FAILED" || (status?.last_error !== null && status?.last_error !== undefined);
 
@@ -67,8 +77,9 @@ export default function App() {
       gmvChartData,
       backfillLoading,
       backfillError,
+      highlightedSellerId,
     }),
-    [priceChartData, gmvChartData, backfillLoading, backfillError],
+    [priceChartData, gmvChartData, backfillLoading, backfillError, highlightedSellerId],
   );
 
   const onActionComplete = useCallback(
@@ -81,12 +92,13 @@ export default function App() {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
-      if (action === "reset" || action === "start") {
+      if (action === "reset") {
         clearSeries();
         resetCyberLog();
+        void reloadBackfill();
       }
 
-      void reloadBackfill();
+      setCyberLogBackfillKey((key) => key + 1);
     },
     [refresh, reloadBackfill, clearSeries, resetCyberLog],
   );
@@ -114,6 +126,8 @@ export default function App() {
         onTabChange={setActiveTab}
         asOfTick={asOfTick}
         dynamics={dynamics}
+        highlightedSellerId={highlightedSellerId}
+        onHighlightSeller={setHighlightedSellerId}
       />
     </>
   );

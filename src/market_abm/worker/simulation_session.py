@@ -116,6 +116,7 @@ class LiveSimulationSession:
         self._sellers_df = None
         self._products_df = None
         self._extended_state = None
+        self._last_external_tick = None
 
     def _write_initial_manifest(self, *, n_ticks: int) -> None:
         assert self._buyers_df is not None
@@ -179,13 +180,30 @@ class LiveSimulationSession:
         self._extended_state = init_extended_state(self._sellers_df)
         self._write_initial_manifest(n_ticks=1_000_000)
 
+    def _tick_artifacts_exist(self, tick_id: int) -> bool:
+        tx = self._run_root / "transactions" / f"tick_{tick_id:06d}.parquet"
+        return tx.is_file()
+
     def run_tick(self, external_tick_index: int) -> None:
         """Выполняет ровно один тик симуляции (вызывается из _WorkerLoop)."""
-        if (
-            external_tick_index == 0
-            and self._last_external_tick is not None
-            and self._last_external_tick > 0
-        ):
+        if self._tick_artifacts_exist(external_tick_index):
+            if self._last_external_tick is None:
+                # Новый subprocess / потеря памяти сессии при артефактах на диске.
+                if external_tick_index == 0:
+                    self._hard_reset()
+                else:
+                    raise RuntimeError(
+                        f"Cannot resume tick {external_tick_index}: session memory was "
+                        "lost but artifacts exist. Call RESET to start fresh."
+                    )
+            else:
+                # Тот же subprocess: tick уже записан (desync tick_counter), пропускаем.
+                self._last_external_tick = max(
+                    self._last_external_tick,
+                    external_tick_index,
+                )
+                return
+        elif external_tick_index == 0 and self._last_external_tick is not None:
             self._hard_reset()
 
         if self._buyers_df is None:
@@ -262,4 +280,12 @@ def make_live_step_fn(
     def _step() -> None:
         session.run_tick(tick_counter.value)
 
+    def reset_session() -> None:
+        session._hard_reset()
+
+    def close_session() -> None:
+        session.close()
+
+    _step.reset_session = reset_session  # type: ignore[attr-defined]
+    _step.close_session = close_session  # type: ignore[attr-defined]
     return _step

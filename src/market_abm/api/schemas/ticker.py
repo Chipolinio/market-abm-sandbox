@@ -18,6 +18,9 @@ class MarketLeaderRowDTO(BaseModel):
     tick_revenue: float
     cumulative_revenue: float
     is_bankrupt: bool
+    algorithm_type: str = "RULE"
+    inventory_stock: int = 0
+    logic_status: str = "rule_based"
 
 
 class MarketLeadersResponse(BaseModel):

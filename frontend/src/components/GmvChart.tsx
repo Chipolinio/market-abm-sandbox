@@ -19,7 +19,7 @@ export function GmvChart({ data }: Props) {
   if (data.length === 0 || !hasPlottableGmvData(data)) {
     return (
       <p className="flex h-full items-center justify-center text-xs italic text-slate-500">
-        Waiting for GMV data…
+        Ожидание данных GMV…
       </p>
     );
   }
@@ -32,8 +32,13 @@ export function GmvChart({ data }: Props) {
           dataKey="tick_id"
           tick={{ fontSize: 10, fill: "#94a3b8" }}
           stroke="#475569"
+          label={{ value: "Тик", position: "insideBottom", offset: -2, fill: "#94a3b8", fontSize: 10 }}
         />
-        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} stroke="#475569" />
+        <YAxis
+          tick={{ fontSize: 10, fill: "#94a3b8" }}
+          stroke="#475569"
+          label={{ value: "GMV", angle: -90, position: "insideLeft", fill: "#94a3b8", fontSize: 10 }}
+        />
         <Tooltip
           contentStyle={{
             backgroundColor: "#0f172a",
@@ -42,7 +47,7 @@ export function GmvChart({ data }: Props) {
           }}
           formatter={(value: number, name: string) => {
             if (name === "gmv") {
-              return [value.toFixed(2), "GMV"];
+              return [value.toFixed(2), "Оборот"];
             }
             return [value, name];
           }}

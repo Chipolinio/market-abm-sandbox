@@ -1,4 +1,5 @@
 import {
+  collapseCyberLogLines,
   formatCyberLine,
   severityClass,
   type CyberLogLine,
@@ -9,19 +10,21 @@ type Props = {
 };
 
 export function CyberEventTerminal({ lines }: Props) {
+  const displayLines = collapseCyberLogLines(lines);
+
   return (
-    <div className="flex h-full flex-col bg-slate-950">
-      <div className="shrink-0 border-b border-slate-800 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        CYBER-LOG
-      </div>
+    <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
+      <h2 className="mb-2 h-6 shrink-0 font-mono text-xs uppercase tracking-wider text-zinc-500">
+        Микро-лог
+      </h2>
       <div
         data-testid="cyber-log-scroll"
-        className="flex flex-1 flex-col-reverse overflow-y-auto px-3 py-2 font-mono text-xs"
+        className="flex flex-1 flex-col-reverse gap-1 overflow-y-auto font-mono text-xs text-zinc-400"
       >
-        {lines.length === 0 ? (
-          <div className="text-slate-500">Waiting for events…</div>
+        {displayLines.length === 0 ? (
+          <div className="text-zinc-600">Ожидание событий…</div>
         ) : (
-          lines.map((line) => (
+          displayLines.map((line) => (
             <div
               key={line.event_id}
               data-testid="cyber-log-line"
@@ -32,6 +35,6 @@ export function CyberEventTerminal({ lines }: Props) {
           ))
         )}
       </div>
-    </div>
+    </section>
   );
 }

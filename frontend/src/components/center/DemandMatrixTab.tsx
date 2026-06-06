@@ -12,7 +12,7 @@ export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
         <div
           key={`${cell.row}-${cell.col}`}
           data-testid="demand-matrix-cell"
-          title={`row=${cell.row} col=${cell.col} density=${cell.density}`}
+          title={`строка=${cell.row} столбец=${cell.col} плотность=${cell.density}`}
           className="aspect-square rounded-sm bg-cyan-500"
           style={{ opacity: cellOpacity(cell.density) }}
         />
@@ -34,10 +34,10 @@ export function DemandMatrixTab({ asOfTick }: Props) {
       className="flex h-full min-h-0 flex-col rounded border border-slate-800 bg-slate-900/60 p-4"
     >
       <h2 className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Demand Matrix (10×10)
+        Матрица спроса (10×10)
       </h2>
       {loading && cells.length === 0 ? (
-        <p className="text-xs text-slate-500">Loading demand matrix…</p>
+        <p className="text-xs text-slate-500">Загрузка матрицы…</p>
       ) : null}
       {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
       {cells.length > 0 ? (

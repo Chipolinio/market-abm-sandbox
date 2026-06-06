@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import queue
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -20,7 +19,7 @@ from market_abm.api.routers.health import router as health_router
 from market_abm.api.routers.stream import router as stream_router
 from market_abm.api.schemas.stream import TickStreamPayload
 from market_abm.api.stub_telemetry import stub_tick_payload
-from market_abm.worker.process import WorkerCommand, WorkerState
+from market_abm.worker.process import WorkerState, shutdown_simulation_worker
 
 _DEFAULT_CORS_ORIGINS: tuple[str, ...] = (
     "http://localhost:5173",
@@ -51,28 +50,10 @@ def _maybe_add_cors(app: FastAPI, *, enable: bool) -> None:
 def _shutdown_worker(worker: Any) -> None:
     """
     Штатный шатдаун воркера (Spec 006 §3.5).
-    Порядок: STOP → join(5s) → queue.close() / join_thread().
-    Все шаги защищены от исключений — не блокируют остановку FastAPI.
+    Делегирует в shutdown_simulation_worker; для моков без shock_queue — duck-typing.
     """
     try:
-        worker.command_queue.put_nowait(WorkerCommand.STOP)
-    except queue.Full:
-        pass
-    except Exception:
-        pass
-
-    try:
-        worker.process.join(timeout=5.0)
-    except Exception:
-        pass
-
-    try:
-        worker.command_queue.close()
-    except Exception:
-        pass
-
-    try:
-        worker.command_queue.join_thread()
+        shutdown_simulation_worker(worker)
     except Exception:
         pass
 

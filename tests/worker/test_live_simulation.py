@@ -63,6 +63,107 @@ def test_live_step_writes_transactions_parquet(tmp_path: Path) -> None:
     t.join(timeout=5.0)
 
 
+def test_run_tick_can_restart_at_tick_zero(tmp_path: Path) -> None:
+    """RESET → START с tick=0 не должен падать на существующем tick_000000.parquet."""
+    shock_queue: queue.Queue = queue.Queue(maxsize=32)
+    session = __import__(
+        "market_abm.worker.simulation_session", fromlist=["LiveSimulationSession"]
+    ).LiveSimulationSession(tmp_path, shock_queue)
+
+    session.run_tick(0)
+    assert (tmp_path / "transactions" / "tick_000000.parquet").is_file()
+
+    session.run_tick(0)
+    assert (tmp_path / "transactions" / "tick_000000.parquet").is_file()
+
+
+def test_reset_clears_parquet_and_allows_rerun(tmp_path: Path) -> None:
+    shock_queue: queue.Queue = queue.Queue(maxsize=32)
+    tick_counter = __import__("multiprocessing").Value("i", 0)
+    cmd_queue = __import__("multiprocessing").Queue(maxsize=1)
+    state_value = __import__("multiprocessing").Value("i", WorkerState.IDLE.value)
+    last_error_array = __import__("multiprocessing").Array("c", 2048)
+
+    step_fn = make_live_step_fn(
+        artifacts_dir=str(tmp_path),
+        shock_queue=shock_queue,
+        tick_counter=tick_counter,
+    )
+    loop = _WorkerLoop(
+        command_queue=cmd_queue,
+        tick_counter=tick_counter,
+        state_value=state_value,
+        last_error_array=last_error_array,
+        artifacts_dir=str(tmp_path),
+        step_fn=step_fn,
+    )
+    t = threading.Thread(target=loop.run, daemon=True)
+    t.start()
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    _wait_for_tick_above(tick_counter, 0, timeout=30.0)
+    _wait_for_parquet(tmp_path / "transactions" / "tick_000000.parquet")
+
+    cmd_queue.put(WorkerCommand.RESET)
+    _wait_for_state(state_value, WorkerState.IDLE)
+    assert not (tmp_path / "transactions" / "tick_000000.parquet").exists()
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    _wait_for_tick_above(tick_counter, 0, timeout=30.0)
+    _wait_for_parquet(tmp_path / "transactions" / "tick_000000.parquet")
+    assert WorkerState(state_value.value) != WorkerState.FAILED
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=5.0)
+
+
+def test_pause_start_does_not_fail_when_tick_zero_on_disk(tmp_path: Path) -> None:
+    """PAUSE → START: tick=0 уже на диске, counter=0 — idempotent skip, не FileExistsError."""
+    shock_queue: queue.Queue = queue.Queue(maxsize=32)
+    tick_counter = __import__("multiprocessing").Value("i", 0)
+    cmd_queue = __import__("multiprocessing").Queue(maxsize=1)
+    state_value = __import__("multiprocessing").Value("i", WorkerState.IDLE.value)
+    last_error_array = __import__("multiprocessing").Array("c", 2048)
+
+    step_fn = make_live_step_fn(
+        artifacts_dir=str(tmp_path),
+        shock_queue=shock_queue,
+        tick_counter=tick_counter,
+    )
+    loop = _WorkerLoop(
+        command_queue=cmd_queue,
+        tick_counter=tick_counter,
+        state_value=state_value,
+        last_error_array=last_error_array,
+        artifacts_dir=str(tmp_path),
+        step_fn=step_fn,
+    )
+    t = threading.Thread(target=loop.run, daemon=True)
+    t.start()
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    _wait_for_parquet(tmp_path / "transactions" / "tick_000000.parquet", timeout=30.0)
+
+    cmd_queue.put(WorkerCommand.PAUSE)
+    _wait_for_state(state_value, WorkerState.PAUSED)
+
+    with tick_counter.get_lock():
+        tick_counter.value = 0
+
+    cmd_queue.put(WorkerCommand.START)
+    _wait_for_state(state_value, WorkerState.RUNNING)
+    time.sleep(0.5)
+    assert WorkerState(state_value.value) != WorkerState.FAILED, (
+        last_error_array.raw.rstrip(b"\x00").decode("utf-8")
+    )
+
+    cmd_queue.put(WorkerCommand.STOP)
+    t.join(timeout=5.0)
+
+
 @pytest.mark.worker
 def test_live_worker_process_writes_parquet(tmp_path: Path) -> None:
     from market_abm.worker.process import SimulationWorker

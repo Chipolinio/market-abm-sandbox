@@ -18,6 +18,9 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     tick_revenue: 120.25,
     cumulative_revenue: 4_200.0,
     is_bankrupt: false,
+    algorithm_type: "CB",
+    inventory_stock: 12,
+    logic_status: "roi_optimization",
   },
   {
     seller_id: 1,
@@ -25,6 +28,9 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     tick_revenue: 80.0,
     cumulative_revenue: 3_100.5,
     is_bankrupt: false,
+    algorithm_type: "REPR",
+    inventory_stock: 8,
+    logic_status: "aggressive_dumping",
   },
   {
     seller_id: 7,
@@ -32,6 +38,9 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     tick_revenue: 0.0,
     cumulative_revenue: 1_800.0,
     is_bankrupt: true,
+    algorithm_type: "RULE",
+    inventory_stock: 0,
+    logic_status: "bankrupt",
   },
   {
     seller_id: 2,
@@ -39,6 +48,9 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     tick_revenue: 45.5,
     cumulative_revenue: 900.0,
     is_bankrupt: false,
+    algorithm_type: "RULE",
+    inventory_stock: 5,
+    logic_status: "rule_based",
   },
   {
     seller_id: 9,
@@ -46,6 +58,9 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     tick_revenue: 10.0,
     cumulative_revenue: 400.0,
     is_bankrupt: false,
+    algorithm_type: "CB",
+    inventory_stock: 3,
+    logic_status: "roi_optimization",
   },
 ];
 

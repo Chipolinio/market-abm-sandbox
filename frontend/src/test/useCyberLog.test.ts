@@ -113,4 +113,26 @@ describe("useCyberLog", () => {
       expect(result.current.lines.some((line) => line.event_id === "backfill-b")).toBe(true);
     });
   });
+
+  it("backfills_again_on_backfill_key_change", async () => {
+    fetchSystemEvents
+      .mockResolvedValueOnce({ events: [makeEvent("backfill-x", 3)] })
+      .mockResolvedValueOnce({ events: [makeEvent("backfill-y", 4)] });
+
+    const { result, rerender } = renderHook(
+      ({ backfillKey }: { backfillKey: number }) => useCyberLog(undefined, 0, backfillKey),
+      { initialProps: { backfillKey: 0 } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.lines.some((line) => line.event_id === "backfill-x")).toBe(true);
+    });
+
+    rerender({ backfillKey: 1 });
+
+    await waitFor(() => {
+      expect(fetchSystemEvents).toHaveBeenCalledTimes(2);
+      expect(result.current.lines.some((line) => line.event_id === "backfill-y")).toBe(true);
+    });
+  });
 });

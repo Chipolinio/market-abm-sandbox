@@ -50,7 +50,8 @@ describe("TradingTerminalLayout", () => {
     const cyberlog = container.querySelector('[data-testid="zone-cyberlog"]');
     expect(cyberlog).not.toBeNull();
     expect(hasClass(cyberlog!, "w-96")).toBe(true);
-    expect(hasClass(cyberlog!, "bg-slate-900")).toBe(true);
+    expect(hasClass(cyberlog!, "bg-black")).toBe(true);
+    expect(container.querySelector('[data-testid="top-sellers-dashboard"]')).not.toBeNull();
   });
 
   it("main_area_no_page_scroll", () => {

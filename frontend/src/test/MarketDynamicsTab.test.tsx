@@ -38,8 +38,8 @@ describe("MarketDynamicsTab", () => {
     );
 
     expect(screen.getByTestId("market-dynamics-panel")).toBeTruthy();
-    expect(screen.getByText(/Price Quantiles/)).toBeTruthy();
-    expect(screen.getByText(/GMV by Tick/)).toBeTruthy();
+    expect(screen.getByText(/Квантили цен/)).toBeTruthy();
+    expect(screen.getByText(/GMV по тикам/)).toBeTruthy();
     expect(screen.getAllByTestId("composed-chart")).toHaveLength(2);
   });
 
@@ -52,7 +52,7 @@ describe("MarketDynamicsTab", () => {
       />,
     );
 
-    expect(screen.getByText(/Loading historical data/)).toBeTruthy();
+    expect(screen.getByText(/Загрузка истории/)).toBeTruthy();
   });
 
   it("shows_backfill_error", () => {

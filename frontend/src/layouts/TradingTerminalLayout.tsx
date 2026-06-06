@@ -3,6 +3,7 @@ import type { SimulationAction } from "@/components/sidebar/SimulationControlStr
 import type { DynamicsTabProps, TerminalTabId } from "@/components/center/types";
 import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
+import { TopSellersDashboard } from "@/components/cyberlog/TopSellersDashboard";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
 import type { WorkerState } from "@/api/types";
 import type { CyberLogLine } from "@/state/cyberLog";
@@ -22,6 +23,8 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   cyberLogLines?: CyberLogLine[];
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
+  highlightedSellerId?: number | null;
+  onHighlightSeller?: (sellerId: number | null) => void;
 };
 
 export function TradingTerminalLayout({
@@ -36,9 +39,12 @@ export function TradingTerminalLayout({
   cyberLogLines = [],
   activeTab,
   onTabChange,
+  highlightedSellerId = null,
+  onHighlightSeller,
 }: TradingTerminalLayoutProps) {
   const handleActionComplete =
     onActionComplete ?? (async (_beforeState: WorkerState, _action: SimulationAction) => undefined);
+  const handleHighlightSeller = onHighlightSeller ?? (() => undefined);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
@@ -77,8 +83,13 @@ export function TradingTerminalLayout({
 
         <aside
           data-testid="zone-cyberlog"
-          className="flex h-full w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900"
+          className="flex h-full w-96 shrink-0 flex-col overflow-hidden border-l border-zinc-800 bg-black"
         >
+          <TopSellersDashboard
+            asOfTick={asOfTick}
+            highlightedSellerId={highlightedSellerId}
+            onHighlightSeller={handleHighlightSeller}
+          />
           <CyberEventTerminal lines={cyberLogLines} />
         </aside>
       </div>

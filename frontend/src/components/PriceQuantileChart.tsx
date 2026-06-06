@@ -13,7 +13,7 @@ import {
 import { hasPlottablePriceData } from "@/state/chartSeries";
 import type { PriceChartRow } from "@/state/types";
 
-export const EMPTY_PRICE_MESSAGE = "Waiting for simulation data…";
+export const EMPTY_PRICE_MESSAGE = "Ожидание данных симуляции…";
 
 type Props = {
   data: PriceChartRow[];
@@ -47,11 +47,13 @@ export function PriceQuantileChart({ data }: Props) {
           dataKey="tick_id"
           tick={{ fontSize: 10, fill: "#94a3b8" }}
           stroke="#475569"
+          label={{ value: "Тик", position: "insideBottom", offset: -2, fill: "#94a3b8", fontSize: 10 }}
         />
         <YAxis
           tick={{ fontSize: 10, fill: "#94a3b8" }}
           stroke="#475569"
           domain={["auto", "auto"]}
+          label={{ value: "Цена", angle: -90, position: "insideLeft", fill: "#94a3b8", fontSize: 10 }}
         />
         <Tooltip
           contentStyle={{
@@ -70,7 +72,7 @@ export function PriceQuantileChart({ data }: Props) {
           fillOpacity={0.25}
           isAnimationActive={false}
           dot={false}
-          name="p90"
+          name="p90 (90%)"
         />
         <Area
           type="monotone"
@@ -81,7 +83,7 @@ export function PriceQuantileChart({ data }: Props) {
           fillOpacity={1}
           isAnimationActive={false}
           dot={false}
-          name="p10 mask"
+          name="p10 маска"
         />
         <Line
           type="monotone"
@@ -90,7 +92,7 @@ export function PriceQuantileChart({ data }: Props) {
           strokeWidth={2}
           isAnimationActive={false}
           dot={false}
-          name="p50"
+          name="p50 (медиана)"
         />
         <Line
           type="monotone"
