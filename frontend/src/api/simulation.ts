@@ -1,4 +1,6 @@
 import { apiFetch } from "./client";
+import type { SessionConfigureRequest, SessionConfigureResponse } from "@/types/session";
+import type { SimulationShockRequest, SimulationShockResponse } from "@/types/shock";
 import type { SimulationStatus, WorkerState } from "./types";
 
 type CommandResponse = { state: string; message: string };
@@ -36,4 +38,18 @@ export function resetSimulation(): Promise<CommandResponse> {
 
 export function isTerminalState(state: WorkerState): boolean {
   return state === "STOPPED" || state === "FAILED";
+}
+
+export function configureSession(body: SessionConfigureRequest): Promise<SessionConfigureResponse> {
+  return apiFetch<SessionConfigureResponse>("/api/v1/simulation/configure", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function triggerShock(body: SimulationShockRequest): Promise<SimulationShockResponse> {
+  return apiFetch<SimulationShockResponse>("/api/v1/simulation/shock", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
