@@ -33,6 +33,8 @@ export function TradingTerminalLayout({
   metrics,
   connectionState,
   workerState,
+  priceIndexDelta,
+  flashCrashActive,
   onActionComplete,
   dynamics = EMPTY_DYNAMICS,
   asOfTick = 0,
@@ -46,19 +48,21 @@ export function TradingTerminalLayout({
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
       <header
         data-testid="zone-top-bar"
-        className="flex h-14 shrink-0 items-center border-b border-slate-800 px-4"
+        className="flex h-14 w-full shrink-0 items-center border-b border-slate-800 px-4"
       >
         <TickerRibbon
           metrics={metrics}
           connectionState={connectionState}
           workerState={workerState}
+          priceIndexDelta={priceIndexDelta}
+          flashCrashActive={flashCrashActive}
         />
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside
           data-testid="zone-left-sidebar"
-          className="h-full w-80 shrink-0 overflow-y-auto border-r border-slate-800 p-4"
+          className="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 p-4"
         >
           <section className="mb-6">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -93,7 +97,7 @@ export function TradingTerminalLayout({
 
         <aside
           data-testid="zone-cyberlog"
-          className="flex h-full w-96 shrink-0 flex-col border-l border-slate-800"
+          className="flex h-full w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900"
         >
           <CyberEventTerminal lines={cyberLogLines} />
         </aside>

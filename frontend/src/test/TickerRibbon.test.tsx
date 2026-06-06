@@ -20,20 +20,51 @@ const mockMetrics: TickerMetricsDTO = {
 describe("TickerRibbon", () => {
   it("renders_four_metric_cards", () => {
     render(
-      <TickerRibbon metrics={mockMetrics} connectionState="open" workerState="RUNNING" />,
+      <TickerRibbon
+        metrics={mockMetrics}
+        connectionState="open"
+        workerState="RUNNING"
+        priceIndexDelta={0.02}
+      />,
     );
 
-    expect(screen.getByText(/18\/25/)).toBeTruthy();
-    expect(screen.getByText(/1\.3M/)).toBeTruthy();
-    expect(screen.getByText(/1\.03/)).toBeTruthy();
     expect(screen.getByText(/t=\s*42/)).toBeTruthy();
+    expect(screen.getByText(/1\.3M/)).toBeTruthy();
+    expect(screen.getByText(/Index:\s*1\.03\s*▲/)).toBeTruthy();
+    expect(screen.getByText("STABLE")).toBeTruthy();
     expect(screen.getAllByTestId("ticker-card")).toHaveLength(4);
+  });
+
+  it("shows_flash_crash_alarm_when_active", () => {
+    render(
+      <TickerRibbon
+        metrics={mockMetrics}
+        connectionState="open"
+        workerState="RUNNING"
+        flashCrashActive
+      />,
+    );
+
+    expect(screen.getByText("FLASH CRASH")).toBeTruthy();
+  });
+
+  it("shows_price_index_down_trend", () => {
+    render(
+      <TickerRibbon
+        metrics={mockMetrics}
+        connectionState="open"
+        workerState="IDLE"
+        priceIndexDelta={-0.01}
+      />,
+    );
+
+    expect(screen.getByText(/Index:\s*1\.03\s*▼/)).toBeTruthy();
   });
 
   it("shows_skeleton_when_metrics_null", () => {
     render(<TickerRibbon metrics={null} connectionState="open" workerState="IDLE" />);
 
-    expect(screen.queryByText(/18\/25/)).toBeNull();
+    expect(screen.queryByText(/t=\s*42/)).toBeNull();
     expect(screen.queryByText(/GMV:/)).toBeNull();
     expect(screen.queryByText(/Index:/)).toBeNull();
     expect(screen.getAllByTestId("ticker-skeleton")).toHaveLength(4);

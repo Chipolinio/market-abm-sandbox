@@ -70,7 +70,10 @@ describe("App", () => {
     expect(screen.getByTestId("zone-left-sidebar")).toBeTruthy();
     expect(screen.getByTestId("zone-main")).toBeTruthy();
     expect(screen.getByTestId("zone-cyberlog")).toBeTruthy();
-    expect(screen.getByText(/5\/10/)).toBeTruthy();
+    expect(screen.getByTestId("zone-top-bar")).toBeTruthy();
+    expect(screen.getByText(/t=\s*7/)).toBeTruthy();
+    expect(screen.getByText(/GMV:/)).toBeTruthy();
+    expect(screen.getByText("STABLE")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start" })).toBeTruthy();
   });
 });

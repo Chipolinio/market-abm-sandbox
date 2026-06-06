@@ -16,11 +16,26 @@ function connectionDotClass(connectionState: TickerRibbonProps["connectionState"
   }
 }
 
-function MetricCard({ children }: { children: ReactNode }) {
+function priceTrendGlyph(delta: number): string {
+  if (delta > 0) {
+    return " ▲";
+  }
+  if (delta < 0) {
+    return " ▼";
+  }
+  return "";
+}
+
+type MetricCardProps = {
+  children: ReactNode;
+  className?: string;
+};
+
+function MetricCard({ children, className }: MetricCardProps) {
   return (
     <div
       data-testid="ticker-card"
-      className="rounded border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-sm"
+      className={`rounded border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-sm${className ? ` ${className}` : ""}`}
     >
       {children}
     </div>
@@ -36,7 +51,12 @@ function SkeletonCard() {
   );
 }
 
-export function TickerRibbon({ metrics, connectionState }: TickerRibbonProps) {
+export function TickerRibbon({
+  metrics,
+  connectionState,
+  priceIndexDelta = 0,
+  flashCrashActive = false,
+}: TickerRibbonProps) {
   return (
     <div className="flex w-full flex-row items-center gap-4">
       <span
@@ -54,12 +74,17 @@ export function TickerRibbon({ metrics, connectionState }: TickerRibbonProps) {
         </>
       ) : (
         <>
-          <MetricCard>
-            Active Sellers: {metrics.active_sellers_count}/{metrics.total_non_bankrupt_sellers}
-          </MetricCard>
-          <MetricCard>GMV: {formatCompactGmv(metrics.total_market_gmv)}</MetricCard>
-          <MetricCard>Index: {metrics.market_price_index.toFixed(2)}</MetricCard>
           <MetricCard>t= {metrics.current_tick}</MetricCard>
+          <MetricCard>GMV: {formatCompactGmv(metrics.total_market_gmv)}</MetricCard>
+          <MetricCard>
+            Index: {metrics.market_price_index.toFixed(2)}
+            {priceTrendGlyph(priceIndexDelta)}
+          </MetricCard>
+          <MetricCard
+            className={flashCrashActive ? "animate-pulse text-red-400" : "text-green-400"}
+          >
+            {flashCrashActive ? "FLASH CRASH" : "STABLE"}
+          </MetricCard>
         </>
       )}
     </div>

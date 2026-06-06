@@ -16,4 +16,8 @@ export type TickerRibbonProps = {
   metrics: TickerMetricsDTO | null;
   connectionState: ConnectionState;
   workerState: WorkerState;
+  /** UI-only delta vs previous WS frame (Spec 009 §2.5 Card 3). */
+  priceIndexDelta?: number;
+  /** UI-only alarm from FLASH_CRASH events (Spec 009 §2.5 Card 4). */
+  flashCrashActive?: boolean;
 };

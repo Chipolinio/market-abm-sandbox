@@ -3,6 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 import type { TerminalTabId } from "@/components/center/types";
 import { useCyberLog } from "@/hooks/useCyberLog";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
+import { useFlashCrashAlarm } from "@/hooks/useFlashCrashAlarm";
+import { usePriceIndexDelta } from "@/hooks/usePriceIndexDelta";
 import { useSimulationStatus } from "@/hooks/useSimulationStatus";
 import { useTickStream } from "@/hooks/useTickStream";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
@@ -25,6 +27,9 @@ export default function App() {
   });
 
   const { lines: cyberLogLines } = useCyberLog(lastPayload?.events);
+
+  const priceIndexDelta = usePriceIndexDelta(lastPayload?.ticker_metrics?.market_price_index);
+  const flashCrashActive = useFlashCrashAlarm(lastPayload?.events);
 
   const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
   const asOfTick =
@@ -74,6 +79,8 @@ export default function App() {
         metrics={lastPayload?.ticker_metrics ?? null}
         connectionState={connectionState}
         workerState={workerState}
+        priceIndexDelta={priceIndexDelta}
+        flashCrashActive={flashCrashActive}
         onActionComplete={onActionComplete}
         cyberLogLines={cyberLogLines}
         activeTab={activeTab}
