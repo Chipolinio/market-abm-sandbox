@@ -16,7 +16,7 @@ export type UseCyberLogResult = {
   reset: () => void;
 };
 
-const LIVE_POLL_MS = 3_000;
+const LIVE_POLL_MS = 1_500;
 const REST_BACKFILL_LIMIT = 200;
 
 type UseCyberLogOptions = {
@@ -119,15 +119,16 @@ export function useCyberLog(
   }, [reconnectKey, backfillKey, replaceFromRest]);
 
   useEffect(() => {
-    if (wsEvents === undefined || wsEvents.length === 0) {
+    if (wsEvents === undefined) {
+      return;
+    }
+    const newEvents = wsEvents.filter((event) => !seenIdsRef.current.has(event.event_id));
+    if (newEvents.length === 0) {
       return;
     }
     const signature = wsEvents.map((event) => event.event_id).join("|");
-    if (signature === lastWsBatchRef.current) {
-      return;
-    }
     lastWsBatchRef.current = signature;
-    mergeEvents(wsEvents);
+    mergeEvents(newEvents);
   }, [wsEvents, mergeEvents]);
 
   useEffect(() => {

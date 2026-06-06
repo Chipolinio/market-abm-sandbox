@@ -72,7 +72,10 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
             )
         ticker_raw = query_ticker_metrics(store, as_of_tick)  # type: ignore[arg-type]
         ticker = TickerMetricsDTO(**{**ticker_raw, "current_tick": next_tick})
-        raw_events = store.recent_system_events(limit=20)  # type: ignore[union-attr]
+        try:
+            raw_events = store.recent_system_events(limit=20)  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            raw_events = []
         frame_events = [SystemEventDTO(**event) for event in raw_events[:20]]
         return TickStreamPayload(
             tick_id=next_tick,

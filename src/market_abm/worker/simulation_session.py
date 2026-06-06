@@ -144,7 +144,7 @@ class LiveSimulationSession:
                 "transactions_glob": "transactions/tick_*.parquet",
                 "products_glob": "products_snapshots/tick_*.parquet",
                 "sellers_state_glob": "sellers_state/tick_*.parquet",
-                "system_events_glob": "system_events/events.parquet",
+                "system_events_glob": "system_events/evt_*.parquet",
             },
         }
         _write_manifest_atomic(self._run_root, manifest)

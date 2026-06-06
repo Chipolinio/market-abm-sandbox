@@ -337,12 +337,19 @@ def coalesce_bankruptcy_events(
     return events, seq
 
 
+def _system_events_fragment_path(events_dir: Path, tick_id: int) -> Path:
+    """Уникальный fragment-файл на append — без перезаписи общего events.parquet."""
+    prefix = f"evt_{tick_id:06d}_"
+    seq = sum(1 for _ in events_dir.glob(f"{prefix}*.parquet"))
+    return events_dir / f"{prefix}{seq:04d}.parquet"
+
+
 def append_system_events(
     run_root: Path,
     events_df: pl.DataFrame,
     con: duckdb.DuckDBPyConnection,
 ) -> None:
-    """Append-only в system_events Parquet."""
+    """Append-only: каждый batch пишется в отдельный evt_{tick}_{seq}.parquet."""
     if events_df.height == 0:
         return
     if list(events_df.columns) != list(SYSTEM_EVENTS_COLUMNS):
@@ -354,30 +361,15 @@ def append_system_events(
     run_root = Path(run_root)
     events_dir = run_root / "system_events"
     events_dir.mkdir(parents=True, exist_ok=True)
-    final_path = events_dir / "events.parquet"
-    tmp_path = events_dir / "events.parquet.tmp"
+    tick_id = int(events_df[COL_TICK_ID].max())
+    fragment_path = _system_events_fragment_path(events_dir, tick_id)
 
     arrow_table = events_df.to_arrow()
     con.register("_new_events", arrow_table)
     try:
-        if final_path.is_file():
-            # DuckDB binds COPY destination (TO ?) before read_parquet(?) in the subquery.
-            con.execute(
-                """
-                COPY (
-                    SELECT * FROM read_parquet(?)
-                    UNION ALL BY NAME
-                    SELECT * FROM _new_events
-                ) TO ? (FORMAT PARQUET, COMPRESSION ZSTD)
-                """,
-                [str(tmp_path), str(final_path)],
-            )
-        else:
-            con.execute(
-                "COPY (SELECT * FROM _new_events) TO ? (FORMAT PARQUET, COMPRESSION ZSTD)",
-                [str(tmp_path)],
-            )
+        con.execute(
+            "COPY (SELECT * FROM _new_events) TO ? (FORMAT PARQUET, COMPRESSION ZSTD)",
+            [str(fragment_path)],
+        )
     finally:
         con.unregister("_new_events")
-
-    tmp_path.replace(final_path)

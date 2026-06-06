@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import duckdb
@@ -38,9 +39,7 @@ class AnalyticsStore:
     def __init__(self, run_root: Path, *, memory_limit: str = "2GB") -> None:
         self._run_root = Path(run_root)
         manifest = self._run_root / "manifest.json"
-        has_parquet = any(self._run_root.glob("**/tick_*.parquet")) or (
-            self._run_root / "system_events" / "events.parquet"
-        ).is_file()
+        has_parquet = any(self._run_root.glob("**/tick_*.parquet")) or self._has_system_events_files()
         if not manifest.is_file() and not has_parquet:
             raise FileNotFoundError(f"Run directory not found or missing manifest: {run_root}")
         self._con = duckdb.connect()
@@ -66,6 +65,27 @@ class AnalyticsStore:
 
     def _has_parquet_files(self, subdir: str) -> bool:
         return any((self._run_root / subdir).glob("tick_*.parquet"))
+
+    def _has_system_events_files(self) -> bool:
+        events_dir = self._run_root / "system_events"
+        if not events_dir.is_dir():
+            return False
+        return (events_dir / "events.parquet").is_file() or any(
+            events_dir.glob("evt_*.parquet")
+        )
+
+    def _system_events_read_sources(self) -> list[str]:
+        """Parquet-источники system_events (legacy monolith + fragment glob)."""
+        events_dir = self._run_root / "system_events"
+        if not events_dir.is_dir():
+            return []
+        sources: list[str] = []
+        legacy = events_dir / "events.parquet"
+        if legacy.is_file():
+            sources.append(str(legacy))
+        if any(events_dir.glob("evt_*.parquet")):
+            sources.append(str(events_dir / "evt_*.parquet"))
+        return sources
 
     def _query_pl(self, sql: str, params: list[object]) -> pl.DataFrame:
         """Выполняет SQL через изолированный cursor() — thread-safe (§1.2 Spec 006)."""
@@ -362,10 +382,28 @@ class AnalyticsStore:
 
     def recent_system_events(self, limit: int = 50) -> list[dict[str, object]]:
         """Последние system_events для WS broadcaster и REST backfill."""
-        path = self._run_root / "system_events" / "events.parquet"
-        if not path.is_file():
+        sources = self._system_events_read_sources()
+        if not sources:
             return []
 
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                return self._recent_system_events_from_sources(sources, limit)
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                if attempt < 2:
+                    time.sleep(0.02 * (attempt + 1))
+        if last_error is not None:
+            return []
+        return []
+
+    def _recent_system_events_from_sources(
+        self,
+        sources: list[str],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        read_arg: str | list[str] = sources[0] if len(sources) == 1 else sources
         df = self._query_pl(
             """
             SELECT *
@@ -373,7 +411,7 @@ class AnalyticsStore:
             ORDER BY tick_id DESC, event_id DESC
             LIMIT ?
             """,
-            [str(path), limit],
+            [read_arg, limit],
         )
         rows: list[dict[str, object]] = []
         for row in df.iter_rows(named=True):

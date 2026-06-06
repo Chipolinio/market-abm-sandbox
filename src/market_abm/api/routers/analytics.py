@@ -47,9 +47,10 @@ def _get_analytics_store(request: Request) -> AnalyticsStore | None:
 
     run_root = Path(artifacts_dir)
     manifest = run_root / "manifest.json"
+    events_dir = run_root / "system_events"
     has_parquet = any(run_root.glob("**/tick_*.parquet")) or (
-        run_root / "system_events" / "events.parquet"
-    ).is_file()
+        (events_dir / "events.parquet").is_file() or any(events_dir.glob("evt_*.parquet"))
+    )
     if not manifest.is_file() and not has_parquet:
         return None
 

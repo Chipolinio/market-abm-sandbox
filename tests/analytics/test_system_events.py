@@ -196,11 +196,11 @@ def test_append_system_events_merges_existing_file(tmp_path: Path) -> None:
     finally:
         con.close()
 
-    events_path = run_root / "system_events" / "events.parquet"
-    assert events_path.is_file()
+    fragments = sorted((run_root / "system_events").glob("evt_*.parquet"))
+    assert len(fragments) == 2
     row_count = duckdb.sql(
         "SELECT COUNT(*) FROM read_parquet(?)",
-        params=[str(events_path)],
+        params=[str(run_root / "system_events" / "evt_*.parquet")],
     ).fetchone()[0]
     assert row_count == 2
 
