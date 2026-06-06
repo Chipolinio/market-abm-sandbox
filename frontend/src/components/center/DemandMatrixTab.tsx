@@ -1,9 +1,6 @@
 import { useDemandMatrix } from "@/hooks/useDemandMatrix";
 import type { DemandMatrixCellDTO } from "@/types/demandMatrix";
-
-function cellOpacity(density: number): number {
-  return Math.max(0.08, density);
-}
+import { cellOpacity } from "@/utils/demandMatrixCell";
 
 export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
   return (
@@ -16,7 +13,7 @@ export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
           key={`${cell.row}-${cell.col}`}
           data-testid="demand-matrix-cell"
           title={`row=${cell.row} col=${cell.col} density=${cell.density}`}
-          className="aspect-square rounded-sm bg-cyan-400"
+          className="aspect-square rounded-sm bg-cyan-500"
           style={{ opacity: cellOpacity(cell.density) }}
         />
       ))}
