@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { TerminalTabId } from "@/components/center/types";
+import type { TickStreamPayload } from "@/api/types";
 import { useCyberLog } from "@/hooks/useCyberLog";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
 import { useFlashCrashAlarm } from "@/hooks/useFlashCrashAlarm";
@@ -22,8 +23,23 @@ export default function App() {
     reloadBackfill,
   } = useDashboardSeries();
 
+  const handleDynamicsPayload = useCallback(
+    (payload: TickStreamPayload) => {
+      if (activeTab === "dynamics") {
+        handlePayload(payload);
+      }
+    },
+    [activeTab, handlePayload],
+  );
+
+  useEffect(() => {
+    if (activeTab === "dynamics") {
+      void reloadBackfill();
+    }
+  }, [activeTab, reloadBackfill]);
+
   const { connectionState, lastPayload } = useTickStream({
-    onPayload: handlePayload,
+    onPayload: handleDynamicsPayload,
   });
 
   const { lines: cyberLogLines } = useCyberLog(lastPayload?.events);

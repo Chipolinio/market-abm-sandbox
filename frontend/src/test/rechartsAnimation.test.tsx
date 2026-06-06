@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { GmvChart } from "@/components/GmvChart";
 import { PriceQuantileChart } from "@/components/PriceQuantileChart";
 
-const lineProps: Array<{ isAnimationActive?: boolean }> = [];
-const areaProps: Array<{ isAnimationActive?: boolean }> = [];
+const lineProps: Array<{ isAnimationActive?: boolean; dot?: boolean }> = [];
+const areaProps: Array<{ isAnimationActive?: boolean; dot?: boolean }> = [];
 const barProps: Array<{ isAnimationActive?: boolean }> = [];
 
 vi.mock("recharts", () => ({
@@ -18,11 +18,11 @@ vi.mock("recharts", () => ({
   YAxis: () => null,
   Tooltip: () => null,
   Legend: () => null,
-  Line: (props: { isAnimationActive?: boolean }) => {
+  Line: (props: { isAnimationActive?: boolean; dot?: boolean }) => {
     lineProps.push(props);
     return null;
   },
-  Area: (props: { isAnimationActive?: boolean }) => {
+  Area: (props: { isAnimationActive?: boolean; dot?: boolean }) => {
     areaProps.push(props);
     return null;
   },
@@ -33,7 +33,7 @@ vi.mock("recharts", () => ({
 }));
 
 describe("recharts animation", () => {
-  it("disables_animation_on_market_dynamics_charts", () => {
+  it("disables_animation_and_dots_on_market_dynamics_charts", () => {
     lineProps.length = 0;
     areaProps.length = 0;
     barProps.length = 0;
@@ -70,6 +70,10 @@ describe("recharts animation", () => {
 
     for (const props of [...lineProps, ...areaProps, ...barProps]) {
       expect(props.isAnimationActive).toBe(false);
+    }
+
+    for (const props of [...lineProps, ...areaProps]) {
+      expect(props.dot).toBe(false);
     }
   });
 });

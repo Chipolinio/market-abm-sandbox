@@ -58,4 +58,23 @@ describe("useMarketLeaders", () => {
     });
     expect(fetchMarketLeaders).toHaveBeenCalledTimes(2);
   });
+
+  it("no_poll_after_tab_becomes_inactive", async () => {
+    const { rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useMarketLeaders(enabled, 5),
+      { initialProps: { enabled: true } },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(fetchMarketLeaders).toHaveBeenCalledTimes(1);
+
+    rerender({ enabled: false });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(fetchMarketLeaders).toHaveBeenCalledTimes(1);
+  });
 });
