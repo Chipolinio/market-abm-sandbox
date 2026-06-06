@@ -1,3 +1,5 @@
+import type { DynamicsTabProps } from "@/components/center/types";
+import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 import { ShocksControlPanel } from "@/components/sidebar/ShocksControlPanel";
@@ -5,8 +7,16 @@ import { SimulationControlStrip } from "@/components/sidebar/SimulationControlSt
 import type { WorkerState } from "@/api/types";
 import type { TickerRibbonProps } from "@/types/ticker";
 
+const EMPTY_DYNAMICS: DynamicsTabProps = {
+  priceChartData: [],
+  gmvChartData: [],
+  topListings: [],
+  topListingsLoading: false,
+};
+
 export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onActionComplete?: (beforeState: WorkerState) => Promise<void>;
+  dynamics?: DynamicsTabProps;
 };
 
 function isConfigurableState(state: WorkerState): boolean {
@@ -18,6 +28,7 @@ export function TradingTerminalLayout({
   connectionState,
   workerState,
   onActionComplete,
+  dynamics = EMPTY_DYNAMICS,
 }: TradingTerminalLayoutProps) {
   const handleActionComplete = onActionComplete ?? (async () => undefined);
 
@@ -49,7 +60,9 @@ export function TradingTerminalLayout({
           />
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-950 p-4" data-testid="zone-main" />
+        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-950 p-4" data-testid="zone-main">
+          <TerminalTabs dynamics={dynamics} />
+        </main>
       </div>
 
       <aside
