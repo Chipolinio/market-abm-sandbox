@@ -1,4 +1,4 @@
-import type { DynamicsTabProps } from "@/components/center/types";
+import type { DynamicsTabProps, TerminalTabId } from "@/components/center/types";
 import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
@@ -20,6 +20,8 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onActionComplete?: (beforeState: WorkerState) => Promise<void>;
   dynamics?: DynamicsTabProps;
   cyberLogLines?: CyberLogLine[];
+  activeTab?: TerminalTabId;
+  onTabChange?: (tab: TerminalTabId) => void;
 };
 
 function isConfigurableState(state: WorkerState): boolean {
@@ -33,6 +35,8 @@ export function TradingTerminalLayout({
   onActionComplete,
   dynamics = EMPTY_DYNAMICS,
   cyberLogLines = [],
+  activeTab,
+  onTabChange,
 }: TradingTerminalLayoutProps) {
   const handleActionComplete = onActionComplete ?? (async () => undefined);
 
@@ -65,7 +69,11 @@ export function TradingTerminalLayout({
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto bg-slate-950 p-4" data-testid="zone-main">
-          <TerminalTabs dynamics={dynamics} />
+          <TerminalTabs
+            dynamics={dynamics}
+            activeTab={activeTab}
+            onTabChange={onTabChange}
+          />
         </main>
       </div>
 

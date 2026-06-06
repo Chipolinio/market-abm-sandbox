@@ -10,7 +10,7 @@ export type UseTopListingsSeriesResult = {
   reload: () => Promise<void>;
 };
 
-export function useTopListingsSeries(): UseTopListingsSeriesResult {
+export function useTopListingsSeries(enabled: boolean = true): UseTopListingsSeriesResult {
   const [listings, setListings] = useState<ListingSeriesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,8 +29,13 @@ export function useTopListingsSeries(): UseTopListingsSeriesResult {
   }, []);
 
   useEffect(() => {
+    if (!enabled) {
+      return undefined;
+    }
+
     void reload();
-  }, [reload]);
+    return undefined;
+  }, [enabled, reload]);
 
   return { listings, loading, error, reload };
 }

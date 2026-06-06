@@ -1,3 +1,4 @@
+/** @deprecated Spec 007 flat layout — replaced by SimulationControlStrip (Spec 009). */
 import { useState } from "react";
 
 import { ApiError } from "@/api/client";

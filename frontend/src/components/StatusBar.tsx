@@ -1,4 +1,5 @@
 import type { SimulationStatus, WorkerState } from "@/api/types";
+/** @deprecated Spec 007 flat layout — replaced by TickerRibbon (Spec 009). */
 import { ConnectionBadge } from "@/components/ConnectionBadge";
 import type { ConnectionState } from "@/hooks/useTickStream";
 
