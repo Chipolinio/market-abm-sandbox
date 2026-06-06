@@ -2,18 +2,21 @@ import { useDemandMatrix } from "@/hooks/useDemandMatrix";
 import type { DemandMatrixCellDTO } from "@/types/demandMatrix";
 
 function cellOpacity(density: number): number {
-  return Math.max(0.05, density);
+  return Math.max(0.08, density);
 }
 
 export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
   return (
-    <div data-testid="demand-matrix-grid" className="grid grid-cols-10 gap-0.5">
+    <div
+      data-testid="demand-matrix-grid"
+      className="mx-auto grid h-full w-full max-w-2xl grid-cols-10 gap-0.5"
+    >
       {cells.map((cell) => (
         <div
           key={`${cell.row}-${cell.col}`}
           data-testid="demand-matrix-cell"
           title={`row=${cell.row} col=${cell.col} density=${cell.density}`}
-          className="aspect-square rounded-sm bg-cyan-500"
+          className="aspect-square rounded-sm bg-cyan-400"
           style={{ opacity: cellOpacity(cell.density) }}
         />
       ))}
@@ -21,20 +24,30 @@ export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
   );
 }
 
-export function DemandMatrixTab() {
-  const { cells, loading, error } = useDemandMatrix(true);
+type Props = {
+  asOfTick: number;
+};
+
+export function DemandMatrixTab({ asOfTick }: Props) {
+  const { cells, loading, error } = useDemandMatrix(true, asOfTick);
 
   return (
     <div
       data-testid="demand-matrix-panel"
-      className="rounded border border-slate-800 bg-slate-900/50 p-4"
+      className="flex h-full min-h-0 flex-col rounded border border-slate-800 bg-slate-900/60 p-4"
     >
-      <h2 className="mb-3 text-sm font-semibold text-slate-300">Demand Matrix</h2>
+      <h2 className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Demand Matrix (10×10)
+      </h2>
       {loading && cells.length === 0 ? (
-        <p className="text-sm text-slate-400">Loading demand matrix…</p>
+        <p className="text-xs text-slate-500">Loading demand matrix…</p>
       ) : null}
-      {error !== null ? <p className="text-sm text-red-400">{error}</p> : null}
-      {cells.length > 0 ? <DemandMatrixGrid cells={cells} /> : null}
+      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
+      {cells.length > 0 ? (
+        <div className="min-h-0 flex-1">
+          <DemandMatrixGrid cells={cells} />
+        </div>
+      ) : null}
     </div>
   );
 }

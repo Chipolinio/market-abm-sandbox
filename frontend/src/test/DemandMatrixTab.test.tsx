@@ -27,8 +27,6 @@ function buildCells(): DemandMatrixCellDTO[] {
 const emptyDynamics = {
   priceChartData: [],
   gmvChartData: [],
-  topListings: [],
-  topListingsLoading: false,
 };
 
 beforeEach(() => {
@@ -47,7 +45,7 @@ afterEach(() => {
 
 describe("DemandMatrixTab", () => {
   it("renders_10x10_grid", async () => {
-    render(<DemandMatrixTab />);
+    render(<DemandMatrixTab asOfTick={5} />);
 
     await waitFor(() => {
       expect(screen.getAllByTestId("demand-matrix-cell")).toHaveLength(100);
@@ -57,25 +55,46 @@ describe("DemandMatrixTab", () => {
 
   it("fetches_on_tab_focus_only", async () => {
     const { rerender } = render(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="dynamics" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={5}
+        activeTab="dynamics"
+        onTabChange={() => {}}
+      />,
     );
 
     expect(fetchDemandMatrix).not.toHaveBeenCalled();
 
     rerender(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="demand_matrix" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={5}
+        activeTab="demand_matrix"
+        onTabChange={() => {}}
+      />,
     );
 
     await waitFor(() => {
       expect(fetchDemandMatrix).toHaveBeenCalledTimes(1);
+      expect(fetchDemandMatrix).toHaveBeenCalledWith(5);
     });
 
     rerender(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="dynamics" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={5}
+        activeTab="dynamics"
+        onTabChange={() => {}}
+      />,
     );
 
     rerender(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="demand_matrix" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={5}
+        activeTab="demand_matrix"
+        onTabChange={() => {}}
+      />,
     );
 
     await waitFor(() => {

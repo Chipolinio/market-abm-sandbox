@@ -30,45 +30,63 @@ function warnIfQuantileOrderBroken(row: PriceChartRow): void {
 
 export function PriceQuantileChart({ data }: Props) {
   if (data.length === 0 || !hasPlottablePriceData(data)) {
-    return <p className="chart-empty">{EMPTY_PRICE_MESSAGE}</p>;
+    return (
+      <p className="flex h-full items-center justify-center text-xs italic text-slate-500">
+        {EMPTY_PRICE_MESSAGE}
+      </p>
+    );
   }
 
   data.forEach(warnIfQuantileOrderBroken);
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <ComposedChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-        <XAxis dataKey="tick_id" tick={{ fontSize: 12 }} />
-        <YAxis tick={{ fontSize: 12 }} domain={["auto", "auto"]} />
-        <Tooltip />
-        <Legend />
+    <ResponsiveContainer width="100%" height="100%">
+      <ComposedChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+        <XAxis
+          dataKey="tick_id"
+          tick={{ fontSize: 10, fill: "#94a3b8" }}
+          stroke="#475569"
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: "#94a3b8" }}
+          stroke="#475569"
+          domain={["auto", "auto"]}
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: "#0f172a",
+            border: "1px solid #334155",
+            fontSize: 11,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 10 }} />
         <Area
           type="monotone"
           dataKey="p90"
           stackId="band"
           stroke="none"
-          fill="#90caf9"
-          fillOpacity={0.35}
+          fill="#0ea5e9"
+          fillOpacity={0.25}
           isAnimationActive={false}
           dot={false}
-          name="p90 (band top)"
+          name="p90"
         />
         <Area
           type="monotone"
           dataKey="p10"
           stackId="band"
           stroke="none"
-          fill="#ffffff"
+          fill="#0f172a"
           fillOpacity={1}
           isAnimationActive={false}
           dot={false}
-          name="p10 (band bottom)"
+          name="p10 mask"
         />
         <Line
           type="monotone"
           dataKey="p50"
-          stroke="#1565c0"
+          stroke="#38bdf8"
           strokeWidth={2}
           isAnimationActive={false}
           dot={false}
@@ -77,7 +95,7 @@ export function PriceQuantileChart({ data }: Props) {
         <Line
           type="monotone"
           dataKey="p10"
-          stroke="#42a5f5"
+          stroke="#64748b"
           strokeDasharray="4 4"
           isAnimationActive={false}
           dot={false}
@@ -86,7 +104,7 @@ export function PriceQuantileChart({ data }: Props) {
         <Line
           type="monotone"
           dataKey="p90"
-          stroke="#42a5f5"
+          stroke="#64748b"
           strokeDasharray="4 4"
           isAnimationActive={false}
           dot={false}

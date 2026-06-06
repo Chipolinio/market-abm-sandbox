@@ -2,23 +2,24 @@ import type { DynamicsTabProps, TerminalTabId } from "@/components/center/types"
 import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
-import type { CyberLogLine } from "@/state/cyberLog";
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 import { ShocksControlPanel } from "@/components/sidebar/ShocksControlPanel";
 import { SimulationControlStrip } from "@/components/sidebar/SimulationControlStrip";
 import type { WorkerState } from "@/api/types";
+import type { CyberLogLine } from "@/state/cyberLog";
 import type { TickerRibbonProps } from "@/types/ticker";
 
 const EMPTY_DYNAMICS: DynamicsTabProps = {
   priceChartData: [],
   gmvChartData: [],
-  topListings: [],
-  topListingsLoading: false,
+  backfillLoading: false,
+  backfillError: null,
 };
 
 export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onActionComplete?: (beforeState: WorkerState) => Promise<void>;
   dynamics?: DynamicsTabProps;
+  asOfTick?: number;
   cyberLogLines?: CyberLogLine[];
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
@@ -34,6 +35,7 @@ export function TradingTerminalLayout({
   workerState,
   onActionComplete,
   dynamics = EMPTY_DYNAMICS,
+  asOfTick = 0,
   cyberLogLines = [],
   activeTab,
   onTabChange,
@@ -41,48 +43,61 @@ export function TradingTerminalLayout({
   const handleActionComplete = onActionComplete ?? (async () => undefined);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
-      <aside
-        data-testid="zone-left-sidebar"
-        className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-slate-800 bg-slate-900"
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
+      <header
+        data-testid="zone-top-bar"
+        className="flex h-14 shrink-0 items-center border-b border-slate-800 px-4"
       >
-        <section className="border-b border-slate-800 p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase text-slate-400">Environment</h2>
-          <EnvironmentConfigurator disabled={!isConfigurableState(workerState)} />
-        </section>
-        <section className="border-b border-slate-800 p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase text-slate-400">Macro Shocks</h2>
-          <ShocksControlPanel />
-        </section>
-        <section className="mt-auto p-4">
-          <SimulationControlStrip state={workerState} onActionComplete={handleActionComplete} />
-        </section>
-      </aside>
+        <TickerRibbon
+          metrics={metrics}
+          connectionState={connectionState}
+          workerState={workerState}
+        />
+      </header>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center border-b border-slate-800 px-4">
-          <TickerRibbon
-            metrics={metrics}
-            connectionState={connectionState}
-            workerState={workerState}
-          />
-        </header>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <aside
+          data-testid="zone-left-sidebar"
+          className="h-full w-80 shrink-0 overflow-y-auto border-r border-slate-800 p-4"
+        >
+          <section className="mb-6">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Environment
+            </h2>
+            <EnvironmentConfigurator disabled={!isConfigurableState(workerState)} />
+          </section>
 
-        <main className="min-h-0 flex-1 overflow-y-auto bg-slate-950 p-4" data-testid="zone-main">
+          <section className="mb-6">
+            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Macro Shocks
+            </h2>
+            <ShocksControlPanel />
+          </section>
+
+          <section className="border-t border-slate-800 pt-4">
+            <SimulationControlStrip state={workerState} onActionComplete={handleActionComplete} />
+          </section>
+        </aside>
+
+        <main
+          data-testid="zone-main"
+          className="flex h-full min-w-0 flex-1 flex-col overflow-hidden p-4"
+        >
           <TerminalTabs
             dynamics={dynamics}
+            asOfTick={asOfTick}
             activeTab={activeTab}
             onTabChange={onTabChange}
           />
         </main>
-      </div>
 
-      <aside
-        data-testid="zone-cyberlog"
-        className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900"
-      >
-        <CyberEventTerminal lines={cyberLogLines} />
-      </aside>
+        <aside
+          data-testid="zone-cyberlog"
+          className="flex h-full w-96 shrink-0 flex-col border-l border-slate-800"
+        >
+          <CyberEventTerminal lines={cyberLogLines} />
+        </aside>
+      </div>
     </div>
   );
 }

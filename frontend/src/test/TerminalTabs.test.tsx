@@ -7,8 +7,6 @@ import { TerminalTabs } from "@/components/center/TerminalTabs";
 const emptyDynamics = {
   priceChartData: [],
   gmvChartData: [],
-  topListings: [],
-  topListingsLoading: false,
 };
 
 afterEach(() => {
@@ -18,7 +16,12 @@ afterEach(() => {
 describe("TerminalTabs", () => {
   it("mounts_only_active_panel", () => {
     const { rerender } = render(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="dynamics" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={0}
+        activeTab="dynamics"
+        onTabChange={() => {}}
+      />,
     );
 
     expect(screen.getByTestId("market-dynamics-panel")).toBeTruthy();
@@ -26,7 +29,12 @@ describe("TerminalTabs", () => {
     expect(screen.queryByTestId("demand-matrix-panel")).toBeNull();
 
     rerender(
-      <TerminalTabs dynamics={emptyDynamics} activeTab="leaders" onTabChange={() => {}} />,
+      <TerminalTabs
+        dynamics={emptyDynamics}
+        asOfTick={0}
+        activeTab="leaders"
+        onTabChange={() => {}}
+      />,
     );
 
     expect(screen.queryByTestId("market-dynamics-panel")).toBeNull();

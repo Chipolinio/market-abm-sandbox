@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import type { TerminalTabId } from "@/components/center/types";
 import { useCyberLog } from "@/hooks/useCyberLog";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
 import { useSimulationStatus } from "@/hooks/useSimulationStatus";
 import { useTickStream } from "@/hooks/useTickStream";
-import { useTopListingsSeries } from "@/hooks/useTopListingsSeries";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
 
@@ -21,14 +20,6 @@ export default function App() {
     reloadBackfill,
   } = useDashboardSeries();
 
-  const dynamicsActive = activeTab === "dynamics";
-  const {
-    listings: topListings,
-    loading: topListingsLoading,
-    error: topListingsError,
-    reload: reloadTopListings,
-  } = useTopListingsSeries(dynamicsActive);
-
   const { connectionState, lastPayload } = useTickStream({
     onPayload: handlePayload,
   });
@@ -36,28 +27,43 @@ export default function App() {
   const { lines: cyberLogLines } = useCyberLog(lastPayload?.events);
 
   const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
+  const asOfTick =
+    lastPayload?.tick_id ??
+    lastPayload?.ticker_metrics?.current_tick ??
+    status?.current_tick ??
+    0;
   const showFailed =
     workerState === "FAILED" || (status?.last_error !== null && status?.last_error !== undefined);
 
-  const onActionComplete = async (beforeState: WorkerState) => {
-    for (let i = 0; i < 25; i += 1) {
-      const next = await refresh();
-      if (next !== null && next.state !== beforeState) {
-        break;
+  const dynamics = useMemo(
+    () => ({
+      priceChartData,
+      gmvChartData,
+      backfillLoading,
+      backfillError,
+    }),
+    [priceChartData, gmvChartData, backfillLoading, backfillError],
+  );
+
+  const onActionComplete = useCallback(
+    async (beforeState: WorkerState) => {
+      for (let i = 0; i < 25; i += 1) {
+        const next = await refresh();
+        if (next !== null && next.state !== beforeState) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    void reloadBackfill();
-    if (dynamicsActive) {
-      void reloadTopListings();
-    }
-  };
+      void reloadBackfill();
+    },
+    [refresh, reloadBackfill],
+  );
 
   return (
     <>
       {showFailed ? (
         <div
-          className="fixed left-0 right-0 top-0 z-50 bg-red-900 px-4 py-2 text-center text-sm text-red-100"
+          className="fixed left-0 right-0 top-0 z-50 bg-red-950 px-4 py-2 text-center text-sm text-red-200"
           role="alert"
         >
           Simulation failed: {status?.last_error ?? "see worker logs"}
@@ -72,14 +78,8 @@ export default function App() {
         cyberLogLines={cyberLogLines}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        dynamics={{
-          priceChartData,
-          gmvChartData,
-          topListings,
-          topListingsLoading,
-          backfillLoading,
-          backfillError: backfillError ?? topListingsError,
-        }}
+        asOfTick={asOfTick}
+        dynamics={dynamics}
       />
     </>
   );

@@ -22,20 +22,21 @@ describe("TradingTerminalLayout", () => {
     expect(root).not.toBeNull();
     expect(hasClass(root!, "h-screen")).toBe(true);
     expect(hasClass(root!, "overflow-hidden")).toBe(true);
-
-    const asides = container.querySelectorAll("aside");
-    expect(asides).toHaveLength(2);
-    expect(hasClass(asides[0]!, "w-80")).toBe(true);
-    expect(hasClass(asides[1]!, "w-96")).toBe(true);
-    expect(hasClass(asides[0]!, "overflow-hidden")).toBe(true);
+    expect(hasClass(root!, "flex-col")).toBe(true);
 
     const header = container.querySelector("header");
     expect(header).not.toBeNull();
     expect(hasClass(header!, "h-14")).toBe(true);
 
+    const asides = container.querySelectorAll("aside");
+    expect(asides).toHaveLength(2);
+    expect(hasClass(asides[0]!, "w-80")).toBe(true);
+    expect(hasClass(asides[1]!, "w-96")).toBe(true);
+    expect(hasClass(asides[0]!, "overflow-y-auto")).toBe(true);
+
     const main = container.querySelector("main");
     expect(main).not.toBeNull();
     expect(hasClass(main!, "flex-1")).toBe(true);
-    expect(hasClass(main!, "overflow-y-auto")).toBe(true);
+    expect(hasClass(main!, "overflow-hidden")).toBe(true);
   });
 });

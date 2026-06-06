@@ -24,15 +24,6 @@ vi.mock("@/hooks/useDashboardSeries", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useTopListingsSeries", () => ({
-  useTopListingsSeries: (_enabled: boolean) => ({
-    listings: [],
-    loading: false,
-    error: null,
-    reload: vi.fn(async () => undefined),
-  }),
-}));
-
 vi.mock("@/hooks/useTickStream", () => ({
   useTickStream: () => ({
     connectionState: "open",

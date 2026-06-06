@@ -11,7 +11,7 @@ export type UseDemandMatrixResult = {
   refresh: () => Promise<void>;
 };
 
-export function useDemandMatrix(enabled: boolean): UseDemandMatrixResult {
+export function useDemandMatrix(enabled: boolean, tickId: number): UseDemandMatrixResult {
   const [cells, setCells] = useState<DemandMatrixCellDTO[]>([]);
   const [gridSize, setGridSize] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ export function useDemandMatrix(enabled: boolean): UseDemandMatrixResult {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchDemandMatrix();
+      const response = await fetchDemandMatrix(tickId);
       setCells(response.cells);
       setGridSize(response.grid_size);
       setError(null);
@@ -29,7 +29,7 @@ export function useDemandMatrix(enabled: boolean): UseDemandMatrixResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tickId]);
 
   useEffect(() => {
     if (!enabled) {

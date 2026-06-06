@@ -11,33 +11,29 @@ function statusLabel(isBankrupt: boolean): string {
 
 export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] }) {
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b border-slate-700 text-left text-slate-400">
-          <th className="px-2 py-2">Rank</th>
-          <th className="px-2 py-2">Seller ID</th>
-          <th className="px-2 py-2">Working Capital</th>
-          <th className="px-2 py-2">Tick Revenue</th>
-          <th className="px-2 py-2">Cumulative</th>
-          <th className="px-2 py-2">Status</th>
+    <table className="w-full border-collapse text-xs">
+      <thead className="sticky top-0 bg-slate-900">
+        <tr className="border-b border-slate-700 text-left text-slate-500">
+          <th className="px-2 py-1.5">Rank</th>
+          <th className="px-2 py-1.5">Seller ID</th>
+          <th className="px-2 py-1.5">Working Capital</th>
+          <th className="px-2 py-1.5">Tick Revenue</th>
+          <th className="px-2 py-1.5">Cumulative</th>
+          <th className="px-2 py-1.5">Status</th>
         </tr>
       </thead>
       <tbody>
         {leaders.map((leader, index) => (
-          <tr key={leader.seller_id} className="border-b border-slate-800">
-            <td className="px-2 py-2">{index + 1}</td>
-            <td className="px-2 py-2" data-testid="leader-seller-id">
+          <tr key={leader.seller_id} className="border-b border-slate-800 hover:bg-slate-800/40">
+            <td className="px-2 py-1.5 text-slate-400">{index + 1}</td>
+            <td className="px-2 py-1.5" data-testid="leader-seller-id">
               {leader.seller_id}
             </td>
-            <td className="px-2 py-2">{formatMoney(leader.working_capital)}</td>
-            <td className="px-2 py-2">{formatMoney(leader.tick_revenue)}</td>
-            <td className="px-2 py-2">{formatMoney(leader.cumulative_revenue)}</td>
-            <td className="px-2 py-2">
-              <span
-                className={
-                  leader.is_bankrupt ? "text-red-400" : "text-green-400"
-                }
-              >
+            <td className="px-2 py-1.5 font-mono">{formatMoney(leader.working_capital)}</td>
+            <td className="px-2 py-1.5 font-mono">{formatMoney(leader.tick_revenue)}</td>
+            <td className="px-2 py-1.5 font-mono">{formatMoney(leader.cumulative_revenue)}</td>
+            <td className="px-2 py-1.5">
+              <span className={leader.is_bankrupt ? "text-red-400" : "text-emerald-400"}>
                 {statusLabel(leader.is_bankrupt)}
               </span>
             </td>
@@ -48,16 +44,25 @@ export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] 
   );
 }
 
-export function MarketLeadersTab() {
-  const { leaders, loading, error } = useMarketLeaders(true);
+type Props = {
+  asOfTick: number;
+};
+
+export function MarketLeadersTab({ asOfTick }: Props) {
+  const { leaders, loading, error } = useMarketLeaders(true, asOfTick);
 
   return (
-    <div data-testid="market-leaders-panel" className="rounded border border-slate-800 bg-slate-900/50 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-slate-300">Market Leaders</h2>
+    <div
+      data-testid="market-leaders-panel"
+      className="h-full rounded border border-slate-800 bg-slate-900/60 p-4"
+    >
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Market Leaders
+      </h2>
       {loading && leaders.length === 0 ? (
-        <p className="text-sm text-slate-400">Loading leaders…</p>
+        <p className="text-xs text-slate-500">Loading leaders…</p>
       ) : null}
-      {error !== null ? <p className="text-sm text-red-400">{error}</p> : null}
+      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
       {leaders.length > 0 ? <MarketLeadersTable leaders={leaders} /> : null}
     </div>
   );

@@ -64,14 +64,14 @@ afterEach(() => {
 
 describe("MarketLeadersTab", () => {
   it("renders_top5_rows", () => {
-    const { container } = render(<MarketLeadersTab />);
+    const { container } = render(<MarketLeadersTab asOfTick={3} />);
 
     const rows = container.querySelectorAll("tbody tr");
     expect(rows).toHaveLength(5);
   });
 
   it("preserves_backend_order_without_client_sort", () => {
-    render(<MarketLeadersTab />);
+    render(<MarketLeadersTab asOfTick={3} />);
 
     const sellerCells = screen.getAllByTestId("leader-seller-id");
     expect(sellerCells.map((cell) => cell.textContent)).toEqual(["3", "1", "7", "2", "9"]);

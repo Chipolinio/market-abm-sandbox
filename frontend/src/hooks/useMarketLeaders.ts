@@ -12,7 +12,7 @@ export type UseMarketLeadersResult = {
   refresh: () => Promise<void>;
 };
 
-export function useMarketLeaders(enabled: boolean): UseMarketLeadersResult {
+export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLeadersResult {
   const [leaders, setLeaders] = useState<MarketLeaderRowDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function useMarketLeaders(enabled: boolean): UseMarketLeadersResult {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(5);
+      const response = await fetchMarketLeaders(tickId, 5);
       setLeaders(response.leaders);
       setError(null);
     } catch (err) {
@@ -28,7 +28,7 @@ export function useMarketLeaders(enabled: boolean): UseMarketLeadersResult {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tickId]);
 
   useEffect(() => {
     if (!enabled) {

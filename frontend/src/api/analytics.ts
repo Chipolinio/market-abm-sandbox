@@ -34,12 +34,17 @@ export function fetchTopListings(
   return apiFetch<TopListingsResponse>(`/api/v1/analytics/top-listings?limit=${limit}`);
 }
 
-export function fetchMarketLeaders(limit: number = 5): Promise<MarketLeadersResponse> {
-  return apiFetch<MarketLeadersResponse>(`/api/v1/analytics/market-leaders?limit=${limit}`);
+export function fetchMarketLeaders(
+  tickId: number,
+  limit: number = 5,
+): Promise<MarketLeadersResponse> {
+  return apiFetch<MarketLeadersResponse>(
+    `/api/v1/analytics/market-leaders?tick_id=${tickId}&limit=${limit}`,
+  );
 }
 
-export function fetchDemandMatrix(): Promise<DemandMatrixResponse> {
-  return apiFetch<DemandMatrixResponse>("/api/v1/analytics/demand-matrix");
+export function fetchDemandMatrix(tickId: number): Promise<DemandMatrixResponse> {
+  return apiFetch<DemandMatrixResponse>(`/api/v1/analytics/demand-matrix?tick_id=${tickId}`);
 }
 
 export function fetchSystemEvents(limit: number = 50): Promise<SystemEventsResponse> {
