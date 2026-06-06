@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,6 +16,7 @@ import polars as pl
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.domain.constants import (
     PRODUCTS_COLUMNS,
+    SELLERS_STATE_COLUMNS,
     TRANSACTIONS_COLUMNS,
 )
 
@@ -105,6 +107,8 @@ def init_run_directory(
 
     (run_root / "transactions").mkdir(parents=True, exist_ok=False)
     (run_root / "products_snapshots").mkdir(parents=False, exist_ok=False)
+    (run_root / "sellers_state").mkdir(parents=False, exist_ok=False)
+    (run_root / "system_events").mkdir(parents=False, exist_ok=False)
 
     manifest: dict[str, object] = {
         "run_id": run_id,
@@ -121,6 +125,8 @@ def init_run_directory(
         "paths": {
             "transactions_glob": "transactions/tick_*.parquet",
             "products_glob": "products_snapshots/tick_*.parquet",
+            "sellers_state_glob": "sellers_state/tick_*.parquet",
+            "system_events_glob": "system_events/events.parquet",
         },
     }
     _write_manifest_atomic(run_root, manifest)
@@ -156,6 +162,32 @@ def persist_tick_artifacts(
     manifest["ticks_completed"] = int(manifest.get("ticks_completed", 0)) + 1
     manifest["last_tick_id"] = tick_id
     _write_manifest_atomic(run_root, manifest)
+
+
+def persist_sellers_state_snapshot(
+    run_root: Path,
+    *,
+    tick_id: int,
+    sellers_state_df: pl.DataFrame,
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    """Пишет sellers_state parquet одного тика."""
+    _validate_frame_columns(sellers_state_df, SELLERS_STATE_COLUMNS, "sellers_state_df")
+    path = _tick_path(run_root, "sellers_state", tick_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        raise FileExistsError(f"Sellers state snapshot for tick {tick_id} already exists")
+    _write_df_to_parquet_arrow(sellers_state_df, path, con)
+
+
+def clear_run_tick_artifacts(run_root: Path) -> None:
+    """Удаляет tick-артефакты прогона (для worker RESET / force_clear)."""
+    run_root = Path(run_root)
+    for subdir in ("transactions", "products_snapshots", "sellers_state", "system_events"):
+        path = run_root / subdir
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir(parents=True, exist_ok=True)
 
 
 def append_drift_alerts(run_root: Path, alerts: list[dict[str, object]]) -> None:

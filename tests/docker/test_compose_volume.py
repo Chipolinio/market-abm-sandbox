@@ -106,7 +106,6 @@ def _wipe_run_artifacts(session: ComposeSession) -> None:
     wait_healthy()
 
 
-@pytest.mark.xfail(reason="TD-NOOP: _noop_step does not write Parquet on START")
 def test_volume_writable_creates_parquet_on_tick_1(compose_stack: ComposeSession) -> None:
     """7.3-T7: полный контракт — после START появляется tick_0.parquet."""
     _wipe_run_artifacts(compose_stack)
@@ -122,7 +121,6 @@ def test_volume_writable_creates_parquet_on_tick_1(compose_stack: ComposeSession
     assert payload["state"] != "FAILED"
 
 
-@pytest.mark.xfail(reason="TD-NOOP: requires live simulation Parquet writer")
 def test_volume_survives_backend_restart_via_live_simulation(compose_stack: ComposeSession) -> None:
     """7.3-T6: START → ticks → restart → price-index > 0 без seed."""
     _wipe_run_artifacts(compose_stack)

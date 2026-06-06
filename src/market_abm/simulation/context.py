@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, replace
 
 from market_abm.domain.constants import PLATFORM_DEFAULTS, COL_BASE_COMMISSION
+from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.domain.shocks import ActiveShock, ShockType
 
 
@@ -80,3 +81,41 @@ def drain_shock_queue(shock_queue: queue.Queue, ctx: SimulationContext) -> Simul
         idle_deadline = None
 
     return ctx_next
+
+
+def with_tick_id(ctx: SimulationContext, tick_id: int) -> SimulationContext:
+    """Обновляет tick_id контекста без мутации исходного объекта."""
+    return replace(ctx, tick_id=tick_id)
+
+
+def tick_down_active_shocks(ctx: SimulationContext) -> SimulationContext:
+    """Уменьшает remaining_ticks; снимает шоки с remaining_ticks <= 1 после тика."""
+    remaining: list[ActiveShock] = []
+    for shock in ctx.active_shocks:
+        if shock.remaining_ticks <= 1:
+            continue
+        remaining.append(replace(shock, remaining_ticks=shock.remaining_ticks - 1))
+    return replace(ctx, active_shocks=tuple(remaining))
+
+
+def active_demand_shock_types(ctx: SimulationContext) -> list[ShockType]:
+    """Типы demand-шоков, активные на текущем тике (для command-side system_events)."""
+    return [
+        shock.shock_type
+        for shock in ctx.active_shocks
+        if shock.shock_type in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM)
+    ]
+
+
+def demand_shock_pct_drop(
+    shock_type: ShockType,
+    *,
+    catalog: ShockCatalogConfig,
+    intensity: float,
+) -> float:
+    """Процент изменения бюджета для cyber-log message."""
+    if shock_type == ShockType.DEMAND_CRASH:
+        mult = catalog.demand_crash.budget_multiplier * intensity
+        return max(0.0, (1.0 - mult) * 100.0)
+    mult = catalog.demand_boom.budget_multiplier * intensity
+    return max(0.0, (mult - 1.0) * 100.0)

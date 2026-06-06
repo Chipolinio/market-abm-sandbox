@@ -1,8 +1,9 @@
-# Назначение файла: много-тиковый генератор симуляции рынка (Slice 004).
+# Назначение файла: много-тиковый генератор симуляции рынка (Slice 004 / 8.4).
 # Базовая идея: listings → products один раз, затем ленивый yield step по тикам.
 from __future__ import annotations
 
 from collections.abc import Generator
+from dataclasses import replace
 from typing import Final
 
 import numpy as np
@@ -22,6 +23,12 @@ from market_abm.analytics.persist import (
     open_duckdb_connection,
     persist_tick_artifacts,
     resolve_run_id,
+)
+from market_abm.simulation.context import with_tick_id
+from market_abm.simulation.extended_runtime import (
+    ExtendedSimulationState,
+    init_extended_state,
+    persist_extended_tick,
 )
 from market_abm.simulation.step import step
 
@@ -71,6 +78,10 @@ def _maybe_rechunk_products(products_df: pl.DataFrame) -> pl.DataFrame:
     return products_df
 
 
+def _is_extended(config: SimulationRunConfig) -> bool:
+    return config.runtime_mode == "extended"
+
+
 def run_simulation(
     buyers_df: pl.DataFrame,
     sellers_df: pl.DataFrame,
@@ -90,21 +101,51 @@ def run_simulation(
         rng=rng,
     )
 
+    extended_state: ExtendedSimulationState | None = None
+    if _is_extended(config):
+        extended_state = init_extended_state(sellers_df)
+
     for tick_id in range(n_ticks):
         step_config = SimulationStepConfig(
             tick_id=tick_id,
             seed=config.seed,
             choice=config.choice,
             repricing=config.repricing,
+            economics=config.economics,
         )
-        products_next, transactions_df, _ = step(
+        sim_ctx = None
+        sellers_state_df = None
+        if extended_state is not None:
+            sim_ctx = with_tick_id(extended_state.simulation_context, tick_id)
+            sellers_state_df = extended_state.sellers_state_df
+
+        products_next, transactions_df, sellers_state_next = step(
             buyers_df,
             sellers_df,
             products_df,
             step_config,
+            sellers_state_df=sellers_state_df,
+            simulation_context=sim_ctx,
+            shock_catalog=config.shock_catalog,
         )
         products_next = _maybe_rechunk_products(products_next)
         products_df = products_next
+
+        if extended_state is not None and sellers_state_next is not None:
+            extended_state = replace(
+                extended_state,
+                sellers_state_df=sellers_state_next,
+                simulation_context=with_tick_id(
+                    extended_state.simulation_context, tick_id + 1
+                ),
+            )
+            from market_abm.simulation.context import tick_down_active_shocks
+
+            extended_state = replace(
+                extended_state,
+                simulation_context=tick_down_active_shocks(extended_state.simulation_context),
+            )
+
         yield tick_id, products_next, transactions_df
 
 
@@ -139,19 +180,95 @@ def run_simulation_and_persist(
 
     def _stream() -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
         try:
-            for tick_id, products_next, transactions_df in run_simulation(
-                buyers_df, sellers_df, listings_df, n_ticks, config
-            ):
-                persist_tick_artifacts(
-                    ctx.run_root,
-                    tick_id=tick_id,
-                    transactions_df=transactions_df,
-                    products_df=products_next,
-                    config=config.persistence,
+            if _is_extended(config):
+                yield from _stream_extended_persist(
+                    buyers_df,
+                    sellers_df,
+                    listings_df,
+                    n_ticks=n_ticks,
+                    config=config,
+                    run_root=ctx.run_root,
+                    run_id=run_id,
                     con=con,
                 )
-                yield tick_id, products_next, transactions_df
+            else:
+                for tick_id, products_next, transactions_df in run_simulation(
+                    buyers_df, sellers_df, listings_df, n_ticks, config
+                ):
+                    persist_tick_artifacts(
+                        ctx.run_root,
+                        tick_id=tick_id,
+                        transactions_df=transactions_df,
+                        products_df=products_next,
+                        config=config.persistence,
+                        con=con,
+                    )
+                    yield tick_id, products_next, transactions_df
         finally:
             con.close()
 
     return _stream()
+
+
+def _stream_extended_persist(
+    buyers_df: pl.DataFrame,
+    sellers_df: pl.DataFrame,
+    listings_df: pl.DataFrame,
+    *,
+    n_ticks: int,
+    config: SimulationRunConfig,
+    run_root,
+    run_id: str,
+    con,
+) -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
+    _validate_listings_df(listings_df)
+    rng = _bootstrap_rng(config.seed)
+    products_df = _bootstrap_products_from_listings(
+        listings_df,
+        config=config.products_bootstrap,
+        rng=rng,
+    )
+    extended_state = init_extended_state(sellers_df)
+
+    for tick_id in range(n_ticks):
+        prev_sellers_state = extended_state.sellers_state_df
+        step_config = SimulationStepConfig(
+            tick_id=tick_id,
+            seed=config.seed,
+            choice=config.choice,
+            repricing=config.repricing,
+            economics=config.economics,
+        )
+        sim_ctx = with_tick_id(extended_state.simulation_context, tick_id)
+        products_next, transactions_df, sellers_state_next = step(
+            buyers_df,
+            sellers_df,
+            products_df,
+            step_config,
+            sellers_state_df=extended_state.sellers_state_df,
+            simulation_context=sim_ctx,
+            shock_catalog=config.shock_catalog,
+        )
+        products_next = _maybe_rechunk_products(products_next)
+        products_df = products_next
+
+        if sellers_state_next is None:
+            raise RuntimeError("extended mode requires sellers_state_next from step()")
+
+        extended_state = replace(
+            extended_state,
+            sellers_state_df=sellers_state_next,
+            simulation_context=sim_ctx,
+        )
+        extended_state = persist_extended_tick(
+            run_root,
+            tick_id=tick_id,
+            transactions_df=transactions_df,
+            products_df=products_next,
+            state=extended_state,
+            prev_sellers_state=prev_sellers_state,
+            config=config,
+            con=con,
+            run_id=run_id,
+        )
+        yield tick_id, products_next, transactions_df

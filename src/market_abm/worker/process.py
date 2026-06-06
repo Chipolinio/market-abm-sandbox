@@ -240,6 +240,7 @@ class _WorkerLoop:
 def _worker_entry(
     artifacts_dir: str,
     command_queue: mp.Queue,
+    shock_queue: mp.Queue,
     tick_counter: mp.Value,
     state_value: mp.Value,
     last_error_array: mp.Array,
@@ -252,10 +253,13 @@ def _worker_entry(
     Все аргументы — pickle-safe (строки, примитивы разделяемой памяти).
     """
     if step_fn_qualname is None:
-        # В production: импортируем реальный шаг симуляции лениво (после spawn)
-        from market_abm.simulation.runner import run_simulation  # noqa: PLC0415
+        from market_abm.worker.simulation_session import make_live_step_fn  # noqa: PLC0415
 
-        step_fn: Callable[[], None] = _noop_step  # placeholder — runner управляет через генератор
+        step_fn = make_live_step_fn(
+            artifacts_dir=artifacts_dir,
+            shock_queue=shock_queue,
+            tick_counter=tick_counter,
+        )
     else:
         module_name, func_name = step_fn_qualname.rsplit(".", 1)
         module = importlib.import_module(module_name)
@@ -294,6 +298,7 @@ class SimulationWorker:
         _step_fn_qualname: str | None = None,
     ) -> None:
         ctx = mp.get_context("spawn")
+        self._artifacts_dir = artifacts_dir
 
         self.command_queue: mp.Queue = ctx.Queue(maxsize=1)
         self.shock_queue: mp.Queue = ctx.Queue(maxsize=_SHOCK_QUEUE_MAXSIZE)
@@ -308,6 +313,7 @@ class SimulationWorker:
             args=(
                 artifacts_dir,
                 self.command_queue,
+                self.shock_queue,
                 self.tick_counter,
                 self._state_value,
                 self._last_error_array,
@@ -317,6 +323,11 @@ class SimulationWorker:
             ),
             daemon=True,
         )
+
+    @property
+    def run_id(self) -> str:
+        """run_id из имени каталога артефактов (runs/{run_id})."""
+        return Path(self._artifacts_dir).name
 
     @property
     def state(self) -> WorkerState:

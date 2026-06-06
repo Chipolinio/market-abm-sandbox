@@ -2,11 +2,14 @@
 # Базовая идея: SimulationRunConfig объединяет choice, repricing, bootstrap и persistence.
 from __future__ import annotations
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from market_abm.config.economics import SellerEconomicsConfig
+from market_abm.config.events import SystemEventsConfig
 from market_abm.config.repricing import RepricingConfig
+from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.config.simulation import ChoiceModelConfig
 
 
@@ -50,3 +53,7 @@ class SimulationRunConfig(BaseModel):
     repricing: RepricingConfig = Field(default_factory=RepricingConfig.default_market)
     products_bootstrap: ProductsBootstrapConfig = Field(default_factory=ProductsBootstrapConfig)
     persistence: PersistenceConfig = Field(default_factory=PersistenceConfig)
+    runtime_mode: Literal["legacy", "extended"] = "legacy"
+    economics: SellerEconomicsConfig = Field(default_factory=SellerEconomicsConfig)
+    events: SystemEventsConfig = Field(default_factory=SystemEventsConfig)
+    shock_catalog: ShockCatalogConfig = Field(default_factory=ShockCatalogConfig)
