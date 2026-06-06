@@ -44,7 +44,7 @@ describe("useCyberLog", () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(fetchSystemEvents).toHaveBeenCalledWith(50);
+    expect(fetchSystemEvents).toHaveBeenCalledWith(200);
     expect(result.current.lines).toHaveLength(1);
     expect(result.current.lines[0]?.event_id).toBe("backfill-1");
   });

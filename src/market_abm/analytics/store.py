@@ -38,7 +38,10 @@ class AnalyticsStore:
     def __init__(self, run_root: Path, *, memory_limit: str = "2GB") -> None:
         self._run_root = Path(run_root)
         manifest = self._run_root / "manifest.json"
-        if not manifest.is_file():
+        has_parquet = any(self._run_root.glob("**/tick_*.parquet")) or (
+            self._run_root / "system_events" / "events.parquet"
+        ).is_file()
+        if not manifest.is_file() and not has_parquet:
             raise FileNotFoundError(f"Run directory not found or missing manifest: {run_root}")
         self._con = duckdb.connect()
         self._con.execute(f"SET memory_limit='{memory_limit}'")
@@ -48,8 +51,11 @@ class AnalyticsStore:
         self._con.close()
 
     def drift_alerts(self) -> list[dict[str, object]]:
-        """Query-сторона: читает manifest['drift_alerts'] (Spec 005 §10.4)."""
-        manifest = json.loads((self._run_root / "manifest.json").read_text(encoding="utf-8"))
+        """Query-side: reads manifest['drift_alerts'] (Spec 005 §10.4)."""
+        manifest_path = self._run_root / "manifest.json"
+        if not manifest_path.is_file():
+            return []
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         return list(manifest.get("drift_alerts", []))
 
     def _transactions_glob(self) -> str:
@@ -192,8 +198,11 @@ class AnalyticsStore:
         return result
 
     def _run_id_from_manifest(self) -> str:
-        manifest = json.loads((self._run_root / "manifest.json").read_text(encoding="utf-8"))
-        return str(manifest.get("run_id", self._run_root.name))
+        manifest_path = self._run_root / "manifest.json"
+        if manifest_path.is_file():
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            return str(manifest.get("run_id", self._run_root.name))
+        return self._run_root.name
 
     def query_price_quantiles(self, tick_id: int) -> dict[str, float] | None:
         """

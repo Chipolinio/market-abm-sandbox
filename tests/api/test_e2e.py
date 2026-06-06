@@ -129,7 +129,7 @@ def test_make_payload_fn_tick_id_passed_to_store_query() -> None:
     fn = make_payload_fn(store)
     fn(42)
 
-    store.query_market_aggregate.assert_any_call(42)
+    store.query_market_aggregate.assert_any_call(41)
     store.query_market_aggregate.assert_any_call(0)
 
 

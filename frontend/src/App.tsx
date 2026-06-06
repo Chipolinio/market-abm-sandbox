@@ -18,6 +18,12 @@ export default function App() {
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
   const { status, refresh } = useSimulationStatus();
+
+  const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
+
+  const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
+  const pollAnalytics = workerState === "RUNNING" || workerState === "PAUSED";
+
   const {
     priceChartData,
     gmvChartData,
@@ -26,7 +32,13 @@ export default function App() {
     handlePayload,
     reloadBackfill,
     clearSeries,
-  } = useDashboardSeries();
+  } = useDashboardSeries(pollAnalytics);
+
+  useEffect(() => {
+    if (lastPayload !== null) {
+      handlePayload(lastPayload);
+    }
+  }, [lastPayload, handlePayload]);
 
   useEffect(() => {
     if (activeTab === "dynamics") {
@@ -34,14 +46,8 @@ export default function App() {
     }
   }, [activeTab, reloadBackfill]);
 
-  const { connectionState, lastPayload, reconnectAttempt } = useTickStream({
-    onPayload: handlePayload,
-  });
-
-  const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
   const nextTick = resolveSimulationTick(status, lastPayload);
   const asOfTick = toLastCompletedTick(nextTick);
-  const pollAnalytics = workerState === "RUNNING" || workerState === "PAUSED";
 
   const { lines: cyberLogLines, reset: resetCyberLog } = useCyberLog(
     lastPayload?.events,
@@ -49,7 +55,6 @@ export default function App() {
     cyberLogBackfillKey,
     {
       pollWhileRunning: pollAnalytics,
-      streamTickId: lastPayload?.tick_id ?? 0,
     },
   );
 

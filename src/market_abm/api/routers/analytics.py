@@ -46,7 +46,11 @@ def _get_analytics_store(request: Request) -> AnalyticsStore | None:
     from pathlib import Path
 
     run_root = Path(artifacts_dir)
-    if not (run_root / "manifest.json").is_file():
+    manifest = run_root / "manifest.json"
+    has_parquet = any(run_root.glob("**/tick_*.parquet")) or (
+        run_root / "system_events" / "events.parquet"
+    ).is_file()
+    if not manifest.is_file() and not has_parquet:
         return None
 
     return AnalyticsStore(run_root)

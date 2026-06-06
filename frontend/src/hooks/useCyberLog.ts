@@ -4,6 +4,7 @@ import { fetchSystemEvents } from "@/api/analytics";
 import {
   CYBER_LOG_MAX_LINES,
   prependEvents,
+  toCyberLogLine,
   type CyberLogLine,
 } from "@/state/cyberLog";
 import type { SystemEventDTO } from "@/types/events";
@@ -16,16 +17,15 @@ export type UseCyberLogResult = {
 };
 
 const LIVE_POLL_MS = 3_000;
+const REST_BACKFILL_LIMIT = 200;
 
 type UseCyberLogOptions = {
-  /** Poll REST while simulation is RUNNING (WS batch may lag behind Parquet append). */
+  /** Poll REST while simulation is active (WS batch may lag behind Parquet append). */
   pollWhileRunning?: boolean;
-  /** Current stream tick — re-process WS batch when it advances. */
-  streamTickId?: number;
 };
 
 /**
- * Cyber-log: REST backfill on mount/reconnect/refresh + WS prepend + live poll while RUNNING.
+ * Cyber-log: REST full sync on mount + incremental WS/poll merge.
  */
 export function useCyberLog(
   wsEvents: SystemEventDTO[] | undefined,
@@ -33,11 +33,12 @@ export function useCyberLog(
   backfillKey: number = 0,
   options: UseCyberLogOptions = {},
 ): UseCyberLogResult {
-  const { pollWhileRunning = false, streamTickId = 0 } = options;
+  const { pollWhileRunning = false } = options;
   const [lines, setLines] = useState<CyberLogLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef(new Set<string>());
+  const lastWsBatchRef = useRef("");
 
   const mergeEvents = useCallback((incoming: SystemEventDTO[]) => {
     if (incoming.length === 0) {
@@ -48,28 +49,44 @@ export function useCyberLog(
     );
   }, []);
 
+  const replaceFromRest = useCallback((incoming: SystemEventDTO[]) => {
+    seenIdsRef.current.clear();
+    for (const event of incoming) {
+      seenIdsRef.current.add(event.event_id);
+    }
+    setLines(incoming.slice(0, CYBER_LOG_MAX_LINES).map(toCyberLogLine));
+  }, []);
+
   const reset = useCallback(() => {
     setLines([]);
     seenIdsRef.current.clear();
+    lastWsBatchRef.current = "";
     setError(null);
   }, []);
 
-  const pullFromRest = useCallback(async (showLoading: boolean) => {
-    if (showLoading) {
-      setLoading(true);
-    }
-    try {
-      const response = await fetchSystemEvents(50);
-      mergeEvents(response.events);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "System events backfill failed");
-    } finally {
+  const pullFromRest = useCallback(
+    async (mode: "replace" | "merge", showLoading: boolean) => {
       if (showLoading) {
-        setLoading(false);
+        setLoading(true);
       }
-    }
-  }, [mergeEvents]);
+      try {
+        const response = await fetchSystemEvents(REST_BACKFILL_LIMIT);
+        if (mode === "replace") {
+          replaceFromRest(response.events);
+        } else {
+          mergeEvents(response.events);
+        }
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "System events backfill failed");
+      } finally {
+        if (showLoading) {
+          setLoading(false);
+        }
+      }
+    },
+    [mergeEvents, replaceFromRest],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -77,11 +94,11 @@ export function useCyberLog(
     const backfill = async () => {
       setLoading(true);
       try {
-        const response = await fetchSystemEvents(50);
+        const response = await fetchSystemEvents(REST_BACKFILL_LIMIT);
         if (cancelled) {
           return;
         }
-        mergeEvents(response.events);
+        replaceFromRest(response.events);
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -99,14 +116,19 @@ export function useCyberLog(
     return () => {
       cancelled = true;
     };
-  }, [reconnectKey, backfillKey, mergeEvents]);
+  }, [reconnectKey, backfillKey, replaceFromRest]);
 
   useEffect(() => {
     if (wsEvents === undefined || wsEvents.length === 0) {
       return;
     }
+    const signature = wsEvents.map((event) => event.event_id).join("|");
+    if (signature === lastWsBatchRef.current) {
+      return;
+    }
+    lastWsBatchRef.current = signature;
     mergeEvents(wsEvents);
-  }, [wsEvents, streamTickId, mergeEvents]);
+  }, [wsEvents, mergeEvents]);
 
   useEffect(() => {
     if (!pollWhileRunning) {
@@ -114,7 +136,7 @@ export function useCyberLog(
     }
 
     const intervalId = window.setInterval(() => {
-      void pullFromRest(false);
+      void pullFromRest("merge", false);
     }, LIVE_POLL_MS);
 
     return () => {
@@ -123,4 +145,4 @@ export function useCyberLog(
   }, [pollWhileRunning, pullFromRest]);
 
   return { lines, loading, error, reset };
-}
+};

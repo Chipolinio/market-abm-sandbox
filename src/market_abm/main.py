@@ -37,22 +37,30 @@ def configure_multiprocessing() -> None:
     mp.set_start_method("spawn", force=True)
 
 
+def _completed_tick(next_tick: int) -> int:
+    """tick_counter = next tick to run; Parquet/analytics keyed by last completed tick."""
+    if next_tick <= 0:
+        return 0
+    return next_tick - 1
+
+
 def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
     """
     Фабрика payload-функции для broadcaster_loop.
     Замыкает готовый store и возвращает callable tick_id → TickStreamPayload.
     """
 
-    def _payload(tick_id: int) -> TickStreamPayload:
+    def _payload(next_tick: int) -> TickStreamPayload:
         if not (
             store._has_parquet_files("transactions")  # type: ignore[union-attr]
             or store._has_parquet_files("products_snapshots")
         ):
-            return stub_tick_payload(tick_id)
+            return stub_tick_payload(next_tick)
 
         from market_abm.analytics.ticker import query_ticker_metrics
 
-        agg: dict = store.query_market_aggregate(tick_id)  # type: ignore[union-attr]
+        as_of_tick = _completed_tick(next_tick)
+        agg: dict = store.query_market_aggregate(as_of_tick)  # type: ignore[union-attr]
         alerts: list[dict] = store.drift_alerts()  # type: ignore[union-attr]
         raw_q = agg.get("price_quantiles")
         quantiles: PriceQuantilesDTO | None = None
@@ -62,16 +70,12 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
                 p50=float(raw_q["p50"]),
                 p90=float(raw_q["p90"]),
             )
-        ticker_raw = query_ticker_metrics(store, tick_id)  # type: ignore[arg-type]
-        ticker = TickerMetricsDTO(**ticker_raw)
+        ticker_raw = query_ticker_metrics(store, as_of_tick)  # type: ignore[arg-type]
+        ticker = TickerMetricsDTO(**{**ticker_raw, "current_tick": next_tick})
         raw_events = store.recent_system_events(limit=20)  # type: ignore[union-attr]
-        frame_events = [
-            SystemEventDTO(**event)
-            for event in raw_events
-            if int(event["tick_id"]) >= tick_id - 5
-        ][:20]
+        frame_events = [SystemEventDTO(**event) for event in raw_events[:20]]
         return TickStreamPayload(
-            tick_id=tick_id,
+            tick_id=next_tick,
             timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
             market_summary=MarketAggregateDTO(
                 mean_price=float(agg["mean_price"]),
