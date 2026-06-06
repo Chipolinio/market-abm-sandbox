@@ -23,6 +23,8 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   cyberLogLines?: CyberLogLine[];
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
+  pollAnalytics?: boolean;
+  pollMatrixLive?: boolean;
   highlightedSellerId?: number | null;
   onHighlightSeller?: (sellerId: number | null) => void;
 };
@@ -39,6 +41,8 @@ export function TradingTerminalLayout({
   cyberLogLines = [],
   activeTab,
   onTabChange,
+  pollAnalytics = false,
+  pollMatrixLive = false,
   highlightedSellerId = null,
   onHighlightSeller,
 }: TradingTerminalLayoutProps) {
@@ -78,6 +82,7 @@ export function TradingTerminalLayout({
             asOfTick={asOfTick}
             activeTab={activeTab}
             onTabChange={onTabChange}
+            pollMatrixLive={pollMatrixLive}
           />
         </main>
 
@@ -87,6 +92,7 @@ export function TradingTerminalLayout({
         >
           <TopSellersDashboard
             asOfTick={asOfTick}
+            pollLive={pollAnalytics}
             highlightedSellerId={highlightedSellerId}
             onHighlightSeller={handleHighlightSeller}
           />

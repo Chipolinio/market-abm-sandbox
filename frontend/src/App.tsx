@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { TerminalTabId } from "@/components/center/types";
-import type { TickStreamPayload } from "@/api/types";
 import { useCyberLog } from "@/hooks/useCyberLog";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
 import { useFlashCrashAlarm } from "@/hooks/useFlashCrashAlarm";
@@ -12,6 +11,7 @@ import type { SimulationAction } from "@/components/sidebar/SimulationControlStr
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
+import { resolveSimulationTick } from "@/utils/simulationTick";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
@@ -28,15 +28,6 @@ export default function App() {
     clearSeries,
   } = useDashboardSeries();
 
-  const handleDynamicsPayload = useCallback(
-    (payload: TickStreamPayload) => {
-      if (activeTab === "dynamics") {
-        handlePayload(payload);
-      }
-    },
-    [activeTab, handlePayload],
-  );
-
   useEffect(() => {
     if (activeTab === "dynamics") {
       void reloadBackfill();
@@ -44,23 +35,20 @@ export default function App() {
   }, [activeTab, reloadBackfill]);
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream({
-    onPayload: handleDynamicsPayload,
+    onPayload: handlePayload,
   });
 
   const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
-  const nextTick =
-    lastPayload?.tick_id ??
-    lastPayload?.ticker_metrics?.current_tick ??
-    status?.current_tick ??
-    0;
+  const nextTick = resolveSimulationTick(status, lastPayload);
   const asOfTick = toLastCompletedTick(nextTick);
+  const pollAnalytics = workerState === "RUNNING" || workerState === "PAUSED";
 
   const { lines: cyberLogLines, reset: resetCyberLog } = useCyberLog(
     lastPayload?.events,
     reconnectAttempt,
     cyberLogBackfillKey,
     {
-      pollWhileRunning: workerState === "RUNNING",
+      pollWhileRunning: pollAnalytics,
       streamTickId: lastPayload?.tick_id ?? 0,
     },
   );
@@ -125,6 +113,8 @@ export default function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         asOfTick={asOfTick}
+        pollAnalytics={pollAnalytics}
+        pollMatrixLive={workerState === "RUNNING" && activeTab === "demand_matrix"}
         dynamics={dynamics}
         highlightedSellerId={highlightedSellerId}
         onHighlightSeller={setHighlightedSellerId}

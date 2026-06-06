@@ -11,8 +11,8 @@ export type UseTopSellersResult = {
   error: string | null;
 };
 
-/** Top-3 sellers for Zone D ribbon (polls while mounted). */
-export function useTopSellers(tickId: number): UseTopSellersResult {
+/** Top-3 sellers for Zone D ribbon. Polls while `live` (RUNNING/PAUSED). */
+export function useTopSellers(tickId: number, live = true): UseTopSellersResult {
   const [sellers, setSellers] = useState<MarketLeaderRowDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,13 +36,16 @@ export function useTopSellers(tickId: number): UseTopSellersResult {
 
   useEffect(() => {
     void refresh();
+    if (!live) {
+      return undefined;
+    }
     const intervalId = window.setInterval(() => {
       void refresh();
     }, POLL_INTERVAL_MS);
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refresh, tickId]);
+  }, [live, refresh]);
 
   return { sellers, loading, error };
 }

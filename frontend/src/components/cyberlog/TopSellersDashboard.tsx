@@ -3,16 +3,18 @@ import { useTopSellers } from "@/hooks/useTopSellers";
 
 type Props = {
   asOfTick: number;
+  pollLive?: boolean;
   highlightedSellerId: number | null;
   onHighlightSeller: (sellerId: number | null) => void;
 };
 
 export function TopSellersDashboard({
   asOfTick,
+  pollLive = true,
   highlightedSellerId,
   onHighlightSeller,
 }: Props) {
-  const { sellers, loading, error } = useTopSellers(asOfTick);
+  const { sellers, loading, error } = useTopSellers(asOfTick, pollLive);
 
   const handleSelect = (sellerId: number) => {
     onHighlightSeller(highlightedSellerId === sellerId ? null : sellerId);

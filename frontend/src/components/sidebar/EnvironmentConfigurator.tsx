@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "@/api/client";
-import { configureSession } from "@/api/simulation";
+import { configureSession, fetchSessionConfigure } from "@/api/simulation";
+import type { SessionConfigureRequest } from "@/types/session";
 
 type Props = {
   disabled: boolean;
@@ -10,9 +11,47 @@ type Props = {
 const DEFAULT_N_BUYERS = 10_000;
 const DEFAULT_CATBOOST_PCT = 40;
 const DEFAULT_RULE_BASED_PCT = 35;
+const SESSION_CONFIG_STORAGE_KEY = "market_abm_session_config";
 
 function pctToRatio(value: number): number {
   return Math.round(value) / 100;
+}
+
+function ratioToPct(value: number): number {
+  return Math.round(value * 100);
+}
+
+function applyConfigToState(
+  config: SessionConfigureRequest,
+  setters: {
+    setNBuyers: (value: number) => void;
+    setCatboostPct: (value: number) => void;
+    setRuleBasedPct: (value: number) => void;
+  },
+): void {
+  setters.setNBuyers(config.n_buyers);
+  setters.setCatboostPct(ratioToPct(config.seller_mix.catboost_pct));
+  setters.setRuleBasedPct(ratioToPct(config.seller_mix.rule_based_pct));
+}
+
+function readCachedConfig(): SessionConfigureRequest | null {
+  try {
+    const raw = localStorage.getItem(SESSION_CONFIG_STORAGE_KEY);
+    if (raw === null) {
+      return null;
+    }
+    return JSON.parse(raw) as SessionConfigureRequest;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedConfig(config: SessionConfigureRequest): void {
+  try {
+    localStorage.setItem(SESSION_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
 export function EnvironmentConfigurator({ disabled }: Props) {
@@ -22,6 +61,34 @@ export function EnvironmentConfigurator({ disabled }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      const cached = readCachedConfig();
+      if (cached !== null) {
+        applyConfigToState(cached, { setNBuyers, setCatboostPct, setRuleBasedPct });
+      }
+
+      try {
+        const remote = await fetchSessionConfigure();
+        if (cancelled) {
+          return;
+        }
+        applyConfigToState(remote, { setNBuyers, setCatboostPct, setRuleBasedPct });
+        writeCachedConfig(remote);
+      } catch {
+        // keep cached / defaults
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const basicPct = Math.max(0, 100 - catboostPct - ruleBasedPct);
   const mixSum = catboostPct + ruleBasedPct + basicPct;
@@ -42,8 +109,10 @@ export function EnvironmentConfigurator({ disabled }: Props) {
     setBusy(true);
     setError(null);
     setMessage(null);
+    const body: SessionConfigureRequest = { n_buyers: nBuyers, seller_mix: sellerMix };
     try {
-      await configureSession({ n_buyers: nBuyers, seller_mix: sellerMix });
+      await configureSession(body);
+      writeCachedConfig(body);
       setMessage("Configuration saved");
     } catch (err) {
       const text =

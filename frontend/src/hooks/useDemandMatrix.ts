@@ -11,11 +11,17 @@ export type UseDemandMatrixResult = {
   refresh: () => Promise<void>;
 };
 
+const POLL_LIVE_MS = 5_000;
+
 /**
- * REST fetch on tab focus only (Spec 009 §4.7 / P-4).
- * Re-fetch when `enabled` flips true (re-entry); NOT on every `tickId` update while mounted.
+ * REST fetch on tab focus (Spec 009 §4.7 / P-4).
+ * Optional live poll while tab is open and simulation is RUNNING.
  */
-export function useDemandMatrix(enabled: boolean, tickId: number): UseDemandMatrixResult {
+export function useDemandMatrix(
+  enabled: boolean,
+  tickId: number,
+  pollLive = false,
+): UseDemandMatrixResult {
   const [cells, setCells] = useState<DemandMatrixCellDTO[]>([]);
   const [gridSize, setGridSize] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -45,6 +51,20 @@ export function useDemandMatrix(enabled: boolean, tickId: number): UseDemandMatr
     void refresh();
     return undefined;
   }, [enabled, refresh]);
+
+  useEffect(() => {
+    if (!enabled || !pollLive) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, POLL_LIVE_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [enabled, pollLive, refresh]);
 
   return { cells, gridSize, loading, error, refresh };
 }

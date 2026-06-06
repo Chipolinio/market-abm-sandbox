@@ -18,6 +18,7 @@ from market_abm.api.schemas import (
     SimulationStartRequest,
     SimulationStatusResponse,
 )
+from market_abm.config.session import SellerMixConfig
 from market_abm.domain.shocks import ShockType
 from market_abm.simulation.context import ShockCommand
 from market_abm.worker.process import WorkerCommand, WorkerState
@@ -117,6 +118,30 @@ async def configure_session(
     pending_path.write_text(body.model_dump_json(), encoding="utf-8")
 
     return SessionConfigureResponse(n_buyers=body.n_buyers)
+
+
+_DEFAULT_SESSION_CONFIGURE = SessionConfigureRequest(
+    n_buyers=10_000,
+    seller_mix=SellerMixConfig(
+        catboost_pct=0.4,
+        rule_based_pct=0.35,
+        basic_pct=0.25,
+    ),
+)
+
+
+@router.get("/configure", response_model=SessionConfigureRequest)
+async def get_session_configure(
+    worker: Any = Depends(_get_worker),
+) -> SessionConfigureRequest:
+    """Pending session config (written by POST /configure) or defaults."""
+    artifacts_dir = Path(getattr(worker, "_artifacts_dir", "runs/default"))
+    pending_path = artifacts_dir / "pending_session.json"
+    if pending_path.is_file():
+        return SessionConfigureRequest.model_validate_json(
+            pending_path.read_text(encoding="utf-8"),
+        )
+    return _DEFAULT_SESSION_CONFIGURE
 
 
 @router.post("/start", status_code=202)

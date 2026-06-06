@@ -23,10 +23,11 @@ export function DemandMatrixGrid({ cells }: { cells: DemandMatrixCellDTO[] }) {
 
 type Props = {
   asOfTick: number;
+  pollLive?: boolean;
 };
 
-export function DemandMatrixTab({ asOfTick }: Props) {
-  const { cells, loading, error } = useDemandMatrix(true, asOfTick);
+export function DemandMatrixTab({ asOfTick, pollLive = false }: Props) {
+  const { cells, loading, error } = useDemandMatrix(true, asOfTick, pollLive);
 
   return (
     <div

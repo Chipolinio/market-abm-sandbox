@@ -47,6 +47,10 @@ export function configureSession(body: SessionConfigureRequest): Promise<Session
   });
 }
 
+export function fetchSessionConfigure(): Promise<SessionConfigureRequest> {
+  return apiFetch<SessionConfigureRequest>("/api/v1/simulation/configure");
+}
+
 export function triggerShock(body: SimulationShockRequest): Promise<SimulationShockResponse> {
   return apiFetch<SimulationShockResponse>("/api/v1/simulation/shock", {
     method: "POST",

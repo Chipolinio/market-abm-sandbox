@@ -12,6 +12,7 @@ type Props = {
   defaultTab?: TerminalTabId;
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
+  pollMatrixLive?: boolean;
 };
 
 export function TerminalTabs({
@@ -20,6 +21,7 @@ export function TerminalTabs({
   defaultTab = "dynamics",
   activeTab: controlledTab,
   onTabChange,
+  pollMatrixLive = false,
 }: Props) {
   const [internalTab, setInternalTab] = useState<TerminalTabId>(defaultTab);
   const activeTab = controlledTab ?? internalTab;
@@ -55,7 +57,7 @@ export function TerminalTabs({
 
         {activeTab === "demand_matrix" ? (
           <TabsContent value="demand_matrix" className="mt-0 h-full overflow-hidden">
-            <DemandMatrixTab asOfTick={asOfTick} />
+            <DemandMatrixTab asOfTick={asOfTick} pollLive={pollMatrixLive} />
           </TabsContent>
         ) : null}
       </div>

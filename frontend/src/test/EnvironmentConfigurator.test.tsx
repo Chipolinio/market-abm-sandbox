@@ -1,25 +1,36 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 
 const configureSession = vi.fn();
+const fetchSessionConfigure = vi.fn();
 
 vi.mock("@/api/simulation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/simulation")>();
   return {
     ...actual,
     configureSession: (...args: unknown[]) => configureSession(...args),
+    fetchSessionConfigure: (...args: unknown[]) => fetchSessionConfigure(...args),
   };
 });
 
 afterEach(() => {
   cleanup();
   configureSession.mockReset();
+  fetchSessionConfigure.mockReset();
+  localStorage.clear();
 });
 
 describe("EnvironmentConfigurator", () => {
+  beforeEach(() => {
+    fetchSessionConfigure.mockResolvedValue({
+      n_buyers: 10_000,
+      seller_mix: { catboost_pct: 0.4, rule_based_pct: 0.35, basic_pct: 0.25 },
+    });
+  });
+
   it("disables_sliders_when_running", () => {
     render(<EnvironmentConfigurator disabled />);
 

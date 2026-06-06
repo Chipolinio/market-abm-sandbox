@@ -320,6 +320,33 @@ def test_configure_accepts_session_when_idle(idle_worker: MagicMock) -> None:
     assert pending_path.is_file()
 
 
+def test_get_configure_returns_defaults_when_no_pending(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.get("/api/v1/simulation/configure")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["n_buyers"] == 10_000
+    assert body["seller_mix"]["catboost_pct"] == pytest.approx(0.4)
+
+
+def test_get_configure_returns_pending_session(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    client.post(
+        "/api/v1/simulation/configure",
+        json={
+            "n_buyers": 5000,
+            "seller_mix": {
+                "catboost_pct": 0.4,
+                "rule_based_pct": 0.35,
+                "basic_pct": 0.25,
+            },
+        },
+    )
+    resp = client.get("/api/v1/simulation/configure")
+    assert resp.status_code == 200
+    assert resp.json()["n_buyers"] == 5000
+
+
 def test_configure_rejects_when_running(running_worker: MagicMock) -> None:
     client = _make_client(running_worker)
     resp = client.post(

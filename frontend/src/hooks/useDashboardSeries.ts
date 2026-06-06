@@ -183,7 +183,6 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
 
       if (gap > 1) {
         scheduleSyncBackfill();
-        return;
       }
 
       const pricePoint = priceFromPayload(payload);
