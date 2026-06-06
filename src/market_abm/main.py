@@ -14,7 +14,9 @@ from pathlib import Path
 
 from market_abm.api.app import create_app
 from market_abm.api.stub_telemetry import stub_tick_payload, zero_tick_payload
+from market_abm.api.schemas.events import SystemEventDTO
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO, TickStreamPayload
+from market_abm.api.schemas.ticker import TickerMetricsDTO
 from market_abm.worker.process import SimulationWorker
 
 __all__ = [
@@ -48,6 +50,8 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
         ):
             return stub_tick_payload(tick_id)
 
+        from market_abm.analytics.ticker import query_ticker_metrics
+
         agg: dict = store.query_market_aggregate(tick_id)  # type: ignore[union-attr]
         alerts: list[dict] = store.drift_alerts()  # type: ignore[union-attr]
         raw_q = agg.get("price_quantiles")
@@ -58,6 +62,14 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
                 p50=float(raw_q["p50"]),
                 p90=float(raw_q["p90"]),
             )
+        ticker_raw = query_ticker_metrics(store, tick_id)  # type: ignore[arg-type]
+        ticker = TickerMetricsDTO(**ticker_raw)
+        raw_events = store.recent_system_events(limit=20)  # type: ignore[union-attr]
+        frame_events = [
+            SystemEventDTO(**event)
+            for event in raw_events
+            if int(event["tick_id"]) >= tick_id - 5
+        ][:20]
         return TickStreamPayload(
             tick_id=tick_id,
             timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
@@ -67,7 +79,9 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
                 total_transactions=int(agg["total_transactions"]),
                 price_quantiles=quantiles,
             ),
+            ticker_metrics=ticker,
             active_drift_alerts=alerts,
+            events=frame_events,
         )
 
     return _payload

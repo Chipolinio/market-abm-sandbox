@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from tests.docker.conftest import (
+from tests.docker.compose_support import (
+    API_BASE,
+    FRONTEND_BASE,
     ComposeSession,
-    _API_BASE,
-    _FRONTEND_BASE,
-    _http_get,
-    _http_post,
     docker_exec,
+    http_get,
+    http_post,
     seed_volume_from_host,
     wait_healthy,
     wait_tick_at_least,
@@ -31,7 +31,7 @@ def test_volume_mount_exists_in_backend_container(compose_stack: ComposeSession)
 
 
 def test_nginx_proxies_api_on_test_ports(compose_stack: ComposeSession) -> None:
-    status, body = _http_get(f"{_FRONTEND_BASE}/api/v1/simulation/status")
+    status, body = http_get(f"{FRONTEND_BASE}/api/v1/simulation/status")
     assert status == 200
     assert '"state"' in body
 
@@ -53,12 +53,12 @@ def test_appuser_can_write_to_volume(compose_stack: ComposeSession) -> None:
 
 
 def test_start_simulation_worker_not_failed_in_noop(compose_stack: ComposeSession) -> None:
-    status_code, _ = _http_post(f"{_API_BASE}/api/v1/simulation/start")
+    status_code, _ = http_post(f"{API_BASE}/api/v1/simulation/start")
     assert status_code == 202
 
     wait_tick_at_least(3, timeout_sec=45)
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/simulation/status")
+    _, body = http_get(f"{API_BASE}/api/v1/simulation/status")
     payload = json.loads(body)
     assert payload["state"] == "RUNNING"
     assert payload["state"] != "FAILED"
@@ -88,7 +88,7 @@ def test_analytics_price_index_after_restart_with_seeded_data(compose_stack: Com
     assert restart.returncode == 0, restart.stderr
     wait_healthy()
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/analytics/price-index")
+    _, body = http_get(f"{API_BASE}/api/v1/analytics/price-index")
     payload = json.loads(body)
     points = payload["points"]
     assert len(points) > 0
@@ -111,13 +111,13 @@ def test_volume_writable_creates_parquet_on_tick_1(compose_stack: ComposeSession
     """7.3-T7: полный контракт — после START появляется tick_0.parquet."""
     _wipe_run_artifacts(compose_stack)
 
-    _http_post(f"{_API_BASE}/api/v1/simulation/start")
+    http_post(f"{API_BASE}/api/v1/simulation/start")
     wait_tick_at_least(1, timeout_sec=30)
 
     exists = docker_exec(compose_stack, "test", "-f", _TICK0_PARQUET)
     assert exists.returncode == 0, exists.stderr
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/simulation/status")
+    _, body = http_get(f"{API_BASE}/api/v1/simulation/status")
     payload = json.loads(body)
     assert payload["state"] != "FAILED"
 
@@ -127,14 +127,14 @@ def test_volume_survives_backend_restart_via_live_simulation(compose_stack: Comp
     """7.3-T6: START → ticks → restart → price-index > 0 без seed."""
     _wipe_run_artifacts(compose_stack)
 
-    _http_post(f"{_API_BASE}/api/v1/simulation/start")
+    http_post(f"{API_BASE}/api/v1/simulation/start")
     wait_tick_at_least(5, timeout_sec=60)
 
     restart = compose_stack.run("restart", "market_abm_backend", timeout=120)
     assert restart.returncode == 0, restart.stderr
     wait_healthy()
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/analytics/price-index")
+    _, body = http_get(f"{API_BASE}/api/v1/analytics/price-index")
     payload = json.loads(body)
     assert len(payload["points"]) > 0
 
@@ -151,7 +151,7 @@ def test_down_without_v_preserves_named_volume(compose_stack: ComposeSession) ->
     assert up.returncode == 0, up.stderr or up.stdout
     wait_healthy()
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/analytics/price-index")
+    _, body = http_get(f"{API_BASE}/api/v1/analytics/price-index")
     payload = json.loads(body)
     assert len(payload["points"]) > 0
 
@@ -168,6 +168,6 @@ def test_down_with_v_clears_analytics(compose_stack: ComposeSession) -> None:
     assert up.returncode == 0, up.stderr or up.stdout
     wait_healthy()
 
-    _, body = _http_get(f"{_API_BASE}/api/v1/analytics/price-index")
+    _, body = http_get(f"{API_BASE}/api/v1/analytics/price-index")
     payload = json.loads(body)
     assert payload["points"] == []

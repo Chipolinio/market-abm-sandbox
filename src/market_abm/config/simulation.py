@@ -6,6 +6,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from market_abm.config.economics import SellerEconomicsConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.domain.constants import PVD_SEGMENTS
 
@@ -49,3 +50,4 @@ class SimulationStepConfig(BaseModel):
     seed: int | None = None
     choice: ChoiceModelConfig = Field(default_factory=ChoiceModelConfig)
     repricing: RepricingConfig = Field(default_factory=RepricingConfig.default_market)
+    economics: SellerEconomicsConfig = Field(default_factory=SellerEconomicsConfig)

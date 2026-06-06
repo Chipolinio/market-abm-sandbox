@@ -8,9 +8,11 @@ import multiprocessing as mp
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import polars as pl
 import pytest
 
 from market_abm.api.schemas import MarketAggregateDTO, TickStreamPayload
+from market_abm.domain.constants import COL_TICK_ID
 from market_abm.worker.process import WorkerCommand, WorkerState
 
 
@@ -22,12 +24,18 @@ def _make_mock_store(
     drift_alerts: list[dict] | None = None,
 ) -> MagicMock:
     store = MagicMock()
+    store._has_parquet_files.return_value = True
     store.query_market_aggregate.return_value = {
         "mean_price": mean_price,
         "total_gmv": total_gmv,
         "total_transactions": total_transactions,
     }
     store.drift_alerts.return_value = drift_alerts or []
+    store.products_snapshot_at_tick.return_value = pl.DataFrame()
+    store.gmv_by_tick.return_value = pl.DataFrame(
+        schema={COL_TICK_ID: pl.Int32, "gmv": pl.Float64, "transaction_count": pl.Int64}
+    )
+    store.recent_system_events.return_value = []
     return store
 
 
@@ -118,7 +126,8 @@ def test_make_payload_fn_tick_id_passed_to_store_query() -> None:
     fn = make_payload_fn(store)
     fn(42)
 
-    store.query_market_aggregate.assert_called_once_with(42)
+    store.query_market_aggregate.assert_any_call(42)
+    store.query_market_aggregate.assert_any_call(0)
 
 
 def test_make_payload_fn_calls_drift_alerts_once_per_call() -> None:

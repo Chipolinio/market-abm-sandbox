@@ -17,7 +17,15 @@ from market_abm.api.schemas.analytics import (
     PriceIndexResponse,
     TopListingsResponse,
 )
+from market_abm.analytics.leaders import query_demand_matrix, query_market_leaders
+from market_abm.api.schemas.events import SystemEventDTO, SystemEventsResponse
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO
+from market_abm.api.schemas.ticker import (
+    DemandMatrixCellDTO,
+    DemandMatrixResponse,
+    MarketLeaderRowDTO,
+    MarketLeadersResponse,
+)
 from market_abm.domain.constants import COL_LISTING_ID, COL_SELLER_ID, COL_TICK_ID
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -161,3 +169,55 @@ async def get_market_summary(
             price_quantiles=None,
         )
     return _market_aggregate_from_store(store, tick_id)
+
+
+@router.get("/system-events", response_model=SystemEventsResponse)
+async def get_system_events(
+    limit: int = Query(50, ge=1, le=200),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> SystemEventsResponse:
+    """Cyber-log history: system_events sorted by tick_id desc."""
+    if store is None:
+        return SystemEventsResponse(events=[])
+
+    rows = store.recent_system_events(limit=limit)
+    events = [SystemEventDTO(**row) for row in rows]
+    return SystemEventsResponse(events=events)
+
+
+@router.get("/market-leaders", response_model=MarketLeadersResponse)
+async def get_market_leaders(
+    tick_id: int = Query(..., ge=0),
+    limit: int = Query(5, ge=1, le=20),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> MarketLeadersResponse:
+    """Top-N sellers by working_capital DESC (backend sort)."""
+    if store is None:
+        return MarketLeadersResponse(run_id=_DEFAULT_RUN_ID, tick_id=tick_id, leaders=[])
+
+    raw = query_market_leaders(store, tick_id, limit=limit)
+    leaders = [MarketLeaderRowDTO(**row) for row in raw["leaders"]]
+    return MarketLeadersResponse(
+        run_id=str(raw["run_id"]),
+        tick_id=int(raw["tick_id"]),
+        leaders=leaders,
+    )
+
+
+@router.get("/demand-matrix", response_model=DemandMatrixResponse)
+async def get_demand_matrix(
+    tick_id: int = Query(..., ge=0),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> DemandMatrixResponse:
+    """10×10 demand density grid (v1 placeholder)."""
+    if store is None:
+        return DemandMatrixResponse(run_id=_DEFAULT_RUN_ID, tick_id=tick_id, cells=[])
+
+    raw = query_demand_matrix(store, tick_id)
+    cells = [DemandMatrixCellDTO(**cell) for cell in raw["cells"]]
+    return DemandMatrixResponse(
+        run_id=str(raw["run_id"]),
+        tick_id=int(raw["tick_id"]),
+        grid_size=int(raw["grid_size"]),
+        cells=cells,
+    )

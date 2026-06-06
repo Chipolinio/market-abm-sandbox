@@ -81,6 +81,23 @@ SELLERS_SCHEMA_DTYPES: Final[dict[str, str]] = {
     COL_REPRICING_SPEED: "UInt8",
 }
 
+# --- Sellers runtime state (sellers_state_df), slice 008 ---
+
+COL_WORKING_CAPITAL: Final = "working_capital"
+COL_IS_BANKRUPT: Final = "is_bankrupt"
+
+SELLERS_STATE_COLUMNS: Final[tuple[str, ...]] = (
+    COL_SELLER_ID,
+    COL_WORKING_CAPITAL,
+    COL_IS_BANKRUPT,
+)
+
+SELLERS_STATE_SCHEMA_DTYPES: Final[dict[str, str]] = {
+    COL_SELLER_ID: "Int32",
+    COL_WORKING_CAPITAL: "Float32",
+    COL_IS_BANKRUPT: "Boolean",
+}
+
 # --- Listings (listings_df), slice 002 contract ---
 
 COL_LISTING_ID: Final = "listing_id"

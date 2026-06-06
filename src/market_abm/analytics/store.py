@@ -351,6 +351,40 @@ class AnalyticsStore:
             }
         )
 
+    def recent_system_events(self, limit: int = 50) -> list[dict[str, object]]:
+        """Последние system_events для WS broadcaster и REST backfill."""
+        path = self._run_root / "system_events" / "events.parquet"
+        if not path.is_file():
+            return []
+
+        df = self._query_pl(
+            """
+            SELECT *
+            FROM read_parquet(?)
+            ORDER BY tick_id DESC, event_id DESC
+            LIMIT ?
+            """,
+            [str(path), limit],
+        )
+        rows: list[dict[str, object]] = []
+        for row in df.iter_rows(named=True):
+            raw_payload = row.get("payload_json")
+            payload: dict[str, object] = {}
+            if raw_payload:
+                payload = json.loads(str(raw_payload))
+            rows.append(
+                {
+                    "event_id": str(row["event_id"]),
+                    "tick_id": int(row["tick_id"]),
+                    "event_type": str(row["event_type"]),
+                    "display_code": str(row["display_code"]),
+                    "severity": str(row["severity"]),
+                    "message": str(row["message"]),
+                    "payload": payload,
+                }
+            )
+        return rows
+
     def price_index_by_tick(self) -> pl.DataFrame:
         """Агрегированные цены по тику; nullable Float64 при пустом snapshot."""
         schema = {

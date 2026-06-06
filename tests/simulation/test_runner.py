@@ -139,7 +139,7 @@ def test_run_simulation_lazy_evaluation() -> None:
             config=config.products_bootstrap,
             rng=_bootstrap_rng(config.seed),
         )
-        mock_step.return_value = (products, pl.DataFrame())
+        mock_step.return_value = (products, pl.DataFrame(), None)
         gen = run_simulation(buyers, sellers, listings, n_ticks=3, config=config)
         assert mock_step.call_count == 0
         next(gen)
@@ -167,7 +167,7 @@ def test_run_simulation_matches_manual_steps() -> None:
             choice=config.choice,
             repricing=config.repricing,
         )
-        products, transactions = step(buyers, sellers, products, step_config)
+        products, transactions, _ = step(buyers, sellers, products, step_config)
         products = _maybe_rechunk_products(products)
         manual.append((tick_id, products.clone(), transactions.clone()))
 

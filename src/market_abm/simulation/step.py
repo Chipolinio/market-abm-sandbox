@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
     BUYERS_COLUMNS,
@@ -32,9 +33,15 @@ from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.choice import choose_listings_for_all_buyers
 from market_abm.simulation.repricing import apply_ml_repricing_tick, apply_repricing_tick
+from market_abm.simulation.seller_economics import (
+    filter_bankrupt_listings,
+    settle_seller_economics,
+)
+from market_abm.simulation.shocks import apply_environment_shocks
 
 if TYPE_CHECKING:  # только типы: избегаем цикла ml.__init__ → bootstrap → runner → step
     from market_abm.ml.catboost_repricing import CatBoostModelRegistry
+    from market_abm.simulation.context import SimulationContext
 
 # Соль потока exploration для детерминизма rng в ML-репрайсе (Spec 005 §4.5).
 _EXPLORE_SALT = 0xE5910E
@@ -232,29 +239,62 @@ def _reprice_to_products(
     )
 
 
+def _settle_if_needed(
+    sellers_state_df: pl.DataFrame | None,
+    transactions_df: pl.DataFrame,
+    config: SimulationStepConfig,
+) -> pl.DataFrame | None:
+    if sellers_state_df is None:
+        return None
+    return settle_seller_economics(
+        sellers_state_df,
+        transactions_df,
+        config.economics,
+    )
+
+
 def step(
     buyers_df: pl.DataFrame,
     sellers_df: pl.DataFrame,
     products_df: pl.DataFrame,
     config: SimulationStepConfig,
     *,
+    sellers_state_df: pl.DataFrame | None = None,
+    simulation_context: SimulationContext | None = None,
+    shock_catalog: ShockCatalogConfig | None = None,
     ml_registry: CatBoostModelRegistry | None = None,
     analytics_store: AnalyticsStore | None = None,
-) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Выполняет один тик: выбор покупателей, transactions, demand_index, репрайс (rules или ML)."""
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None]:
+    """
+    Выполняет один тик: шоки → filter bankrupt → choice → transactions → settle.
+    sellers_state_next — None если sellers_state_df не передан (backward compat).
+    """
     _validate_buyers_df(buyers_df)
     _validate_sellers_df(sellers_df)
     _validate_products_df(products_df)
 
-    if products_df.height == 0:
-        return products_df.clone(), _empty_transactions_df()
+    catalog = shock_catalog or ShockCatalogConfig()
+    buyers_work, products_work = apply_environment_shocks(
+        buyers_df,
+        products_df,
+        simulation_context,
+        catalog,
+    )
+    products_pool = filter_bankrupt_listings(products_work, sellers_state_df)
+
+    if products_pool.height == 0:
+        empty_tx = _empty_transactions_df()
+        return products_pool.clone(), empty_tx, _settle_if_needed(
+            sellers_state_df, empty_tx, config
+        )
 
     rng = _step_rng(config)
-    active_buyers = _select_active_buyers(buyers_df, rng)
+    active_buyers = _select_active_buyers(buyers_work, rng)
     if active_buyers.height == 0:
+        empty_tx = _empty_transactions_df()
         products_with_demand = _update_demand_index(
-            products_df.clone(),
-            _empty_transactions_df(),
+            products_pool.clone(),
+            empty_tx,
             active_buyers_count=0,
         )
         products_next = _reprice_to_products(
@@ -264,17 +304,21 @@ def step(
             ml_registry=ml_registry,
             analytics_store=analytics_store,
         )
-        return products_next, _empty_transactions_df()
+        return products_next, empty_tx, _settle_if_needed(
+            sellers_state_df, empty_tx, config
+        )
 
     choices = choose_listings_for_all_buyers(
         active_buyers,
-        products_df,
+        products_pool,
         seed=config.seed,
         config=config.choice,
     )
-    transactions = _build_transactions_df(choices, products_df, tick_id=config.tick_id)
+    transactions = _build_transactions_df(
+        choices, products_pool, tick_id=config.tick_id
+    )
     products_with_demand = _update_demand_index(
-        products_df.clone(),
+        products_pool.clone(),
         transactions,
         active_buyers_count=active_buyers.height,
     )
@@ -285,4 +329,8 @@ def step(
         ml_registry=ml_registry,
         analytics_store=analytics_store,
     )
-    return products_next, transactions
+    return (
+        products_next,
+        transactions,
+        _settle_if_needed(sellers_state_df, transactions, config),
+    )

@@ -97,7 +97,7 @@ def run_simulation(
             choice=config.choice,
             repricing=config.repricing,
         )
-        products_next, transactions_df = step(
+        products_next, transactions_df, _ = step(
             buyers_df,
             sellers_df,
             products_df,

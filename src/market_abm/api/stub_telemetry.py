@@ -40,6 +40,7 @@ def zero_tick_payload(tick_id: int) -> TickStreamPayload:
             price_quantiles=None,
         ),
         active_drift_alerts=[],
+        events=[],
     )
 
 
@@ -49,4 +50,5 @@ def stub_tick_payload(tick_id: int) -> TickStreamPayload:
         timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
         market_summary=stub_market_summary(tick_id),
         active_drift_alerts=[],
+        events=[],
     )

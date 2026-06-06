@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from market_abm.api.schemas.events import SystemEventDTO
+from market_abm.api.schemas.ticker import TickerMetricsDTO
 
 
 class PriceQuantilesDTO(BaseModel):
@@ -29,5 +32,7 @@ class TickStreamPayload(BaseModel):
     tick_id: int
     timestamp_utc: str
     market_summary: MarketAggregateDTO
+    ticker_metrics: TickerMetricsDTO | None = None
     active_drift_alerts: list[dict]
+    events: list[SystemEventDTO] = Field(default_factory=list)
     worker_state: Literal["IDLE", "RUNNING", "PAUSED", "STOPPED", "FAILED"] = "IDLE"
