@@ -38,11 +38,11 @@ export default function App() {
     }
   }, [activeTab, reloadBackfill]);
 
-  const { connectionState, lastPayload } = useTickStream({
+  const { connectionState, lastPayload, reconnectAttempt } = useTickStream({
     onPayload: handleDynamicsPayload,
   });
 
-  const { lines: cyberLogLines } = useCyberLog(lastPayload?.events);
+  const { lines: cyberLogLines } = useCyberLog(lastPayload?.events, reconnectAttempt);
 
   const priceIndexDelta = usePriceIndexDelta(lastPayload?.ticker_metrics?.market_price_index);
   const flashCrashActive = useFlashCrashAlarm(lastPayload?.events);

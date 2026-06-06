@@ -81,13 +81,12 @@ export function formatCyberLine(line: CyberLogLine): string {
   return `[Tick ${line.tick_id}] ${line.display_code}: ${line.message}`;
 }
 
-export function severityClass(severity: CyberLogLine["severity"]): string {
-  switch (severity) {
-    case "critical":
-      return "text-red-400";
-    case "warning":
-      return "text-amber-400";
-    default:
-      return "text-green-400";
+export function severityClass(line: Pick<CyberLogLine, "severity" | "display_code">): string {
+  if (line.severity === "critical" || line.display_code === "FLASH_CRASH") {
+    return "text-red-400";
   }
+  if (line.severity === "warning" || line.display_code === "PRICING_WAR") {
+    return "text-amber-400";
+  }
+  return "text-green-400";
 }

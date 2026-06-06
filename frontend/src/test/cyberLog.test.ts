@@ -4,6 +4,8 @@ import {
   CYBER_LOG_MAX_LINES,
   formatCyberLine,
   prependEvents,
+  resolveEventMessage,
+  severityClass,
 } from "@/state/cyberLog";
 import type { CyberLogLine } from "@/state/cyberLog";
 import type { SystemEventDTO } from "@/types/events";
@@ -67,5 +69,56 @@ describe("formatCyberLine", () => {
     expect(formatCyberLine(line)).toBe(
       "[Tick 42] DEMAND_SHOCK: Buyer budgets cut by 30%",
     );
+  });
+});
+
+describe("resolveEventMessage", () => {
+  it("prefers_backend_message", () => {
+    expect(
+      resolveEventMessage(
+        makeEvent("evt-1", { message: "Backend ready message", display_code: "DEMAND_SHOCK" }),
+      ),
+    ).toBe("Backend ready message");
+  });
+
+  it("falls_back_for_empty_message", () => {
+    expect(
+      resolveEventMessage(
+        makeEvent("evt-1", {
+          message: "   ",
+          display_code: "BANKRUPTCY",
+          payload: { seller_id: 3 },
+        }),
+      ),
+    ).toBe("Seller_3 depleted working capital and exited the market");
+  });
+});
+
+describe("severityClass", () => {
+  it("maps_flash_crash_to_red", () => {
+    expect(
+      severityClass({
+        severity: "info",
+        display_code: "FLASH_CRASH",
+      }),
+    ).toBe("text-red-400");
+  });
+
+  it("maps_pricing_war_to_amber", () => {
+    expect(
+      severityClass({
+        severity: "info",
+        display_code: "PRICING_WAR",
+      }),
+    ).toBe("text-amber-400");
+  });
+
+  it("maps_info_to_green", () => {
+    expect(
+      severityClass({
+        severity: "info",
+        display_code: "DEMAND_SHOCK",
+      }),
+    ).toBe("text-green-400");
   });
 });

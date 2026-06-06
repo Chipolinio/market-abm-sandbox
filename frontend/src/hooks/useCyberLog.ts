@@ -14,7 +14,16 @@ export type UseCyberLogResult = {
   error: string | null;
 };
 
-export function useCyberLog(wsEvents: SystemEventDTO[] | undefined): UseCyberLogResult {
+/**
+ * Cyber-log state: REST backfill on mount/reconnect + WS prepend (Spec 009 §4.8 / P-3).
+ *
+ * @param wsEvents — `TickStreamPayload.events` from 1 Hz stream
+ * @param reconnectKey — increment (e.g. `reconnectAttempt`) to trigger REST backfill again
+ */
+export function useCyberLog(
+  wsEvents: SystemEventDTO[] | undefined,
+  reconnectKey: number = 0,
+): UseCyberLogResult {
   const [lines, setLines] = useState<CyberLogLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +59,7 @@ export function useCyberLog(wsEvents: SystemEventDTO[] | undefined): UseCyberLog
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reconnectKey]);
 
   useEffect(() => {
     if (wsEvents === undefined || wsEvents.length === 0) {
