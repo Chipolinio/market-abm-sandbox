@@ -1,6 +1,7 @@
 # Назначение файла: live simulation session для worker subprocess (Slice 8.4).
 from __future__ import annotations
 
+import json
 import os
 import queue
 from collections.abc import Callable
@@ -33,9 +34,35 @@ from market_abm.simulation.listings import initialize_listings
 from market_abm.simulation.runner import _bootstrap_products_from_listings, _bootstrap_rng
 from market_abm.simulation.step import step
 _WORKER_SEED: Final[int] = 42
+_PENDING_SESSION_FILENAME: Final[str] = "pending_session.json"
 
 
-def _worker_n_buyers() -> int:
+def _read_pending_session(run_root: Path) -> dict[str, object] | None:
+    pending_path = run_root / _PENDING_SESSION_FILENAME
+    if not pending_path.is_file():
+        return None
+    try:
+        payload = json.loads(pending_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _consume_pending_session(run_root: Path) -> dict[str, object] | None:
+    pending = _read_pending_session(run_root)
+    pending_path = run_root / _PENDING_SESSION_FILENAME
+    if pending_path.is_file():
+        pending_path.unlink(missing_ok=True)
+    return pending
+
+
+def _worker_n_buyers(run_root: Path | None = None) -> int:
+    if run_root is not None:
+        pending = _read_pending_session(run_root)
+        if pending is not None:
+            n_buyers = pending.get("n_buyers")
+            if isinstance(n_buyers, int):
+                return n_buyers
     return int(os.environ.get("WORKER_N_BUYERS", "300"))
 
 
@@ -44,7 +71,7 @@ def _worker_n_sellers() -> int:
 
 
 def _worker_run_config(run_root: Path) -> SimulationRunConfig:
-    n_buyers = _worker_n_buyers()
+    n_buyers = _worker_n_buyers(run_root)
     # ChoiceModelConfig: buyers_batch_size gt=100 (config/simulation.py).
     buyers_batch_size = min(max(n_buyers, 101), 300)
     return SimulationRunConfig(
@@ -122,22 +149,28 @@ class LiveSimulationSession:
         _write_manifest_atomic(self._run_root, manifest)
 
     def _bootstrap_population(self) -> None:
+        pending = _consume_pending_session(self._run_root)
+        if pending is not None and isinstance(pending.get("seed"), int):
+            seed = int(pending["seed"])
+        else:
+            seed = _WORKER_SEED
+
         self._run_root.mkdir(parents=True, exist_ok=True)
         for sub in ("transactions", "products_snapshots", "sellers_state", "system_events"):
             (self._run_root / sub).mkdir(parents=True, exist_ok=True)
 
         self._buyers_df = generate_buyers(
-            BuyerPopulationConfig.default_market(n_buyers=_worker_n_buyers(), seed=_WORKER_SEED)
+            BuyerPopulationConfig.default_market(n_buyers=_worker_n_buyers(self._run_root), seed=seed)
         )
         self._sellers_df = generate_sellers(
-            SellerPopulationConfig.default_market(n_sellers=_worker_n_sellers(), seed=_WORKER_SEED)
+            SellerPopulationConfig.default_market(n_sellers=_worker_n_sellers(), seed=seed)
         )
         listings = initialize_listings(
             self._sellers_df,
             ListingInitConfig.default_market(),
-            seed=_WORKER_SEED,
+            seed=seed,
         )
-        rng = _bootstrap_rng(self._config.seed)
+        rng = _bootstrap_rng(seed)
         self._products_df = _bootstrap_products_from_listings(
             listings,
             config=self._config.products_bootstrap,

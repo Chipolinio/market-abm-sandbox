@@ -10,22 +10,24 @@ import {
 } from "@/api/simulation";
 import type { WorkerState } from "@/api/types";
 
+export type SimulationAction = "start" | "pause" | "step" | "reset";
+
 type Props = {
   state: WorkerState;
-  onActionComplete: (beforeState: WorkerState) => Promise<void>;
+  onActionComplete: (beforeState: WorkerState, action: SimulationAction) => Promise<void>;
 };
 
 export function SimulationControlStrip({ state, onActionComplete }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<unknown>, actionKind: SimulationAction) => {
     const beforeState = state;
     setBusy(true);
     setError(null);
     try {
       await action();
-      await onActionComplete(beforeState);
+      await onActionComplete(beforeState, actionKind);
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Action failed";
@@ -36,10 +38,12 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
   };
 
   const onStart = () =>
-    run(() =>
-      startSimulation({
-        force_clear: isTerminalState(state),
-      }),
+    run(
+      () =>
+        startSimulation({
+          force_clear: isTerminalState(state),
+        }),
+      "start",
     );
 
   return (
@@ -51,31 +55,31 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
           disabled={busy || state === "RUNNING" || state === "FAILED"}
           onClick={() => void onStart()}
         >
-          Start
+          Старт
         </button>
         <button
           type="button"
           className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
           disabled={busy || state !== "RUNNING"}
-          onClick={() => void run(pauseSimulation)}
+          onClick={() => void run(pauseSimulation, "pause")}
         >
-          Pause
+          Пауза
         </button>
         <button
           type="button"
           className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
           disabled={busy || state !== "PAUSED"}
-          onClick={() => void run(stepSimulation)}
+          onClick={() => void run(stepSimulation, "step")}
         >
-          Step
+          Шаг
         </button>
         <button
           type="button"
           className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
           disabled={busy || state === "RUNNING"}
-          onClick={() => void run(resetSimulation)}
+          onClick={() => void run(resetSimulation, "reset")}
         >
-          Reset
+          Сброс
         </button>
       </div>
       {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}

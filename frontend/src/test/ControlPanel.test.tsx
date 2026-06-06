@@ -19,7 +19,7 @@ describe("isConfigurableWorkerState", () => {
 });
 
 describe("ControlPanel", () => {
-  const onActionComplete = vi.fn(async (_before: string) => undefined);
+  const onActionComplete = vi.fn(async (_before: string, _action: string) => undefined);
 
   it("renders_three_sections", () => {
     render(<ControlPanel workerState="IDLE" onActionComplete={onActionComplete} />);
@@ -28,7 +28,7 @@ describe("ControlPanel", () => {
     expect(screen.getByTestId("control-panel-shocks")).toBeTruthy();
     expect(screen.getByTestId("control-panel-simulation")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Запустить шок спроса" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Старт" })).toBeTruthy();
   });
 
   it("disables_environment_when_running", () => {
@@ -53,21 +53,21 @@ describe("ControlPanel", () => {
   it("disables_start_when_running", () => {
     render(<ControlPanel workerState="RUNNING" onActionComplete={onActionComplete} />);
 
-    const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+    const start = screen.getByRole("button", { name: "Старт" }) as HTMLButtonElement;
     expect(start.disabled).toBe(true);
   });
 
   it("enables_pause_when_running", () => {
     render(<ControlPanel workerState="RUNNING" onActionComplete={onActionComplete} />);
 
-    const pause = screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement;
+    const pause = screen.getByRole("button", { name: "Пауза" }) as HTMLButtonElement;
     expect(pause.disabled).toBe(false);
   });
 
   it("disables_start_when_failed", () => {
     render(<ControlPanel workerState="FAILED" onActionComplete={onActionComplete} />);
 
-    const start = screen.getByRole("button", { name: "Start" }) as HTMLButtonElement;
+    const start = screen.getByRole("button", { name: "Старт" }) as HTMLButtonElement;
     expect(start.disabled).toBe(true);
   });
 });

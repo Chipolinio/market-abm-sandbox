@@ -1,11 +1,11 @@
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 import { ShocksControlPanel } from "@/components/sidebar/ShocksControlPanel";
-import { SimulationControlStrip } from "@/components/sidebar/SimulationControlStrip";
+import { SimulationControlStrip, type SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import type { WorkerState } from "@/api/types";
 
 export type ControlPanelProps = {
   workerState: WorkerState;
-  onActionComplete: (beforeState: WorkerState) => Promise<void>;
+  onActionComplete: (beforeState: WorkerState, action: SimulationAction) => Promise<void>;
 };
 
 /** Configure allowed only in IDLE / STOPPED (Spec 008 §4.4). */

@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import asyncio
 import queue
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from market_abm.api.schemas import (
+    SessionConfigureRequest,
+    SessionConfigureResponse,
     SimulationShockRequest,
     SimulationShockResponse,
     SimulationStartRequest,
@@ -93,6 +96,27 @@ async def post_shock(
         shock_type=body.shock_type,
         queue_depth=depth,
     )
+
+
+@router.post("/configure", status_code=202, response_model=SessionConfigureResponse)
+async def configure_session(
+    body: SessionConfigureRequest,
+    worker: Any = Depends(_get_worker),
+) -> SessionConfigureResponse:
+    state: WorkerState = worker.state
+
+    if state == WorkerState.RUNNING:
+        raise HTTPException(
+            status_code=400,
+            detail="Stop simulation before reconfiguring.",
+        )
+
+    artifacts_dir = Path(getattr(worker, "_artifacts_dir", "runs/default"))
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    pending_path = artifacts_dir / "pending_session.json"
+    pending_path.write_text(body.model_dump_json(), encoding="utf-8")
+
+    return SessionConfigureResponse(n_buyers=body.n_buyers)
 
 
 @router.post("/start", status_code=202)

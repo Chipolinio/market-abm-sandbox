@@ -71,6 +71,7 @@ export type UseDashboardSeriesResult = {
   backfillError: string | null;
   handlePayload: (payload: TickStreamPayload) => void;
   reloadBackfill: () => Promise<void>;
+  clearSeries: () => void;
 };
 
 /** noop-step воркер шлёт миллионы тиков/сек — не засоряем графики. */
@@ -84,6 +85,13 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
   const [backfillLoading, setBackfillLoading] = useState(true);
   const [backfillError, setBackfillError] = useState<string | null>(null);
 
+  const clearSeries = useCallback(() => {
+    lastWsTickRef.current = -1;
+    setPriceSeries(new Map());
+    setGmvSeries(new Map());
+    setDriftAlerts([]);
+  }, []);
+
   const reloadBackfill = useCallback(async () => {
     setBackfillLoading(true);
     try {
@@ -92,16 +100,11 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
       const pricePoints = priceRes.points.map(priceFromIndex);
       const gmvPoints = gmvRes.points.map(gmvFromIndex);
 
-      setPriceSeries((prev) =>
-        capSeries(
-          upsertMergeByTickId(prev, pricePoints, { rejectBelowMax: true }),
-          "macro",
-        ),
-      );
+      setPriceSeries(capSeries(upsertMergeByTickId(new Map(), pricePoints), "macro"));
+      setGmvSeries(capSeries(upsertMergeByTickId(new Map(), gmvPoints), "macro"));
 
-      setGmvSeries((prev) =>
-        capSeries(upsertMergeByTickId(prev, gmvPoints, { rejectBelowMax: true }), "macro"),
-      );
+      lastWsTickRef.current =
+        pricePoints.length > 0 ? Math.max(...pricePoints.map((point) => point.tick_id)) : -1;
 
       setBackfillError(null);
     } catch (err) {
@@ -164,5 +167,6 @@ export function useDashboardSeries(): UseDashboardSeriesResult {
     backfillError,
     handlePayload,
     reloadBackfill,
+    clearSeries,
   };
 }

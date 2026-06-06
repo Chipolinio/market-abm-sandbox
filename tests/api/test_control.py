@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,6 +31,7 @@ def _make_mock_worker(
     worker.state = state
     worker.last_error = last_error
     worker.run_id = "test-run"
+    worker._artifacts_dir = tempfile.mkdtemp(prefix="test-run-")
     return worker
 
 
@@ -294,3 +297,40 @@ def test_status_validates_response_schema_via_pydantic(idle_worker: MagicMock) -
     resp = client.get("/api/v1/simulation/status")
     parsed = SimulationStatusResponse.model_validate(resp.json())
     assert parsed.state == "IDLE"
+
+
+def test_configure_accepts_session_when_idle(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post(
+        "/api/v1/simulation/configure",
+        json={
+            "n_buyers": 5000,
+            "seller_mix": {
+                "catboost_pct": 0.4,
+                "rule_based_pct": 0.35,
+                "basic_pct": 0.25,
+            },
+        },
+    )
+    assert resp.status_code == 202
+    assert resp.json()["status"] == "accepted"
+    assert resp.json()["n_buyers"] == 5000
+
+    pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
+    assert pending_path.is_file()
+
+
+def test_configure_rejects_when_running(running_worker: MagicMock) -> None:
+    client = _make_client(running_worker)
+    resp = client.post(
+        "/api/v1/simulation/configure",
+        json={
+            "n_buyers": 5000,
+            "seller_mix": {
+                "catboost_pct": 0.4,
+                "rule_based_pct": 0.35,
+                "basic_pct": 0.25,
+            },
+        },
+    )
+    assert resp.status_code == 400

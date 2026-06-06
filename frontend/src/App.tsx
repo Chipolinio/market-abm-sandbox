@@ -8,6 +8,7 @@ import { useFlashCrashAlarm } from "@/hooks/useFlashCrashAlarm";
 import { usePriceIndexDelta } from "@/hooks/usePriceIndexDelta";
 import { useSimulationStatus } from "@/hooks/useSimulationStatus";
 import { useTickStream } from "@/hooks/useTickStream";
+import type { SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
 
@@ -21,6 +22,7 @@ export default function App() {
     backfillError,
     handlePayload,
     reloadBackfill,
+    clearSeries,
   } = useDashboardSeries();
 
   const handleDynamicsPayload = useCallback(
@@ -42,7 +44,10 @@ export default function App() {
     onPayload: handleDynamicsPayload,
   });
 
-  const { lines: cyberLogLines } = useCyberLog(lastPayload?.events, reconnectAttempt);
+  const { lines: cyberLogLines, reset: resetCyberLog } = useCyberLog(
+    lastPayload?.events,
+    reconnectAttempt,
+  );
 
   const priceIndexDelta = usePriceIndexDelta(lastPayload?.ticker_metrics?.market_price_index);
   const flashCrashActive = useFlashCrashAlarm(lastPayload?.events);
@@ -67,7 +72,7 @@ export default function App() {
   );
 
   const onActionComplete = useCallback(
-    async (beforeState: WorkerState) => {
+    async (beforeState: WorkerState, action: SimulationAction) => {
       for (let i = 0; i < 25; i += 1) {
         const next = await refresh();
         if (next !== null && next.state !== beforeState) {
@@ -75,9 +80,15 @@ export default function App() {
         }
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
+
+      if (action === "reset" || action === "start") {
+        clearSeries();
+        resetCyberLog();
+      }
+
       void reloadBackfill();
     },
-    [refresh, reloadBackfill],
+    [refresh, reloadBackfill, clearSeries, resetCyberLog],
   );
 
   return (

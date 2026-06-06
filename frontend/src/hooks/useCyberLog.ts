@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchSystemEvents } from "@/api/analytics";
 import {
@@ -12,6 +12,7 @@ export type UseCyberLogResult = {
   lines: CyberLogLine[];
   loading: boolean;
   error: string | null;
+  reset: () => void;
 };
 
 /**
@@ -28,6 +29,12 @@ export function useCyberLog(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef(new Set<string>());
+
+  const reset = useCallback(() => {
+    setLines([]);
+    seenIdsRef.current.clear();
+    setError(null);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,5 +78,5 @@ export function useCyberLog(
     );
   }, [wsEvents]);
 
-  return { lines, loading, error };
+  return { lines, loading, error, reset };
 }

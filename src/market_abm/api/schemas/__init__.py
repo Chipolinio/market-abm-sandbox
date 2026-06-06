@@ -11,6 +11,10 @@ from market_abm.api.schemas.shock import (
     SimulationShockRequest,
     SimulationShockResponse,
 )
+from market_abm.api.schemas.session import (
+    SessionConfigureRequest,
+    SessionConfigureResponse,
+)
 from market_abm.api.schemas.simulation import (
     SimulationStartRequest,
     SimulationStatusResponse,
@@ -31,6 +35,8 @@ __all__ = [
     "PriceQuantilesDTO",
     "SimulationShockRequest",
     "SimulationShockResponse",
+    "SessionConfigureRequest",
+    "SessionConfigureResponse",
     "SimulationStartRequest",
     "SimulationStatusResponse",
     "TickStreamPayload",

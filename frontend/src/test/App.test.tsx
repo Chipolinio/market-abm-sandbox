@@ -74,6 +74,6 @@ describe("App", () => {
     expect(screen.getByText(/t=\s*7/)).toBeTruthy();
     expect(screen.getByText(/GMV:/)).toBeTruthy();
     expect(screen.getByText("STABLE")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Start" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Старт" })).toBeTruthy();
   });
 });

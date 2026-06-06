@@ -1,4 +1,5 @@
 import { ControlPanel } from "@/components/ControlPanel";
+import type { SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import type { DynamicsTabProps, TerminalTabId } from "@/components/center/types";
 import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
@@ -15,7 +16,7 @@ const EMPTY_DYNAMICS: DynamicsTabProps = {
 };
 
 export type TradingTerminalLayoutProps = TickerRibbonProps & {
-  onActionComplete?: (beforeState: WorkerState) => Promise<void>;
+  onActionComplete?: (beforeState: WorkerState, action: SimulationAction) => Promise<void>;
   dynamics?: DynamicsTabProps;
   asOfTick?: number;
   cyberLogLines?: CyberLogLine[];
@@ -36,7 +37,8 @@ export function TradingTerminalLayout({
   activeTab,
   onTabChange,
 }: TradingTerminalLayoutProps) {
-  const handleActionComplete = onActionComplete ?? (async () => undefined);
+  const handleActionComplete =
+    onActionComplete ?? (async (_beforeState: WorkerState, _action: SimulationAction) => undefined);
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
