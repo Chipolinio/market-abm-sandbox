@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type { DemandMatrixResponse } from "@/types/demandMatrix";
+import type { SystemEventsResponse } from "@/types/events";
 import type { MarketLeadersResponse } from "@/types/leaders";
 import type { GmvPoint, ListingSeries, PriceIndexPoint } from "./types";
 import { DEFAULT_TOP_LISTINGS_LIMIT } from "@/state/listingSeries";
@@ -39,4 +40,8 @@ export function fetchMarketLeaders(limit: number = 5): Promise<MarketLeadersResp
 
 export function fetchDemandMatrix(): Promise<DemandMatrixResponse> {
   return apiFetch<DemandMatrixResponse>("/api/v1/analytics/demand-matrix");
+}
+
+export function fetchSystemEvents(limit: number = 50): Promise<SystemEventsResponse> {
+  return apiFetch<SystemEventsResponse>(`/api/v1/analytics/system-events?limit=${limit}`);
 }

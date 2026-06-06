@@ -1,4 +1,7 @@
-/** Mirrors backend Pydantic DTOs (Slice 7.1). */
+/** Mirrors backend Pydantic DTOs (Slice 7.1 / 8.3). */
+
+import type { SystemEventDTO } from "@/types/events";
+import type { TickerMetricsDTO } from "@/types/ticker";
 
 export type WorkerState = "IDLE" | "RUNNING" | "PAUSED" | "STOPPED" | "FAILED";
 
@@ -19,7 +22,9 @@ export type TickStreamPayload = {
   tick_id: number;
   timestamp_utc: string;
   market_summary: MarketAggregate;
+  ticker_metrics?: TickerMetricsDTO | null;
   active_drift_alerts: Array<Record<string, unknown>>;
+  events?: SystemEventDTO[];
   worker_state: WorkerState;
 };
 

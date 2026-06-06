@@ -1,6 +1,8 @@
 import type { DynamicsTabProps } from "@/components/center/types";
 import { TerminalTabs } from "@/components/center/TerminalTabs";
+import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
+import type { CyberLogLine } from "@/state/cyberLog";
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 import { ShocksControlPanel } from "@/components/sidebar/ShocksControlPanel";
 import { SimulationControlStrip } from "@/components/sidebar/SimulationControlStrip";
@@ -17,6 +19,7 @@ const EMPTY_DYNAMICS: DynamicsTabProps = {
 export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onActionComplete?: (beforeState: WorkerState) => Promise<void>;
   dynamics?: DynamicsTabProps;
+  cyberLogLines?: CyberLogLine[];
 };
 
 function isConfigurableState(state: WorkerState): boolean {
@@ -29,6 +32,7 @@ export function TradingTerminalLayout({
   workerState,
   onActionComplete,
   dynamics = EMPTY_DYNAMICS,
+  cyberLogLines = [],
 }: TradingTerminalLayoutProps) {
   const handleActionComplete = onActionComplete ?? (async () => undefined);
 
@@ -68,7 +72,9 @@ export function TradingTerminalLayout({
       <aside
         data-testid="zone-cyberlog"
         className="flex w-96 shrink-0 flex-col border-l border-slate-800 bg-slate-900"
-      />
+      >
+        <CyberEventTerminal lines={cyberLogLines} />
+      </aside>
     </div>
   );
 }
