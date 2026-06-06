@@ -20,7 +20,7 @@ vi.mock("@/hooks/useDashboardSeries", () => ({
     backfillLoading: false,
     backfillError: null,
     handlePayload: vi.fn(),
-    reloadBackfill: vi.fn(async () => undefined),
+    reloadBackfill: vi.fn(async () => true),
   }),
 }));
 

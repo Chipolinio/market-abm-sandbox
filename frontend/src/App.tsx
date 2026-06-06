@@ -23,6 +23,7 @@ export default function App() {
 
   const workerState: WorkerState = status?.state ?? lastPayload?.worker_state ?? "IDLE";
   const pollAnalytics = workerState === "RUNNING" || workerState === "PAUSED";
+  const pollCyberLogLive = workerState === "RUNNING";
 
   const {
     priceChartData,
@@ -32,7 +33,7 @@ export default function App() {
     handlePayload,
     reloadBackfill,
     clearSeries,
-  } = useDashboardSeries(pollAnalytics);
+  } = useDashboardSeries(pollAnalytics, reconnectAttempt);
 
   useEffect(() => {
     if (lastPayload !== null) {
@@ -54,7 +55,7 @@ export default function App() {
     reconnectAttempt,
     cyberLogBackfillKey,
     {
-      pollWhileRunning: pollAnalytics,
+      pollWhileRunning: pollCyberLogLive,
     },
   );
 

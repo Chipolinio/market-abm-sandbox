@@ -63,6 +63,24 @@ class AnalyticsStore:
     def _products_glob(self) -> str:
         return str(self._run_root / "products_snapshots" / "tick_*.parquet")
 
+    def _parquet_files(self, subdir: str, pattern: str = "tick_*.parquet") -> list[str]:
+        """Список parquet-файлов с диска — без DuckDB glob cache на long-lived connection."""
+        directory = self._run_root / subdir
+        if not directory.is_dir():
+            return []
+        return sorted(str(path) for path in directory.glob(pattern))
+
+    def _transactions_files(self) -> list[str]:
+        return self._parquet_files("transactions")
+
+    def _products_files(self) -> list[str]:
+        return self._parquet_files("products_snapshots")
+
+    def _read_parquet_arg(self, files: list[str]) -> str | list[str]:
+        if not files:
+            return []
+        return files[0] if len(files) == 1 else files
+
     def _has_parquet_files(self, subdir: str) -> bool:
         return any((self._run_root / subdir).glob("tick_*.parquet"))
 
@@ -75,7 +93,7 @@ class AnalyticsStore:
         )
 
     def _system_events_read_sources(self) -> list[str]:
-        """Parquet-источники system_events (legacy monolith + fragment glob)."""
+        """Parquet-источники system_events (legacy monolith + fragment files)."""
         events_dir = self._run_root / "system_events"
         if not events_dir.is_dir():
             return []
@@ -83,8 +101,7 @@ class AnalyticsStore:
         legacy = events_dir / "events.parquet"
         if legacy.is_file():
             sources.append(str(legacy))
-        if any(events_dir.glob("evt_*.parquet")):
-            sources.append(str(events_dir / "evt_*.parquet"))
+        sources.extend(str(path) for path in sorted(events_dir.glob("evt_*.parquet")))
         return sources
 
     def _query_pl(self, sql: str, params: list[object]) -> pl.DataFrame:
@@ -101,6 +118,10 @@ class AnalyticsStore:
         if not self._has_parquet_files("transactions"):
             return pl.DataFrame(schema=schema)
 
+        files = self._transactions_files()
+        if not files:
+            return pl.DataFrame(schema=schema)
+
         sql = """
             SELECT
                 tick_id,
@@ -110,7 +131,7 @@ class AnalyticsStore:
             GROUP BY tick_id
             ORDER BY tick_id
         """
-        result = self._query_pl(sql, [self._transactions_glob()])
+        result = self._query_pl(sql, [self._read_parquet_arg(files)])
         if result.height == 0:
             return pl.DataFrame(schema=schema)
         return result.cast(
@@ -264,32 +285,42 @@ class AnalyticsStore:
         total_transactions = 0
 
         if self._has_parquet_files("transactions"):
-            sql_tx = """
-                SELECT
-                    COALESCE(SUM(price_paid)::DOUBLE, 0.0) AS total_gmv,
-                    COALESCE(COUNT(*)::BIGINT, 0)          AS total_transactions
-                FROM read_parquet(?)
-                WHERE tick_id = ?
-            """
-            row = self._con.cursor().execute(sql_tx, [self._transactions_glob(), tick_id]).fetchone()
-            if row is not None:
-                total_gmv = float(row[0])
-                total_transactions = int(row[1])
+            tx_files = self._transactions_files()
+            if tx_files:
+                sql_tx = """
+                    SELECT
+                        COALESCE(SUM(price_paid)::DOUBLE, 0.0) AS total_gmv,
+                        COALESCE(COUNT(*)::BIGINT, 0)          AS total_transactions
+                    FROM read_parquet(?)
+                    WHERE tick_id = ?
+                """
+                row = self._con.cursor().execute(
+                    sql_tx,
+                    [self._read_parquet_arg(tx_files), tick_id],
+                ).fetchone()
+                if row is not None:
+                    total_gmv = float(row[0])
+                    total_transactions = int(row[1])
 
         mean_price = 0.0
 
         if self._has_parquet_files("products_snapshots"):
-            sql_price = f"""
-                SELECT COALESCE(AVG(price)::DOUBLE, 0.0) AS mean_price
-                FROM (
-                    SELECT {_TICK_ID_FROM_FILENAME} AS tick_id, price
-                    FROM read_parquet(?, filename=true)
-                )
-                WHERE tick_id = ?
-            """
-            row = self._con.cursor().execute(sql_price, [self._products_glob(), tick_id]).fetchone()
-            if row is not None:
-                mean_price = float(row[0])
+            product_files = self._products_files()
+            if product_files:
+                sql_price = f"""
+                    SELECT COALESCE(AVG(price)::DOUBLE, 0.0) AS mean_price
+                    FROM (
+                        SELECT {_TICK_ID_FROM_FILENAME} AS tick_id, price
+                        FROM read_parquet(?, filename=true)
+                    )
+                    WHERE tick_id = ?
+                """
+                row = self._con.cursor().execute(
+                    sql_price,
+                    [self._read_parquet_arg(product_files), tick_id],
+                ).fetchone()
+                if row is not None:
+                    mean_price = float(row[0])
 
         price_quantiles = self.query_price_quantiles(tick_id)
 
@@ -387,13 +418,13 @@ class AnalyticsStore:
             return []
 
         last_error: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 return self._recent_system_events_from_sources(sources, limit)
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
-                if attempt < 2:
-                    time.sleep(0.02 * (attempt + 1))
+                if attempt < 4:
+                    time.sleep(0.05 * (attempt + 1))
         if last_error is not None:
             return []
         return []
@@ -403,7 +434,9 @@ class AnalyticsStore:
         sources: list[str],
         limit: int,
     ) -> list[dict[str, object]]:
-        read_arg: str | list[str] = sources[0] if len(sources) == 1 else sources
+        read_arg = self._read_parquet_arg(sources)
+        if not read_arg:
+            return []
         df = self._query_pl(
             """
             SELECT *
@@ -444,6 +477,10 @@ class AnalyticsStore:
         if not self._has_parquet_files("products_snapshots"):
             return pl.DataFrame(schema=schema)
 
+        product_files = self._products_files()
+        if not product_files:
+            return pl.DataFrame(schema=schema)
+
         sql = f"""
             SELECT
                 {_TICK_ID_FROM_FILENAME} AS tick_id,
@@ -452,7 +489,7 @@ class AnalyticsStore:
             GROUP BY tick_id
             ORDER BY tick_id
         """
-        result = self._query_pl(sql, [self._products_glob()])
+        result = self._query_pl(sql, [self._read_parquet_arg(product_files)])
         if result.height == 0:
             return pl.DataFrame(schema=schema)
         return result.cast(

@@ -16,11 +16,11 @@ export type UseCyberLogResult = {
   reset: () => void;
 };
 
-const LIVE_POLL_MS = 1_500;
+const LIVE_POLL_MS = 800;
 const REST_BACKFILL_LIMIT = 200;
 
 type UseCyberLogOptions = {
-  /** Poll REST while simulation is active (WS batch may lag behind Parquet append). */
+  /** Poll REST while simulation is RUNNING (WS batch may lag behind Parquet append). */
   pollWhileRunning?: boolean;
 };
 
@@ -135,6 +135,8 @@ export function useCyberLog(
     if (!pollWhileRunning) {
       return undefined;
     }
+
+    void pullFromRest("merge", false);
 
     const intervalId = window.setInterval(() => {
       void pullFromRest("merge", false);
