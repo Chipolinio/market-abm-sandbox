@@ -1,10 +1,8 @@
+import { ControlPanel } from "@/components/ControlPanel";
 import type { DynamicsTabProps, TerminalTabId } from "@/components/center/types";
 import { TerminalTabs } from "@/components/center/TerminalTabs";
 import { CyberEventTerminal } from "@/components/cyberlog/CyberEventTerminal";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
-import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
-import { ShocksControlPanel } from "@/components/sidebar/ShocksControlPanel";
-import { SimulationControlStrip } from "@/components/sidebar/SimulationControlStrip";
 import type { WorkerState } from "@/api/types";
 import type { CyberLogLine } from "@/state/cyberLog";
 import type { TickerRibbonProps } from "@/types/ticker";
@@ -24,10 +22,6 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
 };
-
-function isConfigurableState(state: WorkerState): boolean {
-  return state === "IDLE" || state === "STOPPED";
-}
 
 export function TradingTerminalLayout({
   metrics,
@@ -64,23 +58,7 @@ export function TradingTerminalLayout({
           data-testid="zone-left-sidebar"
           className="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 p-4"
         >
-          <section className="mb-6">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Environment
-            </h2>
-            <EnvironmentConfigurator disabled={!isConfigurableState(workerState)} />
-          </section>
-
-          <section className="mb-6">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Macro Shocks
-            </h2>
-            <ShocksControlPanel />
-          </section>
-
-          <section className="border-t border-slate-800 pt-4">
-            <SimulationControlStrip state={workerState} onActionComplete={handleActionComplete} />
-          </section>
+          <ControlPanel workerState={workerState} onActionComplete={handleActionComplete} />
         </aside>
 
         <main

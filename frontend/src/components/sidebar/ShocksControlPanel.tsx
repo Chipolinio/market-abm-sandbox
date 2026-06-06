@@ -52,7 +52,7 @@ export function ShocksControlPanel() {
         disabled={busy}
         onClick={() => void runShock(PLATFORM_FEE_HIKE_BODY)}
       >
-        Принудительная акция
+        Принудительная акция маркетплейса
       </button>
       {message !== null ? <p className="text-xs text-green-400">{message}</p> : null}
       {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}

@@ -1,11 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EnvironmentConfigurator } from "@/components/sidebar/EnvironmentConfigurator";
 
+const configureSession = vi.fn();
+
+vi.mock("@/api/simulation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/simulation")>();
+  return {
+    ...actual,
+    configureSession: (...args: unknown[]) => configureSession(...args),
+  };
+});
+
 afterEach(() => {
   cleanup();
+  configureSession.mockReset();
 });
 
 describe("EnvironmentConfigurator", () => {
@@ -29,5 +40,29 @@ describe("EnvironmentConfigurator", () => {
     for (const slider of sliders) {
       expect((slider as HTMLInputElement).disabled).toBe(false);
     }
+  });
+
+  it("posts_configure_on_apply", async () => {
+    configureSession.mockResolvedValue({ status: "accepted" });
+
+    render(<EnvironmentConfigurator disabled={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+    await waitFor(() => {
+      expect(configureSession).toHaveBeenCalledTimes(1);
+    });
+
+    expect(configureSession).toHaveBeenCalledWith({
+      n_buyers: 10_000,
+      seller_mix: {
+        catboost_pct: 0.4,
+        rule_based_pct: 0.35,
+        basic_pct: 0.25,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Configuration saved")).toBeTruthy();
+    });
   });
 });
