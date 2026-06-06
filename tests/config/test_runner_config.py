@@ -13,8 +13,9 @@ def test_products_bootstrap_config_defaults() -> None:
     cfg = ProductsBootstrapConfig()
     assert cfg.delivery_days_min == pytest.approx(1.0)
     assert cfg.delivery_days_max == pytest.approx(7.0)
-    assert cfg.rating_min == pytest.approx(3.0)
+    assert cfg.rating_min == pytest.approx(3.2)
     assert cfg.rating_max == pytest.approx(5.0)
+    assert cfg.rating_maximizer_boost == pytest.approx(0.35)
 
 
 def test_products_bootstrap_rejects_invalid_ranges() -> None:

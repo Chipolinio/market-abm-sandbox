@@ -31,12 +31,20 @@ def _as_float32(arr: np.ndarray) -> np.ndarray:
     return np.asarray(arr, dtype=np.float32)
 
 
-def _price_floor(unit_cost: np.ndarray, margin_floor: np.ndarray) -> np.ndarray:
+def _price_floor(
+    unit_cost: np.ndarray,
+    margin_floor: np.ndarray,
+    *,
+    min_listing_price: float = 0.0,
+) -> np.ndarray:
     total_fees = (
         PLATFORM_DEFAULTS[COL_BASE_COMMISSION] + PLATFORM_DEFAULTS[COL_LOGISTIC_FEE]
     )
     denom = 1.0 - margin_floor - total_fees
-    return (unit_cost / denom).astype(np.float32)
+    floor = (unit_cost / denom).astype(np.float32)
+    if min_listing_price > 0.0:
+        return np.maximum(floor, np.float32(min_listing_price))
+    return floor
 
 
 def _validate_sellers_df_contract(sellers_df: pl.DataFrame) -> None:
@@ -52,6 +60,7 @@ def initialize_listings(
     config: ListingInitConfig,
     *,
     seed: int,
+    min_listing_price: float = 0.0,
 ) -> pl.DataFrame:
     """Initialize listings_df with one listing per seller (listing_id == seller_id)."""
     _validate_sellers_df_contract(sellers_df)
@@ -64,7 +73,10 @@ def initialize_listings(
 
     unit_cost = _as_float32(sample_from_spec(config.unit_cost, n, rng))
     base_price = (unit_cost * (1.0 + config.initial_margin_markup)).astype(np.float32)
-    price = np.maximum(base_price, _price_floor(unit_cost, margin_floor)).astype(np.float32)
+    price = np.maximum(
+        base_price,
+        _price_floor(unit_cost, margin_floor, min_listing_price=min_listing_price),
+    ).astype(np.float32)
     demand_index = np.full(n, config.initial_demand_index, dtype=np.float32)
 
     schema = listings_polars_schema()

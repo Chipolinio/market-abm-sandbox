@@ -50,7 +50,7 @@ class SellerPopulationConfig(BaseModel):
             seller_id_start=seller_id_start,
             strategy_type=CategoricalSpec(
                 levels=STRATEGY_TYPES,
-                probabilities=(0.45, 0.40, 0.15),
+                probabilities=(0.35, 0.35, 0.30),
             ),
             capital=DistributionSpec(
                 family="lognorm",
@@ -58,7 +58,7 @@ class SellerPopulationConfig(BaseModel):
             ),
             margin_floor=DistributionSpec(
                 family="uniform",
-                params={"loc": 0.05, "scale": 0.25},
+                params={"loc": 0.15, "scale": 0.20},
             ),
             repricing_speed=DistributionSpec(
                 family="uniform",

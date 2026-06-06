@@ -87,7 +87,7 @@ class BuyerPopulationConfig(BaseModel):
             enforce_negative_coefficients=True,
             budget=DistributionSpec(
                 family="lognorm",
-                params={"s": 0.5, "scale": math.exp(3.0)},
+                params={"s": 0.5, "scale": math.exp(4.5)},
             ),
             beta_price=DistributionSpec(
                 family="truncnorm",
@@ -99,7 +99,7 @@ class BuyerPopulationConfig(BaseModel):
             ),
             beta_rating=DistributionSpec(
                 family="truncnorm",
-                params={**_TRUNC_STD_NEGATIVE, "loc": -0.5, "scale": 0.2},
+                params={**_TRUNC_STD_NEGATIVE, "loc": -1.5, "scale": 0.35},
             ),
             device_type=_categorical_from_domain(
                 DEVICE_TYPES,

@@ -14,6 +14,7 @@ from market_abm.domain.constants import (
     MAX_PROFIT_DEMAND_HIGH_DEFAULT,
     MAX_PROFIT_DEMAND_LOW_DEFAULT,
     MAX_VOLUME_AGGRESSION_DEFAULT,
+    MIN_LISTING_PRICE_DEFAULT,
 )
 
 # Режимы репрайсинга (Spec 005 §1.4 / §8.2). Default — rules (обратная совместимость 002–004).
@@ -40,7 +41,7 @@ class ListingInitConfig(BaseModel):
         return cls(
             unit_cost=DistributionSpec(
                 family="lognorm",
-                params={"s": 0.3, "scale": math.exp(1.5)},
+                params={"s": 0.35, "scale": math.exp(3.0)},
             ),
             initial_margin_markup=initial_margin_markup,
             initial_demand_index=initial_demand_index,
@@ -66,6 +67,7 @@ class RepricingConfig(BaseModel):
         default=MAX_VOLUME_AGGRESSION_DEFAULT,
         ge=1.0,
     )
+    min_listing_price: float = Field(default=MIN_LISTING_PRICE_DEFAULT, ge=0.0)
     mode: RepricingMode = "rules"
     warmup_ticks: int = Field(default=15, ge=0)
     ml: CatBoostRepricingConfig | None = None
@@ -92,4 +94,5 @@ class RepricingConfig(BaseModel):
             max_profit_demand_high=MAX_PROFIT_DEMAND_HIGH_DEFAULT,
             max_profit_demand_low=MAX_PROFIT_DEMAND_LOW_DEFAULT,
             max_volume_aggression=MAX_VOLUME_AGGRESSION_DEFAULT,
+            min_listing_price=MIN_LISTING_PRICE_DEFAULT,
         )

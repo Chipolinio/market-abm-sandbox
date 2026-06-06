@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from market_abm.analytics.store import AnalyticsStore, _TICK_ID_FROM_FILENAME
-from market_abm.domain.constants import COL_DEMAND_INDEX
+from market_abm.domain.constants import COL_DEMAND_INDEX, COL_PRICE, COL_RATING_VALUE
 from market_abm.domain.constants import (
     ALGORITHM_TYPES,
     COL_IS_BANKRUPT,
@@ -145,13 +146,30 @@ def query_market_leaders(
     return {"run_id": run_id, "tick_id": resolved_tick, "leaders": leaders}
 
 
+def _decile_bins(values: list[float], grid_size: int) -> list[int]:
+    """Map values to decile indices [0, grid_size-1]; ties share the same market bin."""
+    if not values:
+        return []
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.size == 1:
+        return [grid_size // 2]
+    edges = np.quantile(arr, np.linspace(0.0, 1.0, grid_size + 1))
+    edges = np.maximum.accumulate(edges)
+    bins = np.clip(np.digitize(arr, edges[1:-1], right=False), 0, grid_size - 1)
+    return [int(b) for b in bins]
+
+
 def query_demand_matrix(
     store: AnalyticsStore,
     tick_id: int,
     *,
     grid_size: int = 10,
 ) -> dict[str, object]:
-    """10×10 heatmap: normalized demand_index of listings at tick (or nearest prior tick)."""
+    """
+    10×10 heatmap: mean demand_index by price decile (col) × rating decile (row).
+
+    row 0 (top) = highest rating tier; col 0 (left) = cheapest price tier.
+    """
     run_id = store._run_id_from_manifest()
     n_cells = grid_size * grid_size
 
@@ -170,57 +188,71 @@ def query_demand_matrix(
             "cells": _empty_cells(),
         }
 
+    resolved_tick = _resolved_tick_id(store, tick_id, "products_snapshots")
     sql = f"""
         WITH snap AS (
             SELECT
                 {_TICK_ID_FROM_FILENAME} AS snap_tick,
-                {COL_DEMAND_INDEX}::DOUBLE AS demand_index,
-                listing_id
+                {COL_PRICE}::DOUBLE AS price,
+                {COL_RATING_VALUE}::DOUBLE AS rating_value,
+                {COL_DEMAND_INDEX}::DOUBLE AS demand_index
             FROM read_parquet(?, filename=true)
             WHERE {_TICK_ID_FROM_FILENAME} <= ?
         ),
         latest AS (
             SELECT MAX(snap_tick) AS snap_tick FROM snap
         )
-        SELECT s.demand_index
+        SELECT s.price, s.rating_value, s.demand_index
         FROM snap s
         INNER JOIN latest l ON s.snap_tick = l.snap_tick
-        ORDER BY s.listing_id
-        LIMIT ?
     """
-    df = store._query_pl(sql, [store._products_glob(), tick_id, n_cells])
+    df = store._query_pl(sql, [store._products_glob(), tick_id])
     if df.height == 0:
         return {
             "run_id": run_id,
-            "tick_id": tick_id,
+            "tick_id": resolved_tick,
             "grid_size": grid_size,
             "cells": _empty_cells(),
         }
 
-    values = [float(v) for v in df["demand_index"].to_list()]
-    max_val = max(values)
-    min_val = min(values)
+    prices = [float(v) for v in df[COL_PRICE].to_list()]
+    ratings = [float(v) for v in df["rating_value"].to_list()]
+    demands = [float(v) for v in df[COL_DEMAND_INDEX].to_list()]
+
+    price_bins = _decile_bins(prices, grid_size)
+    rating_bins = _decile_bins(ratings, grid_size)
+
+    sums = np.zeros((grid_size, grid_size), dtype=np.float64)
+    counts = np.zeros((grid_size, grid_size), dtype=np.int64)
+    for demand, price_bin, rating_bin in zip(demands, price_bins, rating_bins, strict=True):
+        row = (grid_size - 1) - rating_bin
+        col = price_bin
+        sums[row, col] += demand
+        counts[row, col] += 1
+
+    raw_densities = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
+    positive = raw_densities[raw_densities > 0.0]
+    max_val = float(positive.max()) if positive.size else 0.0
+    min_val = float(positive.min()) if positive.size else 0.0
     span = max_val - min_val
 
     cells: list[dict[str, object]] = []
-    for index in range(n_cells):
-        row = index // grid_size
-        col = index % grid_size
-        if index < len(values):
-            raw = values[index]
-            if span > 0.0:
+    for row in range(grid_size):
+        for col in range(grid_size):
+            raw = float(raw_densities[row, col])
+            if counts[row, col] == 0:
+                density = 0.0
+            elif span > 0.0:
                 density = (raw - min_val) / span
             elif raw > 0.0:
                 density = 1.0
             else:
                 density = 0.0
-        else:
-            density = 0.0
-        cells.append({"row": row, "col": col, "density": density})
+            cells.append({"row": row, "col": col, "density": density})
 
     return {
         "run_id": run_id,
-        "tick_id": tick_id,
+        "tick_id": resolved_tick,
         "grid_size": grid_size,
         "cells": cells,
     }

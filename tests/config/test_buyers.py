@@ -84,6 +84,7 @@ def test_default_market_distribution_presets_match_spec() -> None:
 
     assert config.budget.family == "lognorm"
     assert config.budget.params["s"] == pytest.approx(0.5)
+    assert config.budget.params["scale"] == pytest.approx(math.exp(4.5))
 
     assert config.beta_price.family == "truncnorm"
     assert config.beta_price.params["loc"] == pytest.approx(-2.0)
@@ -92,7 +93,7 @@ def test_default_market_distribution_presets_match_spec() -> None:
     assert config.beta_delivery.params["loc"] == pytest.approx(-0.3)
 
     assert config.beta_rating.family == "truncnorm"
-    assert config.beta_rating.params["loc"] == pytest.approx(-0.5)
+    assert config.beta_rating.params["loc"] == pytest.approx(-1.5)
 
     assert config.purchase_frequency.family == "uniform"
     assert config.purchase_frequency.params["loc"] == pytest.approx(0.0)

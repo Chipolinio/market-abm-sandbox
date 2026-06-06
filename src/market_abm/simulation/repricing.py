@@ -22,12 +22,23 @@ from market_abm.domain.constants import (
 )
 
 
-def min_price_from_margin(unit_cost: pl.Expr, margin_floor: pl.Expr) -> pl.Expr:
-    """Build expression for p_min = cost / (1 - margin_floor - base_commission - logistic_fee)."""
+def min_price_from_margin(
+    unit_cost: pl.Expr,
+    margin_floor: pl.Expr,
+    *,
+    min_listing_price: float = 0.0,
+) -> pl.Expr:
+    """p_min = max(cost / (1 - margin - fees), absolute min_listing_price)."""
     total_fees = (
         PLATFORM_DEFAULTS[COL_BASE_COMMISSION] + PLATFORM_DEFAULTS[COL_LOGISTIC_FEE]
     )
-    return unit_cost / (1.0 - margin_floor - pl.lit(total_fees, dtype=pl.Float32))
+    margin_based = unit_cost / (1.0 - margin_floor - pl.lit(total_fees, dtype=pl.Float32))
+    if min_listing_price > 0.0:
+        return pl.max_horizontal(
+            margin_based,
+            pl.lit(min_listing_price, dtype=pl.Float32),
+        )
+    return margin_based
 
 
 def apply_repricing_tick(
@@ -44,7 +55,11 @@ def apply_repricing_tick(
     joined = listings_df.join(sellers_df, on=COL_SELLER_ID, how="left")
 
     step = pl.col(COL_PRICE) * pl.lit(config.relative_step, dtype=pl.Float32)
-    p_min = min_price_from_margin(pl.col(COL_UNIT_COST), pl.col(COL_MARGIN_FLOOR))
+    p_min = min_price_from_margin(
+        pl.col(COL_UNIT_COST),
+        pl.col(COL_MARGIN_FLOOR),
+        min_listing_price=config.min_listing_price,
+    )
     active = (
         (pl.lit(tick, dtype=pl.UInt32) % pl.col(COL_REPRICING_SPEED) == 0)
         & (pl.col(COL_STRATEGY_TYPE) != pl.lit("RatingMaximizer"))
@@ -99,7 +114,11 @@ def apply_ml_repricing_tick(
     )
     joined = listings_with.join(sellers_df, on=COL_SELLER_ID, how="left")
 
-    p_min = min_price_from_margin(pl.col(COL_UNIT_COST), pl.col(COL_MARGIN_FLOOR))
+    p_min = min_price_from_margin(
+        pl.col(COL_UNIT_COST),
+        pl.col(COL_MARGIN_FLOOR),
+        min_listing_price=config.min_listing_price,
+    )
     active = (pl.lit(tick, dtype=pl.UInt32) % pl.col(COL_REPRICING_SPEED) == 0) & (
         pl.col(COL_STRATEGY_TYPE) != pl.lit("RatingMaximizer")
     )

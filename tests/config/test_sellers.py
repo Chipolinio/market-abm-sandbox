@@ -30,8 +30,8 @@ def test_default_market_distribution_presets_match_spec() -> None:
     assert config.capital.params["scale"] == pytest.approx(math.exp(2.5))
 
     assert config.margin_floor.family == "uniform"
-    assert config.margin_floor.params["loc"] == pytest.approx(0.05)
-    assert config.margin_floor.params["scale"] == pytest.approx(0.25)
+    assert config.margin_floor.params["loc"] == pytest.approx(0.15)
+    assert config.margin_floor.params["scale"] == pytest.approx(0.20)
 
     assert config.repricing_speed.family == "uniform"
     assert config.repricing_speed.params["loc"] == pytest.approx(1.0)

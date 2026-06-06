@@ -18,8 +18,8 @@ def test_listing_init_default_market_builds_without_error() -> None:
 def test_listing_init_default_market_distribution_preset_matches_spec() -> None:
     config = ListingInitConfig.default_market()
     assert config.unit_cost.family == "lognorm"
-    assert config.unit_cost.params["s"] == pytest.approx(0.3)
-    assert config.unit_cost.params["scale"] == pytest.approx(math.exp(1.5))
+    assert config.unit_cost.params["s"] == pytest.approx(0.35)
+    assert config.unit_cost.params["scale"] == pytest.approx(math.exp(3.0))
     assert config.initial_margin_markup == pytest.approx(0.20)
     assert config.initial_demand_index == pytest.approx(1.0)
 
@@ -44,7 +44,8 @@ def test_repricing_default_market_values_match_spec() -> None:
     assert config.relative_step == pytest.approx(0.02)
     assert config.max_profit_demand_high == pytest.approx(1.10)
     assert config.max_profit_demand_low == pytest.approx(0.90)
-    assert config.max_volume_aggression == pytest.approx(1.5)
+    assert config.max_volume_aggression == pytest.approx(1.2)
+    assert config.min_listing_price == pytest.approx(25.0)
 
 
 def test_repricing_rejects_invalid_relative_step() -> None:

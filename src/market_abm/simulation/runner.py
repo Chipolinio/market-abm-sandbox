@@ -14,6 +14,8 @@ from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
     COL_DELIVERY_DAYS,
     COL_RATING_VALUE,
+    COL_SELLER_ID,
+    COL_STRATEGY_TYPE,
     LISTINGS_COLUMNS,
     PRODUCTS_COLUMNS,
     PRODUCTS_SCHEMA_DTYPES,
@@ -54,6 +56,7 @@ def _bootstrap_products_from_listings(
     *,
     config: ProductsBootstrapConfig,
     rng: np.random.Generator,
+    sellers_df: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """Добавляет delivery_days и rating_value; не мутирует listings_df."""
     n = listings_df.height
@@ -64,7 +67,27 @@ def _bootstrap_products_from_listings(
         return pl.DataFrame({col: [] for col in PRODUCTS_COLUMNS}, schema=schema)
 
     delivery = rng.uniform(config.delivery_days_min, config.delivery_days_max, size=n)
-    ratings = rng.uniform(config.rating_min, config.rating_max, size=n)
+    ratings = rng.uniform(config.rating_min, config.rating_max, size=n).astype(np.float32)
+    if sellers_df is not None and config.rating_maximizer_boost > 0.0:
+        strategy_by_seller = dict(
+            zip(
+                sellers_df[COL_SELLER_ID].to_list(),
+                sellers_df[COL_STRATEGY_TYPE].cast(pl.String).to_list(),
+                strict=True,
+            )
+        )
+        seller_ids = listings_df[COL_SELLER_ID].to_numpy()
+        boost = np.array(
+            [
+                config.rating_maximizer_boost
+                if strategy_by_seller.get(int(sid)) == "RatingMaximizer"
+                else 0.0
+                for sid in seller_ids
+            ],
+            dtype=np.float32,
+        )
+        ratings = np.minimum(config.rating_max, ratings + boost)
+
     return listings_df.with_columns(
         pl.Series(COL_DELIVERY_DAYS, delivery, dtype=pl.Float32),
         pl.Series(COL_RATING_VALUE, ratings, dtype=pl.Float32),
@@ -99,6 +122,7 @@ def run_simulation(
         listings_df,
         config=config.products_bootstrap,
         rng=rng,
+        sellers_df=sellers_df,
     )
 
     extended_state: ExtendedSimulationState | None = None
@@ -227,6 +251,7 @@ def _stream_extended_persist(
         listings_df,
         config=config.products_bootstrap,
         rng=rng,
+        sellers_df=sellers_df,
     )
     extended_state = init_extended_state(sellers_df)
 

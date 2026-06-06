@@ -35,7 +35,7 @@ export function DemandMatrixTab({ asOfTick, pollLive = false }: Props) {
       className="flex h-full min-h-0 flex-col rounded border border-slate-800 bg-slate-900/60 p-4"
     >
       <h2 className="mb-3 shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Матрица спроса (10×10)
+        Матрица спроса (10×10) · рейтинг × цена
       </h2>
       {loading && cells.length === 0 ? (
         <p className="text-xs text-slate-500">Загрузка матрицы…</p>

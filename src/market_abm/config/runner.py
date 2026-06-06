@@ -20,8 +20,9 @@ class ProductsBootstrapConfig(BaseModel):
 
     delivery_days_min: float = Field(default=1.0, gt=0.0)
     delivery_days_max: float = Field(default=7.0, gt=0.0)
-    rating_min: float = Field(default=3.0, ge=0.0, le=5.0)
+    rating_min: float = Field(default=3.2, ge=0.0, le=5.0)
     rating_max: float = Field(default=5.0, ge=0.0, le=5.0)
+    rating_maximizer_boost: float = Field(default=0.35, ge=0.0, le=2.0)
 
     @model_validator(mode="after")
     def _ranges(self) -> Self:

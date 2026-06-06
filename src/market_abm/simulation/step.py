@@ -199,6 +199,7 @@ def _ml_reprice(
         current_prices=current_prices,
         config=ml_config,
         rng=_ml_explore_rng(config),
+        min_listing_price=config.repricing.min_listing_price,
     )
     return apply_ml_repricing_tick(
         sellers_df,

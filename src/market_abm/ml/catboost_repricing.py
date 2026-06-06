@@ -163,6 +163,7 @@ def predict_next_prices(
     current_prices: np.ndarray,
     config: CatBoostRepricingConfig,
     rng: np.random.Generator,
+    min_listing_price: float = 0.0,
 ) -> np.ndarray:
     """
     Векторный инференс next_prices (Spec 005 §4.4).
@@ -187,6 +188,8 @@ def predict_next_prices(
         PLATFORM_DEFAULTS[COL_BASE_COMMISSION] + PLATFORM_DEFAULTS[COL_LOGISTIC_FEE]
     )
     p_min = unit_cost / (1.0 - margin_floor - total_fees)
+    if min_listing_price > 0.0:
+        p_min = np.maximum(p_min, min_listing_price)
     p_max = config.max_price_multiplier * current
 
     x_all = features_df.select(feature_names).to_numpy().astype(np.float32)

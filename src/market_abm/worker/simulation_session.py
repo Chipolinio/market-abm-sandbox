@@ -81,7 +81,7 @@ def _worker_run_config(run_root: Path) -> SimulationRunConfig:
             engine="numpy_softmax",
             max_products_per_choice_set=50,
             buyers_batch_size=buyers_batch_size,
-            outside_utility_bias=-50.0,
+            outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
         ),
         repricing=RepricingConfig.default_market(),
         persistence=PersistenceConfig(
@@ -125,6 +125,7 @@ class LiveSimulationSession:
             self._sellers_df,
             ListingInitConfig.default_market(),
             seed=_WORKER_SEED,
+            min_listing_price=self._config.repricing.min_listing_price,
         )
         manifest: dict[str, object] = {
             "run_id": self._run_id,
@@ -170,12 +171,14 @@ class LiveSimulationSession:
             self._sellers_df,
             ListingInitConfig.default_market(),
             seed=seed,
+            min_listing_price=self._config.repricing.min_listing_price,
         )
         rng = _bootstrap_rng(seed)
         self._products_df = _bootstrap_products_from_listings(
             listings,
             config=self._config.products_bootstrap,
             rng=rng,
+            sellers_df=self._sellers_df,
         )
         self._extended_state = init_extended_state(self._sellers_df)
         self._write_initial_manifest(n_ticks=1_000_000)

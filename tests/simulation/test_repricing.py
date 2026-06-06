@@ -79,7 +79,7 @@ def test_max_volume_drops_price_more_aggressively_than_max_profit() -> None:
     out = apply_repricing_tick(sellers, listings, tick=1, config=RepricingConfig.default_market())
     prices = out.sort(COL_SELLER_ID)[COL_PRICE].to_list()
     assert prices[0] == pytest.approx(98.0)
-    assert prices[1] == pytest.approx(97.0)
+    assert prices[1] == pytest.approx(97.6)
     assert (100.0 - prices[1]) > (100.0 - prices[0])
 
 

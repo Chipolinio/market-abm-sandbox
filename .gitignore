@@ -23,6 +23,10 @@ htmlcov/
 *.db
 *.duckdb
 
+# Live simulation runtime (SIMULATION_ARTIFACTS_DIR, default runs/default)
+runs/
+output/
+
 .DS_Store
 Thumbs.db
 
