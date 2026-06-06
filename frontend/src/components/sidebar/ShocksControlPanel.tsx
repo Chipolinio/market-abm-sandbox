@@ -9,8 +9,8 @@ const DEMAND_CRASH_BODY = {
   duration_ticks: 10,
 };
 
-const PLATFORM_FEE_HIKE_BODY = {
-  shock_type: "platform_fee_hike" as const,
+const MARKETPLACE_PROMOTION_BODY = {
+  shock_type: "marketplace_promotion" as const,
   intensity: 1.0,
   duration_ticks: 15,
 };
@@ -20,7 +20,9 @@ export function ShocksControlPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const runShock = async (body: typeof DEMAND_CRASH_BODY | typeof PLATFORM_FEE_HIKE_BODY) => {
+  const runShock = async (
+    body: typeof DEMAND_CRASH_BODY | typeof MARKETPLACE_PROMOTION_BODY,
+  ) => {
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -50,7 +52,7 @@ export function ShocksControlPanel() {
         type="button"
         className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
         disabled={busy}
-        onClick={() => void runShock(PLATFORM_FEE_HIKE_BODY)}
+        onClick={() => void runShock(MARKETPLACE_PROMOTION_BODY)}
       >
         Принудительная акция маркетплейса
       </button>

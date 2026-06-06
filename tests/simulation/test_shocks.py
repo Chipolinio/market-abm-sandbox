@@ -130,3 +130,17 @@ def test_platform_fee_hike_increases_price() -> None:
     prices_out = products_out[COL_PRICE].to_list()
     assert prices_out[0] == pytest.approx(100.0 * expected_multiplier, rel=1e-4)
     assert prices_out[1] == pytest.approx(200.0 * expected_multiplier, rel=1e-4)
+
+
+def test_marketplace_promotion_lowers_price_with_cap() -> None:
+    products = _products_df([100.0, 200.0])
+    buyers = _buyers_df([500.0])
+    catalog = ShockCatalogConfig()
+    ctx = _ctx_with_shock(ShockType.MARKETPLACE_PROMOTION)
+
+    _, products_out = apply_environment_shocks(buyers, products, ctx, catalog)
+
+    discount = catalog.marketplace_promotion.fee_delta
+    assert products_out["price"].max() < products["price"].max()
+    assert products_out["price"][0] == pytest.approx(100.0 * (1.0 - discount), rel=1e-4)
+    assert "promotion_anchor_price" in products_out.columns

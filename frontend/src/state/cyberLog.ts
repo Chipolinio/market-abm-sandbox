@@ -81,11 +81,11 @@ export function formatCyberLine(line: Pick<CyberLogLine, "tick_id" | "display_co
   return `[Тик ${line.tick_id}] ${line.display_code}: ${line.message}`;
 }
 
-/** Collapse 4+ BANKRUPTCY lines for the same tick into one macro event (Zone D spec). */
+/** Collapse legacy per-seller spam; backend now emits aggregated BANKRUPTCY rows. */
 export function collapseCyberLogLines(lines: CyberLogLine[]): CyberLogLine[] {
   const bankruptcyCount = new Map<number, number>();
   for (const line of lines) {
-    if (line.display_code === "BANKRUPTCY") {
+    if (line.display_code === "BANKRUPTCY" && !line.message.includes("массово выбыло")) {
       bankruptcyCount.set(line.tick_id, (bankruptcyCount.get(line.tick_id) ?? 0) + 1);
     }
   }
@@ -97,7 +97,11 @@ export function collapseCyberLogLines(lines: CyberLogLine[]): CyberLogLine[] {
   const result: CyberLogLine[] = [];
 
   for (const line of lines) {
-    if (line.display_code === "BANKRUPTCY" && collapsedTicks.has(line.tick_id)) {
+    if (
+      line.display_code === "BANKRUPTCY"
+      && collapsedTicks.has(line.tick_id)
+      && !line.message.includes("массово выбыло")
+    ) {
       if (emittedCollapsed.has(line.tick_id)) {
         continue;
       }
@@ -107,7 +111,7 @@ export function collapseCyberLogLines(lines: CyberLogLine[]): CyberLogLine[] {
         event_id: `collapsed-bankruptcy-${line.tick_id}`,
         tick_id: line.tick_id,
         display_code: "BANKRUPTCY",
-        message: `Массовое выбывание алгоритмов (${count} игроков)`,
+        message: `Из симуляции массово выбыло ${count} селлеров`,
         severity: line.severity,
       });
       continue;

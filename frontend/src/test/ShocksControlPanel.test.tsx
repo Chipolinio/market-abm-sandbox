@@ -41,10 +41,10 @@ describe("ShocksControlPanel", () => {
     });
   });
 
-  it("posts_platform_fee_hike_on_click", async () => {
+  it("posts_marketplace_promotion_on_click", async () => {
     triggerShock.mockResolvedValue({
       status: "queued",
-      shock_type: "platform_fee_hike",
+      shock_type: "marketplace_promotion",
       queue_depth: 2,
     });
 
@@ -58,7 +58,7 @@ describe("ShocksControlPanel", () => {
       expect(triggerShock).toHaveBeenCalledTimes(1);
     });
     expect(triggerShock).toHaveBeenCalledWith({
-      shock_type: "platform_fee_hike",
+      shock_type: "marketplace_promotion",
       intensity: 1.0,
       duration_ticks: 15,
     });

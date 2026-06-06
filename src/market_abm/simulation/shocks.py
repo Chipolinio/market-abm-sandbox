@@ -9,6 +9,63 @@ from market_abm.domain.constants import COL_BUDGET, COL_PRICE, COL_UNIT_COST
 from market_abm.domain.shocks import ActiveShock, ShockType
 from market_abm.simulation.context import SimulationContext
 
+COL_PROMOTION_ANCHOR: str = "promotion_anchor_price"
+
+
+def _active_shock(ctx: SimulationContext, shock_type: ShockType) -> ActiveShock | None:
+    for shock in ctx.active_shocks:
+        if shock.shock_type == shock_type:
+            return shock
+    return None
+
+
+def _promotion_discount(ctx: SimulationContext, catalog: ShockCatalogConfig) -> float:
+    shock = _active_shock(ctx, ShockType.MARKETPLACE_PROMOTION)
+    if shock is None:
+        return 0.0
+    return catalog.marketplace_promotion.fee_delta * shock.intensity
+
+
+def drop_promotion_columns(products_df: pl.DataFrame) -> pl.DataFrame:
+    """Убирает runtime-колонку якоря акции перед persist."""
+    if COL_PROMOTION_ANCHOR in products_df.columns:
+        return products_df.drop(COL_PROMOTION_ANCHOR)
+    return products_df
+
+
+def apply_marketplace_promotion_caps(
+    products_df: pl.DataFrame,
+    ctx: SimulationContext | None,
+    catalog: ShockCatalogConfig,
+) -> pl.DataFrame:
+    """
+    Жёсткий потолок цены во время акции маркетплейса:
+    final_allowed_price = anchor_price * (1 - discount).
+    Repricers не могут поднять цену выше потолка на последующих тиках.
+    """
+    if ctx is None or _active_shock(ctx, ShockType.MARKETPLACE_PROMOTION) is None:
+        return drop_promotion_columns(products_df)
+
+    discount = _promotion_discount(ctx, catalog)
+    if discount <= 0.0 or products_df.height == 0:
+        return products_df
+
+    df = products_df
+    if COL_PROMOTION_ANCHOR not in df.columns:
+        df = df.with_columns(pl.col(COL_PRICE).alias(COL_PROMOTION_ANCHOR))
+
+    cap = (pl.col(COL_PROMOTION_ANCHOR) * (1.0 - pl.lit(discount, dtype=pl.Float32))).cast(
+        pl.Float32
+    )
+    return df.with_columns(
+        pl.max_horizontal(
+            pl.min_horizontal(pl.col(COL_PRICE), cap),
+            pl.col(COL_UNIT_COST),
+        )
+        .cast(pl.Float32)
+        .alias(COL_PRICE)
+    )
+
 
 def apply_environment_shocks(
     buyers_df: pl.DataFrame,
@@ -21,7 +78,7 @@ def apply_environment_shocks(
     Без ctx — identity (клоны входных таблиц).
     """
     if ctx is None or not ctx.active_shocks:
-        return buyers_df.clone(), products_df.clone()
+        return buyers_df.clone(), drop_promotion_columns(products_df.clone())
 
     buyers_out = buyers_df.clone()
     products_out = products_df.clone()
@@ -37,6 +94,7 @@ def apply_environment_shocks(
             catalog,
         )
 
+    products_out = apply_marketplace_promotion_caps(products_out, ctx, catalog)
     return buyers_out, products_out
 
 
@@ -81,6 +139,10 @@ def _apply_single_shock(
                 .cast(pl.Float32)
                 .alias(COL_PRICE)
             )
+
+    elif shock.shock_type == ShockType.MARKETPLACE_PROMOTION:
+        # Ценовой потолок применяется в apply_marketplace_promotion_caps после всех шоков.
+        pass
 
     elif shock.shock_type == ShockType.SUPPLY_SHOCK:
         if products_df.height > 0:

@@ -9,8 +9,8 @@ import polars as pl
 
 from market_abm.analytics.events import (
     append_system_events,
-    build_bankruptcy_event,
     build_demand_shock_event,
+    coalesce_bankruptcy_events,
     detect_system_events,
 )
 from market_abm.analytics.persist import (
@@ -19,7 +19,12 @@ from market_abm.analytics.persist import (
 )
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.config.runner import SimulationRunConfig
-from market_abm.domain.constants import COL_PRICE_PAID
+from market_abm.domain.constants import (
+    COL_IS_BANKRUPT,
+    COL_PRICE_PAID,
+    COL_SELLER_ID,
+    COL_WORKING_CAPITAL,
+)
 from market_abm.domain.shocks import ShockType
 from market_abm.simulation.context import (
     SimulationContext,
@@ -50,6 +55,21 @@ def init_extended_state(
         sellers_state_df=init_sellers_state(sellers_df),
         simulation_context=default_simulation_context(tick_id=tick_id),
     )
+
+
+def _top_seller_ids(sellers_state: pl.DataFrame, *, n: int = 3) -> frozenset[int]:
+    """Топ-N по working_capital до банкротств на тике (для VIP-событий)."""
+    if sellers_state.height == 0:
+        return frozenset()
+    active = sellers_state.filter(~pl.col(COL_IS_BANKRUPT))
+    if active.height == 0:
+        return frozenset()
+    top = (
+        active.sort(COL_WORKING_CAPITAL, descending=True)
+        .head(n)[COL_SELLER_ID]
+        .to_list()
+    )
+    return frozenset(int(sid) for sid in top)
 
 
 def _build_command_side_events(
@@ -88,16 +108,16 @@ def _build_command_side_events(
         )
         seq += 1
 
-    for seller_id in new_bankruptcy_seller_ids(prev_sellers_state, next_sellers_state):
-        events.append(
-            build_bankruptcy_event(
-                run_id=run_id,
-                tick_id=tick_id,
-                seller_id=int(seller_id),
-                seq=seq,
-            )
-        )
-        seq += 1
+    bankrupt_ids = [int(s) for s in new_bankruptcy_seller_ids(prev_sellers_state, next_sellers_state)]
+    top_ids = _top_seller_ids(prev_sellers_state)
+    bankruptcy_events, seq = coalesce_bankruptcy_events(
+        run_id=run_id,
+        tick_id=tick_id,
+        bankrupt_seller_ids=bankrupt_ids,
+        top_seller_ids=top_ids,
+        seq_start=seq,
+    )
+    events.extend(bankruptcy_events)
 
     return events, seq
 

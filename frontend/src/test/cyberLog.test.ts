@@ -84,7 +84,7 @@ describe("collapseCyberLogLines", () => {
 
     const collapsed = collapseCyberLogLines(lines);
     expect(collapsed).toHaveLength(1);
-    expect(collapsed[0]?.message).toContain("Массовое выбывание алгоритмов (4 игроков)");
+    expect(collapsed[0]?.message).toContain("Из симуляции массово выбыло 4 селлеров");
   });
 
   it("keeps_three_or_fewer_bankruptcies_separate", () => {

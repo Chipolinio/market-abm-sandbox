@@ -19,4 +19,5 @@ class ShockCatalogConfig(BaseModel):
     demand_boom: ShockEffectSpec = ShockEffectSpec(budget_multiplier=1.3)
     platform_fee_hike: ShockEffectSpec = ShockEffectSpec(fee_delta=0.05)
     platform_fee_cut: ShockEffectSpec = ShockEffectSpec(fee_delta=0.05)
+    marketplace_promotion: ShockEffectSpec = ShockEffectSpec(fee_delta=0.10)
     supply_shock: ShockEffectSpec = ShockEffectSpec(supply_cost_multiplier=1.2)

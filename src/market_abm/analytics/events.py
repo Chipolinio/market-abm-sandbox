@@ -251,6 +251,92 @@ def build_bankruptcy_event(
     }
 
 
+def build_mass_bankruptcy_event(
+    *,
+    run_id: str,
+    tick_id: int,
+    seller_ids: list[int],
+    seq: int,
+) -> dict[str, object]:
+    """Агрегированное событие массового банкротства (>3 рядовых селлеров за тик)."""
+    event_type = SystemEventType.BANKRUPTCY
+    count = len(seller_ids)
+    preview = ", ".join(str(sid) for sid in seller_ids[:8])
+    suffix = "..." if count > 8 else ""
+    payload = {"seller_ids": seller_ids, "count": count, "aggregated": True}
+    return {
+        COL_EVENT_ID: _event_id(
+            run_id=run_id,
+            tick_id=tick_id,
+            event_type=event_type,
+            seq=seq,
+        ),
+        COL_TICK_ID: tick_id,
+        COL_EVENT_TYPE: event_type.value,
+        COL_DISPLAY_CODE: DISPLAY_CODE_BY_TYPE[event_type],
+        COL_SEVERITY: "warning",
+        COL_MESSAGE: (
+            f"Из симуляции массово выбыло {count} селлеров (ID: {preview}{suffix})"
+        ),
+        COL_PAYLOAD_JSON: json.dumps(payload, separators=(",", ":")),
+    }
+
+
+def coalesce_bankruptcy_events(
+    *,
+    run_id: str,
+    tick_id: int,
+    bankrupt_seller_ids: list[int],
+    top_seller_ids: frozenset[int],
+    seq_start: int,
+) -> tuple[list[dict[str, object]], int]:
+    """
+    Топ-3 игрока — штучные события; >3 рядовых банкротств — одна групповая сводка.
+    """
+    if not bankrupt_seller_ids:
+        return [], seq_start
+
+    events: list[dict[str, object]] = []
+    seq = seq_start
+    vip = [sid for sid in bankrupt_seller_ids if sid in top_seller_ids]
+    routine = [sid for sid in bankrupt_seller_ids if sid not in top_seller_ids]
+
+    for seller_id in vip:
+        events.append(
+            build_bankruptcy_event(
+                run_id=run_id,
+                tick_id=tick_id,
+                seller_id=seller_id,
+                seq=seq,
+            )
+        )
+        seq += 1
+
+    if len(routine) > 3:
+        events.append(
+            build_mass_bankruptcy_event(
+                run_id=run_id,
+                tick_id=tick_id,
+                seller_ids=routine,
+                seq=seq,
+            )
+        )
+        seq += 1
+    else:
+        for seller_id in routine:
+            events.append(
+                build_bankruptcy_event(
+                    run_id=run_id,
+                    tick_id=tick_id,
+                    seller_id=seller_id,
+                    seq=seq,
+                )
+            )
+            seq += 1
+
+    return events, seq
+
+
 def append_system_events(
     run_root: Path,
     events_df: pl.DataFrame,

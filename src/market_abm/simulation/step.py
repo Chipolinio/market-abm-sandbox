@@ -37,7 +37,12 @@ from market_abm.simulation.seller_economics import (
     filter_bankrupt_listings,
     settle_seller_economics,
 )
-from market_abm.simulation.shocks import apply_environment_shocks
+from market_abm.simulation.shocks import (
+    COL_PROMOTION_ANCHOR,
+    apply_environment_shocks,
+    apply_marketplace_promotion_caps,
+    drop_promotion_columns,
+)
 
 if TYPE_CHECKING:  # только типы: избегаем цикла ml.__init__ → bootstrap → runner → step
     from market_abm.ml.catboost_repricing import CatBoostModelRegistry
@@ -211,9 +216,15 @@ def _reprice_to_products(
     *,
     ml_registry: CatBoostModelRegistry | None,
     analytics_store: AnalyticsStore | None,
+    simulation_context: SimulationContext | None = None,
+    shock_catalog: ShockCatalogConfig | None = None,
 ) -> pl.DataFrame:
     """Выбирает rules/ML-путь репрайса и пришивает карточные фичи обратно в products."""
-    listings = products_with_demand.select(list(LISTINGS_COLUMNS))
+    catalog = shock_catalog or ShockCatalogConfig()
+    listing_cols = list(LISTINGS_COLUMNS)
+    if COL_PROMOTION_ANCHOR in products_with_demand.columns:
+        listing_cols = [*listing_cols, COL_PROMOTION_ANCHOR]
+    listings = products_with_demand.select(listing_cols)
     if _use_ml_path(config, ml_registry):
         if analytics_store is None:
             raise ValueError(
@@ -234,9 +245,18 @@ def _reprice_to_products(
     card_features = products_with_demand.select(
         [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]
     )
-    return repriced.join(card_features, on=COL_LISTING_ID, how="left").select(
-        list(PRODUCTS_COLUMNS)
-    )
+    merged = repriced.join(card_features, on=COL_LISTING_ID, how="left")
+    if COL_PROMOTION_ANCHOR in products_with_demand.columns and COL_PROMOTION_ANCHOR not in merged.columns:
+        merged = merged.join(
+            products_with_demand.select([COL_LISTING_ID, COL_PROMOTION_ANCHOR]),
+            on=COL_LISTING_ID,
+            how="left",
+        )
+    merged = apply_marketplace_promotion_caps(merged, simulation_context, catalog)
+    select_cols = list(PRODUCTS_COLUMNS)
+    if COL_PROMOTION_ANCHOR in merged.columns:
+        select_cols = [*select_cols, COL_PROMOTION_ANCHOR]
+    return merged.select(select_cols)
 
 
 def _settle_if_needed(
@@ -303,8 +323,10 @@ def step(
             config,
             ml_registry=ml_registry,
             analytics_store=analytics_store,
+            simulation_context=simulation_context,
+            shock_catalog=catalog,
         )
-        return products_next, empty_tx, _settle_if_needed(
+        return drop_promotion_columns(products_next), empty_tx, _settle_if_needed(
             sellers_state_df, empty_tx, config
         )
 
@@ -328,7 +350,10 @@ def step(
         config,
         ml_registry=ml_registry,
         analytics_store=analytics_store,
+        simulation_context=simulation_context,
+        shock_catalog=catalog,
     )
+    products_next = drop_promotion_columns(products_next)
     return (
         products_next,
         transactions,

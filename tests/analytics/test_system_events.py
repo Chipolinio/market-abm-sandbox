@@ -12,6 +12,7 @@ from market_abm.analytics.events import (
     append_system_events,
     build_bankruptcy_event,
     build_demand_shock_event,
+    coalesce_bankruptcy_events,
     detect_system_events,
 )
 from market_abm.analytics.persist import open_duckdb_connection
@@ -44,6 +45,7 @@ from market_abm.domain.events import (
     COL_EVENT_ID,
     COL_EVENT_TYPE,
     COL_MESSAGE,
+    COL_PAYLOAD_JSON,
     COL_SEVERITY,
     SystemEventType,
 )
@@ -221,3 +223,20 @@ def test_bankruptcy_emits_system_event() -> None:
     assert event[COL_DISPLAY_CODE] == "BANKRUPTCY"
     assert event[COL_EVENT_TYPE] == SystemEventType.BANKRUPTCY.value
     assert "Seller_3" in event[COL_MESSAGE]
+
+
+def test_coalesce_bankruptcy_events_groups_routine_mass_exit() -> None:
+    events, seq = coalesce_bankruptcy_events(
+        run_id="r1",
+        tick_id=1,
+        bankrupt_seller_ids=[3, 22, 25, 28, 30, 31],
+        top_seller_ids=frozenset({3}),
+        seq_start=0,
+    )
+    assert seq == 2
+    assert len(events) == 2
+    assert "Seller_3" in events[0][COL_MESSAGE]
+    assert "массово выбыло 5 селлеров" in events[1][COL_MESSAGE]
+    payload = json.loads(str(events[1][COL_PAYLOAD_JSON]))
+    assert payload["aggregated"] is True
+    assert payload["count"] == 5

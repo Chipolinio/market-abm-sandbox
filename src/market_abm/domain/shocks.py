@@ -13,6 +13,7 @@ class ShockType(str, Enum):
     DEMAND_BOOM = "demand_boom"
     PLATFORM_FEE_HIKE = "platform_fee_hike"
     PLATFORM_FEE_CUT = "platform_fee_cut"
+    MARKETPLACE_PROMOTION = "marketplace_promotion"
     SUPPLY_SHOCK = "supply_shock"
 
 

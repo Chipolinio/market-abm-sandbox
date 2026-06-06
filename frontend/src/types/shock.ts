@@ -6,6 +6,7 @@ export type SimulationShockRequest = {
     | "demand_boom"
     | "platform_fee_hike"
     | "platform_fee_cut"
+    | "marketplace_promotion"
     | "supply_shock";
   intensity: number;
   duration_ticks: number;

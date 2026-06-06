@@ -75,10 +75,18 @@ def _validate_products(products_df: pl.DataFrame) -> None:
 
 
 def _softmax_row(utilities: np.ndarray) -> np.ndarray:
-    """Считает вероятности выбора по одной строке полезностей."""
-    shifted = utilities - np.max(utilities)
+    """Считает вероятности выбора по одной строке полезностей (-inf → prob 0)."""
+    finite = np.isfinite(utilities)
+    if not np.any(finite):
+        return np.full(utilities.size, 1.0 / utilities.size, dtype=np.float32)
+    max_u = np.max(utilities[finite])
+    shifted = np.where(finite, utilities - max_u, -np.inf)
     exp_u = np.exp(shifted, dtype=np.float64)
-    return (exp_u / exp_u.sum()).astype(np.float32)
+    exp_u = np.where(finite, exp_u, 0.0)
+    total = exp_u.sum()
+    if total <= 0.0:
+        return np.full(utilities.size, 1.0 / utilities.size, dtype=np.float32)
+    return (exp_u / total).astype(np.float32)
 
 
 def _sample_choice_index(probabilities: np.ndarray, rng: np.random.Generator) -> int:
@@ -131,21 +139,20 @@ def _choose_one_buyer(
     outside_utility_bias: float,
 ) -> tuple[int | None, float]:
     """Выбирает один оффер для покупателя или возвращает отказ от покупки."""
-    n_products = products_df.height
-    k = min(config.max_products_per_choice_set, n_products)
-    product_indices = rng.choice(n_products, size=k, replace=False)
+    budget = float(buyer_row[COL_BUDGET])
+    all_prices = products_df[COL_PRICE].to_numpy()
+    affordable_indices = np.flatnonzero(all_prices <= budget)
+    if affordable_indices.size == 0:
+        return None, 1.0
+
+    k = min(config.max_products_per_choice_set, affordable_indices.size)
+    product_indices = rng.choice(affordable_indices, size=k, replace=False)
 
     subset = products_df.gather(product_indices.astype(np.uint32).tolist())
     prices = subset[COL_PRICE].to_numpy()
-    budgets = float(buyer_row[COL_BUDGET])
-    affordable_mask = prices <= budgets
-    if not np.any(affordable_mask):
-        return None, 1.0
-
-    prices = prices[affordable_mask]
-    delivery = subset[COL_DELIVERY_DAYS].to_numpy()[affordable_mask]
-    ratings = subset[COL_RATING_VALUE].to_numpy()[affordable_mask]
-    listing_ids = subset[COL_LISTING_ID].to_numpy()[affordable_mask]
+    delivery = subset[COL_DELIVERY_DAYS].to_numpy()
+    ratings = subset[COL_RATING_VALUE].to_numpy()
+    listing_ids = subset[COL_LISTING_ID].to_numpy()
 
     beta_price = float(buyer_row[COL_BETA_PRICE])
     beta_delivery = float(buyer_row[COL_BETA_DELIVERY])
@@ -159,6 +166,9 @@ def _choose_one_buyer(
         product_utils = _compute_utilities_numpy(
             prices, delivery, ratings, beta_price, beta_delivery, beta_rating
         )
+
+    # Budget constraint: price > budget → probability strictly 0 (outside option only).
+    product_utils = np.where(prices <= budget, product_utils, -np.inf)
 
     utilities = np.concatenate(
         [product_utils, np.array([outside_utility_bias], dtype=np.float32)]

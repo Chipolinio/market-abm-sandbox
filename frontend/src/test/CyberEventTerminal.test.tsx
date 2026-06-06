@@ -106,6 +106,6 @@ describe("CyberEventTerminal", () => {
 
     const rendered = screen.getAllByTestId("cyber-log-line");
     expect(rendered).toHaveLength(1);
-    expect(rendered[0]?.textContent).toContain("Массовое выбывание алгоритмов (4 игроков)");
+    expect(rendered[0]?.textContent).toContain("Из симуляции массово выбыло 4 селлеров");
   });
 });

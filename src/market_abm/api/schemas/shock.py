@@ -12,6 +12,7 @@ class SimulationShockRequest(BaseModel):
         "demand_boom",
         "platform_fee_hike",
         "platform_fee_cut",
+        "marketplace_promotion",
         "supply_shock",
     ]
     intensity: float = Field(default=1.0, gt=0.0, le=3.0)
