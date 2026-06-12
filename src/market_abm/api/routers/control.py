@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import queue
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,41 @@ async def _enqueue_shock(shock_queue: Any, command: ShockCommand) -> int:
             status_code=429,
             detail="Shock queue is full. Worker is busy processing previous shocks.",
         )
+
+
+def _merge_start_pending(
+    artifacts_dir: Path,
+    body: SimulationStartRequest,
+    *,
+    explicit_fields: frozenset[str],
+) -> None:
+    """
+    Записывает population overlay для worker bootstrap.
+    Явные поля из JSON тела /start перетирают configure; неявные дефолты Pydantic — нет.
+    """
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    pending_path = artifacts_dir / "pending_session.json"
+    existing: dict[str, object] = {}
+    if pending_path.is_file():
+        try:
+            loaded = json.loads(pending_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+
+    payload = dict(existing)
+    if "n_buyers" in explicit_fields:
+        payload["n_buyers"] = body.n_buyers
+    elif "n_buyers" not in payload:
+        payload["n_buyers"] = body.n_buyers
+
+    if "n_sellers" in explicit_fields:
+        payload["n_sellers"] = body.n_sellers
+    elif "n_sellers" not in payload:
+        payload["n_sellers"] = body.n_sellers
+
+    pending_path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 async def _enqueue_command(cmd_queue: Any, command: WorkerCommand) -> None:
@@ -146,9 +182,18 @@ async def get_session_configure(
 
 @router.post("/start", status_code=202)
 async def start_simulation(
-    body: SimulationStartRequest = SimulationStartRequest(),
+    request: Request,
     worker: Any = Depends(_get_worker),
 ) -> dict[str, str]:
+    try:
+        raw_body = await request.json()
+    except json.JSONDecodeError:
+        raw_body = {}
+    if not isinstance(raw_body, dict):
+        raw_body = {}
+    body = SimulationStartRequest.model_validate(raw_body)
+    explicit_fields = frozenset(raw_body.keys())
+
     state: WorkerState = worker.state
 
     if state == WorkerState.RUNNING:
@@ -164,6 +209,9 @@ async def start_simulation(
                 "to start a new session."
             ),
         )
+
+    artifacts_dir = Path(getattr(worker, "_artifacts_dir", "runs/default"))
+    _merge_start_pending(artifacts_dir, body, explicit_fields=explicit_fields)
 
     start_cmd = (
         WorkerCommand.START_FORCE_CLEAR

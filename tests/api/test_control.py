@@ -3,6 +3,7 @@
 # asyncio.to_thread тестируется через инжектирование реального Queue (sync → async bridge).
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import tempfile
 from pathlib import Path
@@ -163,6 +164,68 @@ def test_start_response_body_contains_state(idle_worker: MagicMock) -> None:
     resp = client.post("/api/v1/simulation/start")
     body = resp.json()
     assert "state" in body or "message" in body
+
+
+def test_post_start_writes_pending_population(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    resp = client.post(
+        "/api/v1/simulation/start",
+        json={"n_buyers": 100, "n_sellers": 20},
+    )
+    assert resp.status_code == 202
+
+    pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
+    assert pending_path.is_file()
+    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending["n_buyers"] == 100
+    assert pending["n_sellers"] == 20
+
+
+def test_post_start_preserves_configure_n_buyers_when_not_in_body(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    client.post(
+        "/api/v1/simulation/configure",
+        json={
+            "n_buyers": 5000,
+            "seller_mix": {
+                "catboost_pct": 0.4,
+                "rule_based_pct": 0.35,
+                "basic_pct": 0.25,
+            },
+        },
+    )
+    client.post("/api/v1/simulation/start", json={"force_clear": True})
+
+    pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
+    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending["n_buyers"] == 5000
+
+
+def test_post_start_merges_with_existing_configure(idle_worker: MagicMock) -> None:
+    client = _make_client(idle_worker)
+    client.post(
+        "/api/v1/simulation/configure",
+        json={
+            "n_buyers": 8000,
+            "seller_mix": {
+                "catboost_pct": 0.4,
+                "rule_based_pct": 0.35,
+                "basic_pct": 0.25,
+            },
+            "seed": 7,
+        },
+    )
+    client.post(
+        "/api/v1/simulation/start",
+        json={"n_buyers": 100, "n_sellers": 25},
+    )
+
+    pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
+    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+    assert pending["n_buyers"] == 100
+    assert pending["n_sellers"] == 25
+    assert pending["seed"] == 7
+    assert pending["seller_mix"]["catboost_pct"] == pytest.approx(0.4)
 
 
 def test_pause_from_running_returns_202(running_worker: MagicMock) -> None:

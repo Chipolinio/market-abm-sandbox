@@ -77,7 +77,7 @@ export type UseDashboardSeriesResult = {
 
 /** noop-step воркер шлёт миллионы тиков/сек — не засоряем графики. */
 const NOOP_TICK_JUMP_THRESHOLD = 1000;
-const LIVE_SYNC_MS = 2_500;
+const LIVE_SYNC_MS = 1_000;
 
 function isLikelyStubPayload(payload: TickStreamPayload): boolean {
   const summary = payload.market_summary;

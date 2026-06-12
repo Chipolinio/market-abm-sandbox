@@ -56,22 +56,46 @@ def _consume_pending_session(run_root: Path) -> dict[str, object] | None:
     return pending
 
 
+def _population_from_pending(
+    pending: dict[str, object] | None,
+    *,
+    run_root: Path | None = None,
+) -> tuple[int, int, int]:
+    """Возвращает (n_buyers, n_sellers, seed); pending приоритетнее env defaults."""
+    n_buyers = int(os.environ.get("WORKER_N_BUYERS", "300"))
+    n_sellers = int(os.environ.get("WORKER_N_SELLERS", "30"))
+    seed = _WORKER_SEED
+
+    source = pending
+    if source is None and run_root is not None:
+        source = _read_pending_session(run_root)
+
+    if source is not None:
+        raw_buyers = source.get("n_buyers")
+        if isinstance(raw_buyers, int):
+            n_buyers = raw_buyers
+        raw_sellers = source.get("n_sellers")
+        if isinstance(raw_sellers, int):
+            n_sellers = raw_sellers
+        raw_seed = source.get("seed")
+        if isinstance(raw_seed, int):
+            seed = raw_seed
+
+    return n_buyers, n_sellers, seed
+
+
 def _worker_n_buyers(run_root: Path | None = None) -> int:
-    if run_root is not None:
-        pending = _read_pending_session(run_root)
-        if pending is not None:
-            n_buyers = pending.get("n_buyers")
-            if isinstance(n_buyers, int):
-                return n_buyers
-    return int(os.environ.get("WORKER_N_BUYERS", "300"))
+    n_buyers, _, _ = _population_from_pending(None, run_root=run_root)
+    return n_buyers
 
 
-def _worker_n_sellers() -> int:
-    return int(os.environ.get("WORKER_N_SELLERS", "30"))
+def _worker_n_sellers(run_root: Path | None = None) -> int:
+    _, n_sellers, _ = _population_from_pending(None, run_root=run_root)
+    return n_sellers
 
 
 def _worker_run_config(run_root: Path) -> SimulationRunConfig:
-    n_buyers = _worker_n_buyers(run_root)
+    n_buyers, _, _ = _population_from_pending(None, run_root=run_root)
     # ChoiceModelConfig: buyers_batch_size gt=100 (config/simulation.py).
     buyers_batch_size = min(max(n_buyers, 101), 300)
     return SimulationRunConfig(
@@ -81,6 +105,7 @@ def _worker_run_config(run_root: Path) -> SimulationRunConfig:
             engine="numpy_softmax",
             max_products_per_choice_set=50,
             buyers_batch_size=buyers_batch_size,
+            outside_utility_bias=-100.0,
             outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
         ),
         repricing=RepricingConfig.default_market(),
@@ -152,20 +177,27 @@ class LiveSimulationSession:
 
     def _bootstrap_population(self) -> None:
         pending = _consume_pending_session(self._run_root)
-        if pending is not None and isinstance(pending.get("seed"), int):
-            seed = int(pending["seed"])
-        else:
-            seed = _WORKER_SEED
+        n_buyers, n_sellers, seed = _population_from_pending(pending)
+
+        buyers_batch_size = min(max(n_buyers, 101), 300)
+        if self._config.choice.buyers_batch_size != buyers_batch_size:
+            self._config = self._config.model_copy(
+                update={
+                    "choice": self._config.choice.model_copy(
+                        update={"buyers_batch_size": buyers_batch_size},
+                    ),
+                },
+            )
 
         self._run_root.mkdir(parents=True, exist_ok=True)
         for sub in ("transactions", "products_snapshots", "sellers_state", "system_events"):
             (self._run_root / sub).mkdir(parents=True, exist_ok=True)
 
         self._buyers_df = generate_buyers(
-            BuyerPopulationConfig.default_market(n_buyers=_worker_n_buyers(self._run_root), seed=seed)
+            BuyerPopulationConfig.default_market(n_buyers=n_buyers, seed=seed)
         )
         self._sellers_df = generate_sellers(
-            SellerPopulationConfig.default_market(n_sellers=_worker_n_sellers(), seed=seed)
+            SellerPopulationConfig.default_market(n_sellers=n_sellers, seed=seed)
         )
         listings = initialize_listings(
             self._sellers_df,

@@ -16,10 +16,18 @@ type Props = {
 };
 
 export function GmvChart({ data }: Props) {
-  if (data.length === 0 || !hasPlottableGmvData(data)) {
+  if (data.length === 0) {
     return (
       <p className="flex h-full items-center justify-center text-xs italic text-slate-500">
         Ожидание данных GMV…
+      </p>
+    );
+  }
+
+  if (!hasPlottableGmvData(data)) {
+    return (
+      <p className="flex h-full items-center justify-center text-xs italic text-slate-500">
+        Нет оборота за выбранный период (тики: {data[data.length - 1]?.tick_id ?? 0})…
       </p>
     );
   }

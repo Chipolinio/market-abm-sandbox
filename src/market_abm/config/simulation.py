@@ -33,11 +33,15 @@ class ChoiceModelConfig(BaseModel):
 
     @classmethod
     def default_segment_biases(cls) -> dict[str, float]:
-        """Стартовые bias по сегменту ПВЗ для калибровки отказа от покупки."""
+        """
+        Bias outside-option в шкале utility (β·price + …).
+        Должен быть существенно ниже типичной utility карточки (~−30…−80),
+        иначе softmax всегда выбирает отказ и GMV остаётся нулевым.
+        """
         return {
-            "rich": -2.5,
-            "standard": -1.5,
-            "low": -0.5,
+            "rich": -120.0,
+            "standard": -100.0,
+            "low": -80.0,
         }
 
 
