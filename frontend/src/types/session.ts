@@ -8,6 +8,7 @@ export type SellerMixConfig = {
 
 export type SessionConfigureRequest = {
   n_buyers: number;
+  n_sellers: number;
   seller_mix: SellerMixConfig;
   seed?: number | null;
 };
@@ -15,4 +16,5 @@ export type SessionConfigureRequest = {
 export type SessionConfigureResponse = {
   status: string;
   n_buyers: number;
+  n_sellers: number;
 };

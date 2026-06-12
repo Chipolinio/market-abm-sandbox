@@ -19,6 +19,7 @@ class SellerMixConfig(BaseModel):
 
 class SessionConfigureRequest(BaseModel):
     n_buyers: int = Field(ge=100, le=10_000_000)
+    n_sellers: int = Field(default=50, gt=0, le=1000)
     seller_mix: SellerMixConfig
     seed: int | None = None
 
@@ -26,3 +27,4 @@ class SessionConfigureRequest(BaseModel):
 class SessionConfigureResponse(BaseModel):
     status: str = "accepted"
     n_buyers: int
+    n_sellers: int

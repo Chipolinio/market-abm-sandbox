@@ -27,6 +27,7 @@ describe("EnvironmentConfigurator", () => {
   beforeEach(() => {
     fetchSessionConfigure.mockResolvedValue({
       n_buyers: 10_000,
+      n_sellers: 50,
       seller_mix: { catboost_pct: 0.4, rule_based_pct: 0.35, basic_pct: 0.25 },
     });
   });
@@ -65,6 +66,7 @@ describe("EnvironmentConfigurator", () => {
 
     expect(configureSession).toHaveBeenCalledWith({
       n_buyers: 10_000,
+      n_sellers: 50,
       seller_mix: {
         catboost_pct: 0.4,
         rule_based_pct: 0.35,

@@ -153,11 +153,12 @@ async def configure_session(
     pending_path = artifacts_dir / "pending_session.json"
     pending_path.write_text(body.model_dump_json(), encoding="utf-8")
 
-    return SessionConfigureResponse(n_buyers=body.n_buyers)
+    return SessionConfigureResponse(n_buyers=body.n_buyers, n_sellers=body.n_sellers)
 
 
 _DEFAULT_SESSION_CONFIGURE = SessionConfigureRequest(
     n_buyers=10_000,
+    n_sellers=50,
     seller_mix=SellerMixConfig(
         catboost_pct=0.4,
         rule_based_pct=0.35,

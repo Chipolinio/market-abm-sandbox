@@ -101,8 +101,7 @@ def test_a1_l2_t2_start_request_population_size(tmp_path: Path) -> None:
 
 def test_a1_l2_t3_configure_overlay_manifest_reflects_slider_n_buyers(tmp_path: Path) -> None:
     """
-    Контракт фронта: POST /configure (слайдер n_buyers) → pending без n_sellers.
-    После POST /start({force_clear}) merge добавляет n_sellers default.
+    Контракт фронта: POST /configure сохраняет n_buyers и n_sellers в pending.
     """
     session = _run_first_tick(
         tmp_path,

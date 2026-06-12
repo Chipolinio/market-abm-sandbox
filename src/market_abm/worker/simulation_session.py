@@ -73,14 +73,14 @@ def _population_from_pending(
 
     if source is not None:
         raw_buyers = source.get("n_buyers")
-        if isinstance(raw_buyers, int):
-            n_buyers = raw_buyers
+        if isinstance(raw_buyers, (int, float)) and not isinstance(raw_buyers, bool):
+            n_buyers = int(raw_buyers)
         raw_sellers = source.get("n_sellers")
-        if isinstance(raw_sellers, int):
-            n_sellers = raw_sellers
+        if isinstance(raw_sellers, (int, float)) and not isinstance(raw_sellers, bool):
+            n_sellers = int(raw_sellers)
         raw_seed = source.get("seed")
-        if isinstance(raw_seed, int):
-            seed = raw_seed
+        if isinstance(raw_seed, (int, float)) and not isinstance(raw_seed, bool):
+            seed = int(raw_seed)
 
     return n_buyers, n_sellers, seed
 

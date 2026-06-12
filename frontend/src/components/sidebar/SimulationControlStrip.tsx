@@ -10,6 +10,7 @@ import {
 } from "@/api/simulation";
 import type { WorkerState } from "@/api/types";
 import { MCK_BUTTON } from "@/styles/mckinsey";
+import { resolveSessionConfig } from "@/utils/sessionConfigStorage";
 
 export type SimulationAction = "start" | "pause" | "step" | "reset";
 
@@ -38,14 +39,18 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
     }
   };
 
-  const onStart = () =>
-    run(
+  const onStart = () => {
+    const { n_buyers, n_sellers } = resolveSessionConfig();
+    return run(
       () =>
         startSimulation({
+          n_buyers,
+          n_sellers,
           force_clear: isTerminalState(state),
         }),
       "start",
     );
+  };
 
   return (
     <div className="flex flex-col gap-2">

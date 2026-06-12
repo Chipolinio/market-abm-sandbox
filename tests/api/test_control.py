@@ -199,6 +199,7 @@ def test_post_start_preserves_configure_n_buyers_when_not_in_body(idle_worker: M
     pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
     pending = json.loads(pending_path.read_text(encoding="utf-8"))
     assert pending["n_buyers"] == 5000
+    assert pending["n_sellers"] == 50
 
 
 def test_post_start_merges_with_existing_configure(idle_worker: MagicMock) -> None:
@@ -378,6 +379,7 @@ def test_configure_accepts_session_when_idle(idle_worker: MagicMock) -> None:
     assert resp.status_code == 202
     assert resp.json()["status"] == "accepted"
     assert resp.json()["n_buyers"] == 5000
+    assert resp.json()["n_sellers"] == 50
 
     pending_path = Path(idle_worker._artifacts_dir) / "pending_session.json"
     assert pending_path.is_file()
@@ -389,6 +391,7 @@ def test_get_configure_returns_defaults_when_no_pending(idle_worker: MagicMock) 
     assert resp.status_code == 200
     body = resp.json()
     assert body["n_buyers"] == 10_000
+    assert body["n_sellers"] == 50
     assert body["seller_mix"]["catboost_pct"] == pytest.approx(0.4)
 
 

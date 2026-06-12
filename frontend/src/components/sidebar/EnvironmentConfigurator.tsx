@@ -3,15 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiError } from "@/api/client";
 import { configureSession, fetchSessionConfigure } from "@/api/simulation";
 import type { SessionConfigureRequest } from "@/types/session";
+import {
+  DEFAULT_SESSION_CONFIG,
+  readSessionConfig,
+  writeSessionConfig,
+} from "@/utils/sessionConfigStorage";
 
 type Props = {
   disabled: boolean;
 };
-
-const DEFAULT_N_BUYERS = 10_000;
-const DEFAULT_CATBOOST_PCT = 40;
-const DEFAULT_RULE_BASED_PCT = 35;
-const SESSION_CONFIG_STORAGE_KEY = "market_abm_session_config";
 
 function pctToRatio(value: number): number {
   return Math.round(value) / 100;
@@ -25,39 +25,22 @@ function applyConfigToState(
   config: SessionConfigureRequest,
   setters: {
     setNBuyers: (value: number) => void;
+    setNSellers: (value: number) => void;
     setCatboostPct: (value: number) => void;
     setRuleBasedPct: (value: number) => void;
   },
 ): void {
   setters.setNBuyers(config.n_buyers);
+  setters.setNSellers(config.n_sellers ?? DEFAULT_SESSION_CONFIG.n_sellers);
   setters.setCatboostPct(ratioToPct(config.seller_mix.catboost_pct));
   setters.setRuleBasedPct(ratioToPct(config.seller_mix.rule_based_pct));
 }
 
-function readCachedConfig(): SessionConfigureRequest | null {
-  try {
-    const raw = localStorage.getItem(SESSION_CONFIG_STORAGE_KEY);
-    if (raw === null) {
-      return null;
-    }
-    return JSON.parse(raw) as SessionConfigureRequest;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedConfig(config: SessionConfigureRequest): void {
-  try {
-    localStorage.setItem(SESSION_CONFIG_STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    // ignore quota / private mode
-  }
-}
-
 export function EnvironmentConfigurator({ disabled }: Props) {
-  const [nBuyers, setNBuyers] = useState(DEFAULT_N_BUYERS);
-  const [catboostPct, setCatboostPct] = useState(DEFAULT_CATBOOST_PCT);
-  const [ruleBasedPct, setRuleBasedPct] = useState(DEFAULT_RULE_BASED_PCT);
+  const [nBuyers, setNBuyers] = useState(DEFAULT_SESSION_CONFIG.n_buyers);
+  const [nSellers, setNSellers] = useState(DEFAULT_SESSION_CONFIG.n_sellers);
+  const [catboostPct, setCatboostPct] = useState(40);
+  const [ruleBasedPct, setRuleBasedPct] = useState(35);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -66,9 +49,9 @@ export function EnvironmentConfigurator({ disabled }: Props) {
     let cancelled = false;
 
     const load = async () => {
-      const cached = readCachedConfig();
+      const cached = readSessionConfig();
       if (cached !== null) {
-        applyConfigToState(cached, { setNBuyers, setCatboostPct, setRuleBasedPct });
+        applyConfigToState(cached, { setNBuyers, setNSellers, setCatboostPct, setRuleBasedPct });
       }
 
       try {
@@ -76,8 +59,8 @@ export function EnvironmentConfigurator({ disabled }: Props) {
         if (cancelled) {
           return;
         }
-        applyConfigToState(remote, { setNBuyers, setCatboostPct, setRuleBasedPct });
-        writeCachedConfig(remote);
+        applyConfigToState(remote, { setNBuyers, setNSellers, setCatboostPct, setRuleBasedPct });
+        writeSessionConfig(remote);
       } catch {
         // keep cached / defaults
       }
@@ -109,10 +92,10 @@ export function EnvironmentConfigurator({ disabled }: Props) {
     setBusy(true);
     setError(null);
     setMessage(null);
-    const body: SessionConfigureRequest = { n_buyers: nBuyers, seller_mix: sellerMix };
+    const body: SessionConfigureRequest = { n_buyers: nBuyers, n_sellers: nSellers, seller_mix: sellerMix };
     try {
       await configureSession(body);
-      writeCachedConfig(body);
+      writeSessionConfig(body);
       setMessage("Configuration saved");
     } catch (err) {
       const text =
@@ -137,6 +120,22 @@ export function EnvironmentConfigurator({ disabled }: Props) {
           value={nBuyers}
           disabled={disabled}
           onChange={(e) => setNBuyers(Number(e.target.value))}
+          className="w-full"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-xs text-muted">
+        Sellers: {nSellers.toLocaleString()}
+        <input
+          type="range"
+          role="slider"
+          data-testid="n-sellers-slider"
+          min={5}
+          max={500}
+          step={5}
+          value={nSellers}
+          disabled={disabled}
+          onChange={(e) => setNSellers(Number(e.target.value))}
           className="w-full"
         />
       </label>
