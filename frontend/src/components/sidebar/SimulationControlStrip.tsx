@@ -9,6 +9,7 @@ import {
   stepSimulation,
 } from "@/api/simulation";
 import type { WorkerState } from "@/api/types";
+import { MCK_BUTTON } from "@/styles/mckinsey";
 
 export type SimulationAction = "start" | "pause" | "step" | "reset";
 
@@ -51,7 +52,7 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
+          className={MCK_BUTTON}
           disabled={busy || state === "RUNNING" || state === "FAILED"}
           onClick={() => void onStart()}
         >
@@ -59,7 +60,7 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
         </button>
         <button
           type="button"
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
+          className={MCK_BUTTON}
           disabled={busy || state !== "RUNNING"}
           onClick={() => void run(pauseSimulation, "pause")}
         >
@@ -67,7 +68,7 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
         </button>
         <button
           type="button"
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
+          className={MCK_BUTTON}
           disabled={busy || state !== "PAUSED"}
           onClick={() => void run(stepSimulation, "step")}
         >
@@ -75,14 +76,14 @@ export function SimulationControlStrip({ state, onActionComplete }: Props) {
         </button>
         <button
           type="button"
-          className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm disabled:opacity-50"
+          className={MCK_BUTTON}
           disabled={busy || state === "RUNNING"}
           onClick={() => void run(resetSimulation, "reset")}
         >
           Сброс
         </button>
       </div>
-      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
+      {error !== null ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

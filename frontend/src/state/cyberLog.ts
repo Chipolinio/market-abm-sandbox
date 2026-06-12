@@ -134,13 +134,13 @@ export function collapseCyberLogLines(lines: CyberLogLine[]): CyberLogLine[] {
 
 export function severityClass(line: Pick<CyberLogLine, "severity" | "display_code">): string {
   if (line.severity === "critical" || line.display_code === "FLASH_CRASH") {
-    return "text-red-400";
+    return "text-red-600";
   }
   if (line.severity === "warning" || line.display_code === "PRICING_WAR") {
-    return "text-amber-400";
+    return "text-amber-700";
   }
   if (line.display_code === "TICK_PULSE") {
-    return "text-slate-400";
+    return "text-muted";
   }
-  return "text-green-400";
+  return "text-emerald-700";
 }

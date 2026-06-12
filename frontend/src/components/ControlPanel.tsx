@@ -19,21 +19,21 @@ export function ControlPanel({ workerState, onActionComplete }: ControlPanelProp
   return (
     <>
       <section className="mb-6" data-testid="control-panel-environment">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <h2 className="mb-3 text-xs uppercase tracking-wider text-muted">
           Environment
         </h2>
         <EnvironmentConfigurator disabled={!configurable} />
       </section>
 
       <section className="mb-6" data-testid="control-panel-shocks">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        <h2 className="mb-3 text-xs uppercase tracking-wider text-muted">
           Macro Shocks
         </h2>
         <ShocksControlPanel />
       </section>
 
       <section
-        className="border-t border-slate-800 pt-4"
+        className="border-t border-border pt-4"
         data-testid="control-panel-simulation"
       >
         <SimulationControlStrip state={workerState} onActionComplete={onActionComplete} />

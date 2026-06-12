@@ -10,19 +10,9 @@ import {
 } from "recharts";
 
 import type { ListingWideRow } from "@/state/types";
+import { MCK_SERIES_COLORS } from "@/styles/chartPalette";
 
-export const DENSE_LINE_COLORS = [
-  "#1565c0",
-  "#2e7d32",
-  "#c62828",
-  "#6a1b9a",
-  "#ef6c00",
-  "#00838f",
-  "#ad1457",
-  "#4527a0",
-  "#558b2f",
-  "#f9a825",
-] as const;
+export const DENSE_LINE_COLORS = MCK_SERIES_COLORS;
 
 type SeriesMeta = {
   dataKey: string;
@@ -46,11 +36,34 @@ export function DenseMultiLineChart({ data, series, emptyMessage, yAxisLabel }: 
   return (
     <ResponsiveContainer width="100%" height={240}>
       <LineChart data={data} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-        <XAxis dataKey="tick_id" tick={{ fontSize: 11 }} />
-        <YAxis tick={{ fontSize: 11 }} label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: "insideLeft" } : undefined} />
-        <Tooltip />
-        <Legend wrapperStyle={{ fontSize: 11 }} />
+        <CartesianGrid horizontal vertical={false} stroke="#F1F5F9" />
+        <XAxis
+          dataKey="tick_id"
+          tick={{ fontSize: 10, fill: "#64748B" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: "#64748B" }}
+          axisLine={false}
+          tickLine={false}
+          label={
+            yAxisLabel
+              ? { value: yAxisLabel, angle: -90, position: "insideLeft", fill: "#64748B", fontSize: 10 }
+              : undefined
+          }
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: "transparent",
+            border: "none",
+            boxShadow: "none",
+            color: "#475569",
+            fontSize: 11,
+            padding: 0,
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 10, color: "#64748B" }} />
         {series.map((s, idx) => (
           <Line
             key={s.dataKey}

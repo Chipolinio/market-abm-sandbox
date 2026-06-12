@@ -38,5 +38,11 @@ class DemandMatrixCellDTO(BaseModel):
 class DemandMatrixResponse(BaseModel):
     run_id: str
     tick_id: int
-    grid_size: int = 10
+    grid_size: int = 3
+    row_count: int = 3
+    col_count: int = 3
+    x_labels: list[str] = Field(default_factory=list)
+    y_labels: list[str] = Field(default_factory=list)
+    axis_x: str = "strategy_type"
+    axis_y: str = "pvd_segment"
     cells: list[DemandMatrixCellDTO] = Field(default_factory=list)

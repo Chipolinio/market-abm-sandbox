@@ -16,24 +16,52 @@ export function logicStatusLabel(status: LogicStatus): string {
 export function logicStatusClass(status: LogicStatus): string {
   switch (status) {
     case "roi_optimization":
-      return "text-emerald-400 border-emerald-800 bg-emerald-950/40";
+      return "text-emerald-800 border-emerald-200 bg-emerald-50";
     case "aggressive_dumping":
-      return "text-red-400 border-red-800 bg-red-950/40";
+      return "text-red-700 border-red-200 bg-red-50";
     case "bankrupt":
-      return "text-zinc-500 border-zinc-700 bg-zinc-900/60";
+      return "text-slate-600 border-slate-200 bg-slate-100";
     default:
-      return "text-cyan-400 border-cyan-800 bg-cyan-950/40";
+      return "text-blue-900 border-blue-200 bg-blue-50";
   }
 }
 
 export function algorithmAvatarClass(algorithm: MarketLeaderRowDTO["algorithm_type"]): string {
   switch (algorithm) {
     case "CB":
-      return "bg-violet-900 text-violet-200 ring-violet-700";
+      return "bg-violet-100 text-violet-800 ring-violet-200";
     case "REPR":
-      return "bg-orange-900 text-orange-200 ring-orange-700";
+      return "bg-teal-100 text-teal-800 ring-teal-200";
     default:
-      return "bg-sky-900 text-sky-200 ring-sky-700";
+      return "bg-blue-100 text-blue-900 ring-blue-200";
+  }
+}
+
+/** Rank stripe + badge for top-3 leaderboard (0 = gold tier). */
+export function sellerRankAccent(rank: number): {
+  stripeClass: string;
+  badgeClass: string;
+  barClass: string;
+} {
+  switch (rank) {
+    case 0:
+      return {
+        stripeClass: "border-l-[#051C2C]",
+        badgeClass: "bg-[#051C2C] text-white",
+        barClass: "bg-[#051C2C]",
+      };
+    case 1:
+      return {
+        stripeClass: "border-l-[#0D9488]",
+        badgeClass: "bg-[#0D9488] text-white",
+        barClass: "bg-[#0D9488]",
+      };
+    default:
+      return {
+        stripeClass: "border-l-[#1E40AF]",
+        badgeClass: "bg-[#1E40AF] text-white",
+        barClass: "bg-[#1E40AF]",
+      };
   }
 }
 

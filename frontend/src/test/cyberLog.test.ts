@@ -131,7 +131,7 @@ describe("severityClass", () => {
         severity: "info",
         display_code: "FLASH_CRASH",
       }),
-    ).toBe("text-red-400");
+    ).toBe("text-red-600");
   });
 
   it("maps_pricing_war_to_amber", () => {
@@ -140,7 +140,7 @@ describe("severityClass", () => {
         severity: "info",
         display_code: "PRICING_WAR",
       }),
-    ).toBe("text-amber-400");
+    ).toBe("text-amber-700");
   });
 
   it("maps_info_to_green", () => {
@@ -149,6 +149,6 @@ describe("severityClass", () => {
         severity: "info",
         display_code: "DEMAND_SHOCK",
       }),
-    ).toBe("text-green-400");
+    ).toBe("text-emerald-700");
   });
 });

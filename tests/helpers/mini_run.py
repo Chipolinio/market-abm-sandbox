@@ -11,8 +11,10 @@ from market_abm.analytics.persist import (
     persist_tick_artifacts,
 )
 from market_abm.analytics.store import AnalyticsStore
+from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
+from market_abm.config.sellers import SellerPopulationConfig
 from market_abm.config.simulation import ChoiceModelConfig
 from market_abm.domain.constants import (
     COL_BUYER_ID,
@@ -30,6 +32,9 @@ from market_abm.domain.constants import (
     TRANSACTIONS_COLUMNS,
     TRANSACTIONS_SCHEMA_DTYPES,
 )
+from market_abm.population.buyers import generate_buyers
+from market_abm.population.sellers import generate_sellers
+from market_abm.simulation.listings import initialize_listings
 
 
 def _run_config(base_dir: Path, *, run_id: str = "default") -> SimulationRunConfig:
@@ -77,17 +82,16 @@ def _products_snapshot(n: int, *, prices: list[float] | None = None) -> pl.DataF
 
 def build_mini_run(base_dir: Path, *, run_id: str = "default") -> Path:
     """
-    Создаёт run_root с manifest и tick_0 parquet.
+    Создаёт run_root с manifest, reference snapshots и tick_0 parquet.
     base_dir — родитель run_id (для Docker: /data/runs → run_root = base_dir/default).
     """
     config = _run_config(base_dir, run_id=run_id)
-    buyers = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(pl.col(COL_BUYER_ID).cast(pl.Int32))
-    sellers = pl.DataFrame({COL_SELLER_ID: [0, 1]}).with_columns(
-        pl.col(COL_SELLER_ID).cast(pl.Int32)
-    )
-    listings = pl.DataFrame({COL_LISTING_ID: [0, 1], COL_SELLER_ID: [0, 1]}).with_columns(
-        pl.col(COL_LISTING_ID).cast(pl.Int32),
-        pl.col(COL_SELLER_ID).cast(pl.Int32),
+    buyers = generate_buyers(BuyerPopulationConfig.default_market(n_buyers=30, seed=1))
+    sellers = generate_sellers(SellerPopulationConfig.default_market(n_sellers=9, seed=1))
+    listings = initialize_listings(
+        sellers,
+        __import__("market_abm.config.repricing", fromlist=["ListingInitConfig"]).ListingInitConfig.default_market(),
+        seed=1,
     )
     ctx = init_run_directory(
         config,
@@ -97,20 +101,42 @@ def build_mini_run(base_dir: Path, *, run_id: str = "default") -> Path:
         listings_df=listings,
         n_ticks=1,
     )
+    rich_buyer = int(
+        buyers.filter(pl.col("pvd_segment").cast(pl.String) == "rich")[COL_BUYER_ID][0]
+    )
+    low_buyer = int(
+        buyers.filter(pl.col("pvd_segment").cast(pl.String) == "low")[COL_BUYER_ID][0]
+    )
+    max_profit_seller = int(
+        sellers.filter(pl.col("strategy_type").cast(pl.String) == "MaxProfit")[COL_SELLER_ID][0]
+    )
+    max_volume_seller = int(
+        sellers.filter(pl.col("strategy_type").cast(pl.String) == "MaxVolume")[COL_SELLER_ID][0]
+    )
+
     tx = _tx_rows(
         [
             {
                 COL_TICK_ID: 0,
-                COL_BUYER_ID: 0,
-                COL_LISTING_ID: 0,
-                COL_SELLER_ID: 0,
+                COL_BUYER_ID: rich_buyer,
+                COL_LISTING_ID: max_profit_seller,
+                COL_SELLER_ID: max_profit_seller,
                 COL_PRICE_PAID: 100.0,
                 COL_UNIT_COST: 20.0,
                 COL_GROSS_MARGIN: 80.0,
             },
+            {
+                COL_TICK_ID: 0,
+                COL_BUYER_ID: low_buyer,
+                COL_LISTING_ID: max_volume_seller,
+                COL_SELLER_ID: max_volume_seller,
+                COL_PRICE_PAID: 50.0,
+                COL_UNIT_COST: 10.0,
+                COL_GROSS_MARGIN: 40.0,
+            },
         ]
     )
-    products = _products_snapshot(2, prices=[100.0, 200.0])
+    products = _products_snapshot(9, prices=[100.0, 200.0] + [80.0] * 7)
     con = open_duckdb_connection(config.persistence)
     try:
         persist_tick_artifacts(

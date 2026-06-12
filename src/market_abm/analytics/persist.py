@@ -2,6 +2,8 @@
 # Базовая идея: один тик — два parquet-файла; manifest обновляется атомарно.
 from __future__ import annotations
 
+from typing import Final
+
 import hashlib
 import json
 import shutil
@@ -15,10 +17,18 @@ import polars as pl
 
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.domain.constants import (
+    COL_BUYER_ID,
+    COL_PVD_SEGMENT,
+    COL_SELLER_ID,
+    COL_STRATEGY_TYPE,
     PRODUCTS_COLUMNS,
     SELLERS_STATE_COLUMNS,
     TRANSACTIONS_COLUMNS,
 )
+
+_REFERENCE_DIR: Final[str] = "reference"
+_REFERENCE_BUYERS_FILE: Final[str] = "buyers.parquet"
+_REFERENCE_SELLERS_FILE: Final[str] = "sellers.parquet"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +97,33 @@ def _write_manifest_atomic(run_root: Path, manifest: dict[str, object]) -> None:
     tmp_path.replace(final_path)
 
 
+def reference_buyers_path(run_root: Path) -> Path:
+    return run_root / _REFERENCE_DIR / _REFERENCE_BUYERS_FILE
+
+
+def reference_sellers_path(run_root: Path) -> Path:
+    return run_root / _REFERENCE_DIR / _REFERENCE_SELLERS_FILE
+
+
+def write_reference_snapshots(
+    run_root: Path,
+    *,
+    buyers_df: pl.DataFrame,
+    sellers_df: pl.DataFrame,
+) -> None:
+    """Статические срезы buyers/sellers для demand-matrix (strategy × pvd_segment)."""
+    ref_dir = run_root / _REFERENCE_DIR
+    ref_dir.mkdir(parents=True, exist_ok=True)
+
+    buyers_df.select(COL_BUYER_ID, COL_PVD_SEGMENT).with_columns(
+        pl.col(COL_PVD_SEGMENT).cast(pl.String).alias(COL_PVD_SEGMENT),
+    ).write_parquet(reference_buyers_path(run_root))
+
+    sellers_df.select(COL_SELLER_ID, COL_STRATEGY_TYPE).with_columns(
+        pl.col(COL_STRATEGY_TYPE).cast(pl.String).alias(COL_STRATEGY_TYPE),
+    ).write_parquet(reference_sellers_path(run_root))
+
+
 def init_run_directory(
     config: SimulationRunConfig,
     *,
@@ -109,6 +146,7 @@ def init_run_directory(
     (run_root / "products_snapshots").mkdir(parents=False, exist_ok=False)
     (run_root / "sellers_state").mkdir(parents=False, exist_ok=False)
     (run_root / "system_events").mkdir(parents=False, exist_ok=False)
+    write_reference_snapshots(run_root, buyers_df=buyers_df, sellers_df=sellers_df)
 
     manifest: dict[str, object] = {
         "run_id": run_id,

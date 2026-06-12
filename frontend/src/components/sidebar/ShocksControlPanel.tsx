@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { ApiError } from "@/api/client";
 import { triggerShock } from "@/api/simulation";
+import { MCK_BUTTON_MD } from "@/styles/mckinsey";
 
 const DEMAND_CRASH_BODY = {
   shock_type: "demand_crash" as const,
@@ -42,7 +43,7 @@ export function ShocksControlPanel() {
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
+        className={MCK_BUTTON_MD}
         disabled={busy}
         onClick={() => void runShock(DEMAND_CRASH_BODY)}
       >
@@ -50,14 +51,14 @@ export function ShocksControlPanel() {
       </button>
       <button
         type="button"
-        className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
+        className={MCK_BUTTON_MD}
         disabled={busy}
         onClick={() => void runShock(MARKETPLACE_PROMOTION_BODY)}
       >
         Принудительная акция маркетплейса
       </button>
-      {message !== null ? <p className="text-xs text-green-400">{message}</p> : null}
-      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
+      {message !== null ? <p className="text-xs text-emerald-700">{message}</p> : null}
+      {error !== null ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

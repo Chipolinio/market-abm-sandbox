@@ -101,7 +101,7 @@ export default function App() {
     <>
       {showFailed ? (
         <div
-          className="fixed left-0 right-0 top-0 z-50 bg-red-950 px-4 py-2 text-center text-sm text-red-200"
+          className="fixed left-0 right-0 top-0 z-50 border-b border-red-200 bg-red-50 px-4 py-2 text-center text-sm text-red-800"
           role="alert"
         >
           Simulation failed: {status?.last_error ?? "see worker logs"}

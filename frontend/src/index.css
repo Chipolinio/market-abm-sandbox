@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+@theme {
+  /* McKinsey corporate dashboard */
+  --color-canvas: #ffffff;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-foreground: #1e293b;
+  --color-muted: #64748b;
+  --color-muted-strong: #475569;
+  --color-accent: #051c2c;
+  --color-grid-line: #f1f5f9;
+  --color-matrix-substrate: #f8fafc;
+  --color-matrix-fill: #1e3a8a;
+  --color-quantile-line: #94a3b8;
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
 *,
 *::before,
 *::after {
@@ -15,6 +33,18 @@ body,
 
 body {
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--font-sans);
+  color: var(--color-foreground);
+  background-color: var(--color-canvas);
   -webkit-font-smoothing: antialiased;
+}
+
+.chart-empty {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--color-muted);
 }

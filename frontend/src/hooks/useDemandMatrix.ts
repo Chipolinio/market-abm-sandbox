@@ -6,6 +6,10 @@ import type { DemandMatrixCellDTO } from "@/types/demandMatrix";
 export type UseDemandMatrixResult = {
   cells: DemandMatrixCellDTO[];
   gridSize: number;
+  rowCount: number;
+  colCount: number;
+  xLabels: string[];
+  yLabels: string[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -23,7 +27,11 @@ export function useDemandMatrix(
   pollLive = false,
 ): UseDemandMatrixResult {
   const [cells, setCells] = useState<DemandMatrixCellDTO[]>([]);
-  const [gridSize, setGridSize] = useState(10);
+  const [gridSize, setGridSize] = useState(3);
+  const [rowCount, setRowCount] = useState(3);
+  const [colCount, setColCount] = useState(3);
+  const [xLabels, setXLabels] = useState<string[]>([]);
+  const [yLabels, setYLabels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tickIdRef = useRef(tickId);
@@ -46,6 +54,10 @@ export function useDemandMatrix(
       }
       setCells(response.cells);
       setGridSize(response.grid_size);
+      setRowCount(response.row_count);
+      setColCount(response.col_count);
+      setXLabels(response.x_labels);
+      setYLabels(response.y_labels);
       setError(null);
     } catch (err) {
       if (!aliveRef.current) {
@@ -82,5 +94,15 @@ export function useDemandMatrix(
     };
   }, [enabled, pollLive, refresh]);
 
-  return { cells, gridSize, loading, error, refresh };
+  return {
+    cells,
+    gridSize,
+    rowCount,
+    colCount,
+    xLabels,
+    yLabels,
+    loading,
+    error,
+    refresh,
+  };
 }

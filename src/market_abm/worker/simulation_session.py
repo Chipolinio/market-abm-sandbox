@@ -16,6 +16,7 @@ from market_abm.analytics.persist import (
     _write_manifest_atomic,
     clear_run_tick_artifacts,
     open_duckdb_connection,
+    write_reference_snapshots,
 )
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.repricing import ListingInitConfig, RepricingConfig
@@ -213,6 +214,11 @@ class LiveSimulationSession:
             sellers_df=self._sellers_df,
         )
         self._extended_state = init_extended_state(self._sellers_df)
+        write_reference_snapshots(
+            self._run_root,
+            buyers_df=self._buyers_df,
+            sellers_df=self._sellers_df,
+        )
         self._write_initial_manifest(n_ticks=1_000_000)
 
     def _tick_artifacts_exist(self, tick_id: int) -> bool:

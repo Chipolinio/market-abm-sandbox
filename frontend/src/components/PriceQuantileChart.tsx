@@ -12,8 +12,13 @@ import {
 
 import { hasPlottablePriceData } from "@/state/chartSeries";
 import type { PriceChartRow } from "@/state/types";
+import { MCK_CHART } from "@/styles/chartPalette";
 
 export const EMPTY_PRICE_MESSAGE = "Ожидание данных симуляции…";
+
+const AXIS_TICK = { fontSize: 10, fill: "#64748B" };
+const QUANTILE_STROKE = "#94A3B8";
+const BAND_FILL = "rgba(241, 245, 249, 0.5)";
 
 type Props = {
   data: PriceChartRow[];
@@ -31,7 +36,7 @@ function warnIfQuantileOrderBroken(row: PriceChartRow): void {
 export function PriceQuantileChart({ data }: Props) {
   if (data.length === 0 || !hasPlottablePriceData(data)) {
     return (
-      <p className="flex h-full items-center justify-center text-xs italic text-slate-500">
+      <p className="flex h-full items-center justify-center text-xs italic text-muted">
         {EMPTY_PRICE_MESSAGE}
       </p>
     );
@@ -42,75 +47,92 @@ export function PriceQuantileChart({ data }: Props) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+        <CartesianGrid horizontal vertical={false} stroke="#F1F5F9" />
         <XAxis
           dataKey="tick_id"
-          tick={{ fontSize: 10, fill: "#94a3b8" }}
-          stroke="#475569"
-          label={{ value: "Тик", position: "insideBottom", offset: -2, fill: "#94a3b8", fontSize: 10 }}
+          tick={AXIS_TICK}
+          axisLine={false}
+          tickLine={false}
+          label={{
+            value: "Тик",
+            position: "insideBottom",
+            offset: -2,
+            fill: "#64748B",
+            fontSize: 10,
+          }}
         />
         <YAxis
-          tick={{ fontSize: 10, fill: "#94a3b8" }}
-          stroke="#475569"
+          tick={AXIS_TICK}
+          axisLine={false}
+          tickLine={false}
           domain={["auto", "auto"]}
-          label={{ value: "Цена", angle: -90, position: "insideLeft", fill: "#94a3b8", fontSize: 10 }}
+          label={{
+            value: "Цена",
+            angle: -90,
+            position: "insideLeft",
+            fill: "#64748B",
+            fontSize: 10,
+          }}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: "#0f172a",
-            border: "1px solid #334155",
+            backgroundColor: "transparent",
+            border: "none",
+            boxShadow: "none",
+            color: "#475569",
             fontSize: 11,
+            padding: 0,
           }}
         />
-        <Legend wrapperStyle={{ fontSize: 10 }} />
+        <Legend wrapperStyle={{ fontSize: 10, color: "#64748B" }} />
         <Area
           type="monotone"
           dataKey="p90"
           stackId="band"
           stroke="none"
-          fill="#0ea5e9"
-          fillOpacity={0.25}
+          fill={BAND_FILL}
+          fillOpacity={1}
           isAnimationActive={false}
           dot={false}
-          name="p90 (90%)"
+          legendType="none"
         />
         <Area
           type="monotone"
           dataKey="p10"
           stackId="band"
           stroke="none"
-          fill="#0f172a"
+          fill="#FFFFFF"
           fillOpacity={1}
           isAnimationActive={false}
           dot={false}
-          name="p10 маска"
+          legendType="none"
         />
         <Line
           type="monotone"
           dataKey="p50"
-          stroke="#38bdf8"
-          strokeWidth={2}
+          stroke={MCK_CHART.navy}
+          strokeWidth={2.5}
           isAnimationActive={false}
           dot={false}
-          name="p50 (медиана)"
+          name="P50 (Медиана)"
         />
         <Line
           type="monotone"
           dataKey="p10"
-          stroke="#64748b"
-          strokeDasharray="4 4"
+          stroke={QUANTILE_STROKE}
+          strokeWidth={1}
           isAnimationActive={false}
           dot={false}
-          name="p10"
+          name="P10 (Мин)"
         />
         <Line
           type="monotone"
           dataKey="p90"
-          stroke="#64748b"
-          strokeDasharray="4 4"
+          stroke={QUANTILE_STROKE}
+          strokeWidth={1}
           isAnimationActive={false}
           dot={false}
-          name="p90"
+          name="P90 (Макс)"
         />
       </ComposedChart>
     </ResponsiveContainer>

@@ -10,7 +10,7 @@ export const TabsList = forwardRef<
 >(({ className = "", ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={`inline-flex h-9 items-center rounded border border-slate-700 bg-slate-900 p-1 ${className}`.trim()}
+    className={`inline-flex h-9 items-center gap-1 border-b border-border ${className}`.trim()}
     {...props}
   />
 ));
@@ -22,7 +22,7 @@ export const TabsTrigger = forwardRef<
 >(({ className = "", ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
-    className={`rounded px-3 py-1 text-sm text-slate-400 data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 ${className}`.trim()}
+    className={`px-3 py-1.5 text-sm text-muted hover:text-accent data-[state=active]:border-b-2 data-[state=active]:border-accent data-[state=active]:text-accent ${className}`.trim()}
     {...props}
   />
 ));

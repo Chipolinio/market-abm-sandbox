@@ -71,10 +71,10 @@ describe("TickerRibbon", () => {
   });
 
   it.each([
-    ["open", "bg-green-400"],
-    ["connecting", "bg-amber-400"],
-    ["error", "bg-red-400"],
-    ["closed", "bg-slate-400"],
+    ["open", "bg-emerald-600"],
+    ["connecting", "bg-amber-600"],
+    ["error", "bg-red-600"],
+    ["closed", "bg-muted"],
   ] as const)("connection_indicator_%s_uses_%s", (connectionState, expectedClass) => {
     render(
       <TickerRibbon metrics={mockMetrics} connectionState={connectionState} workerState="IDLE" />,

@@ -116,8 +116,9 @@ def test_market_leaders_sorted_by_working_capital() -> None:
     assert raw["leaders"][0]["seller_id"] == 1
 
 
-def test_demand_matrix_uses_demand_index_from_products_snapshot() -> None:
+def test_demand_matrix_strategy_by_pvd_segment_from_transactions() -> None:
     from market_abm.analytics.leaders import query_demand_matrix
+    from market_abm.domain.constants import DEMAND_MATRIX_PVD_ORDER, DEMAND_MATRIX_STRATEGY_ORDER
 
     with tempfile.TemporaryDirectory() as tmp:
         run_root = build_mini_run(Path(tmp))
@@ -127,7 +128,9 @@ def test_demand_matrix_uses_demand_index_from_products_snapshot() -> None:
         finally:
             store.close()
 
-    assert len(raw["cells"]) == 100
+    assert raw["axis_x"] == "strategy_type"
+    assert raw["y_labels"] == list(DEMAND_MATRIX_PVD_ORDER)
+    assert len(raw["cells"]) == len(DEMAND_MATRIX_STRATEGY_ORDER) * len(DEMAND_MATRIX_PVD_ORDER)
     densities = [cell["density"] for cell in raw["cells"]]
     assert max(densities) > 0.0
 

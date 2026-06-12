@@ -6,13 +6,13 @@ import { formatCompactGmv } from "@/utils/formatCompactGmv";
 function connectionDotClass(connectionState: TickerRibbonProps["connectionState"]): string {
   switch (connectionState) {
     case "open":
-      return "bg-green-400";
+      return "bg-emerald-600";
     case "connecting":
-      return "bg-amber-400";
+      return "bg-amber-600";
     case "error":
-      return "bg-red-400";
+      return "bg-red-600";
     default:
-      return "bg-slate-400";
+      return "bg-muted";
   }
 }
 
@@ -26,27 +26,27 @@ function priceTrendGlyph(delta: number): string {
   return "";
 }
 
-type MetricCardProps = {
+type MetricItemProps = {
   children: ReactNode;
   className?: string;
 };
 
-function MetricCard({ children, className }: MetricCardProps) {
+function MetricItem({ children, className }: MetricItemProps) {
   return (
     <div
       data-testid="ticker-card"
-      className={`rounded border border-slate-700 bg-slate-800/50 px-3 py-1.5 text-sm${className ? ` ${className}` : ""}`}
+      className={`text-sm text-foreground${className ? ` ${className}` : ""}`}
     >
       {children}
     </div>
   );
 }
 
-function SkeletonCard() {
+function SkeletonItem() {
   return (
     <div
       data-testid="ticker-skeleton"
-      className="h-8 animate-pulse rounded border border-slate-700 bg-slate-800/50 px-3 py-1.5"
+      className="h-5 w-24 animate-pulse bg-slate-100"
     />
   );
 }
@@ -58,7 +58,7 @@ export function TickerRibbon({
   flashCrashActive = false,
 }: TickerRibbonProps) {
   return (
-    <div className="flex w-full flex-row items-center gap-4">
+    <div className="flex w-full flex-row items-center gap-6">
       <span
         data-testid="connection-dot"
         className={`inline-block h-2 w-2 shrink-0 rounded-full ${connectionDotClass(connectionState)}`}
@@ -67,24 +67,24 @@ export function TickerRibbon({
 
       {metrics === null ? (
         <>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
+          <SkeletonItem />
+          <SkeletonItem />
+          <SkeletonItem />
+          <SkeletonItem />
         </>
       ) : (
         <>
-          <MetricCard>t= {metrics.current_tick}</MetricCard>
-          <MetricCard>GMV: {formatCompactGmv(metrics.total_market_gmv)}</MetricCard>
-          <MetricCard>
+          <MetricItem>t= {metrics.current_tick}</MetricItem>
+          <MetricItem>GMV: {formatCompactGmv(metrics.total_market_gmv)}</MetricItem>
+          <MetricItem>
             Index: {metrics.market_price_index.toFixed(2)}
             {priceTrendGlyph(priceIndexDelta)}
-          </MetricCard>
-          <MetricCard
-            className={flashCrashActive ? "animate-pulse text-red-400" : "text-green-400"}
+          </MetricItem>
+          <MetricItem
+            className={flashCrashActive ? "animate-pulse text-red-600" : "text-muted-strong"}
           >
             {flashCrashActive ? "FLASH CRASH" : "STABLE"}
-          </MetricCard>
+          </MetricItem>
         </>
       )}
     </div>

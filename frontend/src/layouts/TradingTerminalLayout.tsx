@@ -51,10 +51,10 @@ export function TradingTerminalLayout({
   const handleHighlightSeller = onHighlightSeller ?? (() => undefined);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-foreground">
       <header
         data-testid="zone-top-bar"
-        className="flex h-14 w-full shrink-0 items-center border-b border-slate-800 px-4"
+        className="flex h-14 w-full shrink-0 items-center border-b border-border bg-white px-4"
       >
         <TickerRibbon
           metrics={metrics}
@@ -68,7 +68,7 @@ export function TradingTerminalLayout({
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <aside
           data-testid="zone-left-sidebar"
-          className="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 p-4"
+          className="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-border bg-white p-4"
         >
           <ControlPanel workerState={workerState} onActionComplete={handleActionComplete} />
         </aside>
@@ -88,7 +88,7 @@ export function TradingTerminalLayout({
 
         <aside
           data-testid="zone-cyberlog"
-          className="flex h-full w-96 shrink-0 flex-col overflow-hidden border-l border-zinc-800 bg-black"
+          className="flex h-full w-96 shrink-0 flex-col overflow-hidden border-l border-border bg-white"
         >
           <TopSellersDashboard
             asOfTick={asOfTick}

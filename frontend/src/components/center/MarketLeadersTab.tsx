@@ -12,8 +12,8 @@ function statusLabel(isBankrupt: boolean): string {
 export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] }) {
   return (
     <table className="w-full border-collapse text-xs">
-      <thead className="sticky top-0 bg-slate-900">
-        <tr className="border-b border-slate-700 text-left text-slate-500">
+      <thead className="sticky top-0 bg-surface">
+        <tr className="border-b border-border text-left text-muted">
           <th className="px-2 py-1.5">Место</th>
           <th className="px-2 py-1.5">ID селлера</th>
           <th className="px-2 py-1.5">Капитал</th>
@@ -24,8 +24,8 @@ export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] 
       </thead>
       <tbody>
         {leaders.map((leader, index) => (
-          <tr key={leader.seller_id} className="border-b border-slate-800 hover:bg-slate-800/40">
-            <td className="px-2 py-1.5 text-slate-400">{index + 1}</td>
+          <tr key={leader.seller_id} className="border-b border-border hover:bg-slate-50">
+            <td className="px-2 py-1.5 text-muted">{index + 1}</td>
             <td className="px-2 py-1.5" data-testid="leader-seller-id">
               {leader.seller_id}
             </td>
@@ -33,7 +33,7 @@ export function MarketLeadersTable({ leaders }: { leaders: MarketLeaderRowDTO[] 
             <td className="px-2 py-1.5 font-mono">{formatMoney(leader.tick_revenue)}</td>
             <td className="px-2 py-1.5 font-mono">{formatMoney(leader.cumulative_revenue)}</td>
             <td className="px-2 py-1.5">
-              <span className={leader.is_bankrupt ? "text-red-400" : "text-emerald-400"}>
+              <span className={leader.is_bankrupt ? "text-red-600" : "text-emerald-700"}>
                 {statusLabel(leader.is_bankrupt)}
               </span>
             </td>
@@ -54,18 +54,18 @@ export function MarketLeadersTab({ asOfTick }: Props) {
   return (
     <div
       data-testid="market-leaders-panel"
-      className="h-full rounded border border-slate-800 bg-slate-900/60 p-4"
+      className="h-full bg-white p-4"
     >
-      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="mb-3 text-xs uppercase tracking-wide text-muted">
         Лидеры рынка
       </h2>
       {loading && leaders.length === 0 ? (
-        <p className="text-xs text-slate-500">Загрузка лидеров…</p>
+        <p className="text-xs text-muted">Загрузка лидеров…</p>
       ) : null}
-      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
+      {error !== null ? <p className="text-xs text-red-600">{error}</p> : null}
       {leaders.length > 0 ? <MarketLeadersTable leaders={leaders} /> : null}
       {!loading && leaders.length === 0 && error === null ? (
-        <p className="text-xs text-slate-500">Нет данных — запустите симуляцию</p>
+        <p className="text-xs text-muted">Нет данных — запустите симуляцию</p>
       ) : null}
     </div>
   );

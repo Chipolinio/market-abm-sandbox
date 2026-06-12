@@ -89,8 +89,8 @@ describe("CyberEventTerminal", () => {
     );
 
     const lines = screen.getAllByTestId("cyber-log-line");
-    expect(lines[0]?.className.split(/\s+/)).toContain("text-red-400");
-    expect(lines[1]?.className.split(/\s+/)).toContain("text-amber-400");
+    expect(lines[0]?.className.split(/\s+/)).toContain("text-red-600");
+    expect(lines[1]?.className.split(/\s+/)).toContain("text-amber-700");
   });
 
   it("collapses_mass_bankruptcy_events", () => {

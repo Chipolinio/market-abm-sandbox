@@ -65,6 +65,10 @@ STRATEGY_TYPES: Final[tuple[str, ...]] = (
     "RatingMaximizer",
 )
 
+# Demand matrix: seller strategy (col) × buyer PVD segment (row 0 = rich / quality-loyal).
+DEMAND_MATRIX_STRATEGY_ORDER: Final[tuple[str, ...]] = STRATEGY_TYPES
+DEMAND_MATRIX_PVD_ORDER: Final[tuple[str, ...]] = ("rich", "standard", "low")
+
 # Top-sellers ribbon mapping (Zone D UI).
 ALGORITHM_TYPES: Final[tuple[str, ...]] = ("CB", "REPR", "RULE")
 LOGIC_STATUS_BANKRUPT: Final = "bankrupt"

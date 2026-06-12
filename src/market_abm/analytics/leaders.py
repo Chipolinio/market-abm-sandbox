@@ -6,14 +6,16 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from market_abm.analytics.store import AnalyticsStore, _TICK_ID_FROM_FILENAME
-from market_abm.domain.constants import COL_DEMAND_INDEX, COL_PRICE, COL_RATING_VALUE
+from market_abm.analytics.persist import reference_buyers_path, reference_sellers_path
+from market_abm.analytics.store import AnalyticsStore
 from market_abm.domain.constants import (
     ALGORITHM_TYPES,
     COL_IS_BANKRUPT,
     COL_SELLER_ID,
     COL_TICK_ID,
     COL_WORKING_CAPITAL,
+    DEMAND_MATRIX_PVD_ORDER,
+    DEMAND_MATRIX_STRATEGY_ORDER,
     LOGIC_STATUS_BANKRUPT,
     LOGIC_STATUS_DUMPING,
     LOGIC_STATUS_ROI,
@@ -146,114 +148,105 @@ def query_market_leaders(
     return {"run_id": run_id, "tick_id": resolved_tick, "leaders": leaders}
 
 
-def _decile_bins(values: list[float], grid_size: int) -> list[int]:
-    """Map values to decile indices [0, grid_size-1]; ties share the same market bin."""
-    if not values:
-        return []
-    arr = np.asarray(values, dtype=np.float64)
-    if arr.size == 1:
-        return [grid_size // 2]
-    edges = np.quantile(arr, np.linspace(0.0, 1.0, grid_size + 1))
-    edges = np.maximum.accumulate(edges)
-    bins = np.clip(np.digitize(arr, edges[1:-1], right=False), 0, grid_size - 1)
-    return [int(b) for b in bins]
+def _empty_strategy_pvd_cells() -> list[dict[str, object]]:
+    return [
+        {"row": row_idx, "col": col_idx, "density": 0.0}
+        for row_idx in range(len(DEMAND_MATRIX_PVD_ORDER))
+        for col_idx in range(len(DEMAND_MATRIX_STRATEGY_ORDER))
+    ]
+
+
+def _has_reference_snapshots(store: AnalyticsStore) -> bool:
+    run_root = store._run_root
+    return reference_buyers_path(run_root).is_file() and reference_sellers_path(run_root).is_file()
 
 
 def query_demand_matrix(
     store: AnalyticsStore,
     tick_id: int,
-    *,
-    grid_size: int = 10,
 ) -> dict[str, object]:
     """
-    10×10 heatmap: mean demand_index by price decile (col) × rating decile (row).
+    Strategy × buyer-segment heatmap: transaction counts per cell.
 
-    row 0 (top) = highest rating tier; col 0 (left) = cheapest price tier.
+    Col (X): seller strategy_type — MaxProfit / MaxVolume / RatingMaximizer.
+    Row (Y): buyer pvd_segment — rich (top) → low (bottom, price-sensitive).
+    Density: normalized share of tick transactions in each cell [0, 1].
     """
     run_id = store._run_id_from_manifest()
-    n_cells = grid_size * grid_size
+    row_labels = list(DEMAND_MATRIX_PVD_ORDER)
+    col_labels = list(DEMAND_MATRIX_STRATEGY_ORDER)
+    n_rows = len(row_labels)
+    n_cols = len(col_labels)
+    grid_size = max(n_rows, n_cols)
 
-    def _empty_cells() -> list[dict[str, object]]:
-        return [
-            {"row": row, "col": col, "density": 0.0}
-            for row in range(grid_size)
-            for col in range(grid_size)
-        ]
+    base = {
+        "run_id": run_id,
+        "tick_id": tick_id,
+        "grid_size": grid_size,
+        "row_count": n_rows,
+        "col_count": n_cols,
+        "x_labels": col_labels,
+        "y_labels": row_labels,
+        "axis_x": "strategy_type",
+        "axis_y": "pvd_segment",
+        "cells": _empty_strategy_pvd_cells(),
+    }
 
-    if not store._has_parquet_files("products_snapshots"):
-        return {
-            "run_id": run_id,
-            "tick_id": tick_id,
-            "grid_size": grid_size,
-            "cells": _empty_cells(),
-        }
+    if not _has_reference_snapshots(store) or not store._has_parquet_files("transactions"):
+        return base
 
-    resolved_tick = _resolved_tick_id(store, tick_id, "products_snapshots")
-    sql = f"""
-        WITH snap AS (
-            SELECT
-                {_TICK_ID_FROM_FILENAME} AS snap_tick,
-                {COL_PRICE}::DOUBLE AS price,
-                {COL_RATING_VALUE}::DOUBLE AS rating_value,
-                {COL_DEMAND_INDEX}::DOUBLE AS demand_index
-            FROM read_parquet(?, filename=true)
-            WHERE {_TICK_ID_FROM_FILENAME} <= ?
-        ),
-        latest AS (
-            SELECT MAX(snap_tick) AS snap_tick FROM snap
-        )
-        SELECT s.price, s.rating_value, s.demand_index
-        FROM snap s
-        INNER JOIN latest l ON s.snap_tick = l.snap_tick
-    """
-    df = store._query_pl(sql, [store._products_glob(), tick_id])
-    if df.height == 0:
-        return {
-            "run_id": run_id,
-            "tick_id": resolved_tick,
-            "grid_size": grid_size,
-            "cells": _empty_cells(),
-        }
+    resolved_tick = _resolved_tick_id(store, tick_id, "transactions")
+    buyers_path = str(reference_buyers_path(store._run_root))
+    sellers_path = str(reference_sellers_path(store._run_root))
+    tx_glob = str(store._run_root / "transactions" / "tick_*.parquet")
 
-    prices = [float(v) for v in df[COL_PRICE].to_list()]
-    ratings = [float(v) for v in df["rating_value"].to_list()]
-    demands = [float(v) for v in df[COL_DEMAND_INDEX].to_list()]
+    counts_df = store._query_pl(
+        """
+        SELECT
+            CAST(b.pvd_segment AS VARCHAR) AS pvd_segment,
+            CAST(s.strategy_type AS VARCHAR) AS strategy_type,
+            COUNT(*)::BIGINT AS txn_count
+        FROM read_parquet(?) AS tx
+        INNER JOIN read_parquet(?) AS b ON tx.buyer_id = b.buyer_id
+        INNER JOIN read_parquet(?) AS s ON tx.seller_id = s.seller_id
+        WHERE tx.tick_id = ?
+        GROUP BY 1, 2
+        """,
+        [tx_glob, buyers_path, sellers_path, resolved_tick],
+    )
 
-    price_bins = _decile_bins(prices, grid_size)
-    rating_bins = _decile_bins(ratings, grid_size)
+    row_index = {label: idx for idx, label in enumerate(row_labels)}
+    col_index = {label: idx for idx, label in enumerate(col_labels)}
+    raw_counts = np.zeros((n_rows, n_cols), dtype=np.float64)
 
-    sums = np.zeros((grid_size, grid_size), dtype=np.float64)
-    counts = np.zeros((grid_size, grid_size), dtype=np.int64)
-    for demand, price_bin, rating_bin in zip(demands, price_bins, rating_bins, strict=True):
-        row = (grid_size - 1) - rating_bin
-        col = price_bin
-        sums[row, col] += demand
-        counts[row, col] += 1
+    if counts_df.height > 0:
+        for row in counts_df.iter_rows(named=True):
+            pvd = str(row["pvd_segment"])
+            strategy = str(row["strategy_type"])
+            if pvd not in row_index or strategy not in col_index:
+                continue
+            raw_counts[row_index[pvd], col_index[strategy]] = float(row["txn_count"])
 
-    raw_densities = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
-    positive = raw_densities[raw_densities > 0.0]
-    max_val = float(positive.max()) if positive.size else 0.0
-    min_val = float(positive.min()) if positive.size else 0.0
-    span = max_val - min_val
+    total_tx = float(raw_counts.sum())
+    max_cell = float(raw_counts.max()) if raw_counts.size else 0.0
 
     cells: list[dict[str, object]] = []
-    for row in range(grid_size):
-        for col in range(grid_size):
-            raw = float(raw_densities[row, col])
-            if counts[row, col] == 0:
+    for row_idx in range(n_rows):
+        for col_idx in range(n_cols):
+            count = raw_counts[row_idx, col_idx]
+            if count <= 0.0:
                 density = 0.0
-            elif span > 0.0:
-                density = (raw - min_val) / span
-            elif raw > 0.0:
-                density = 1.0
+            elif total_tx > 0.0:
+                density = count / total_tx
+            elif max_cell > 0.0:
+                density = count / max_cell
             else:
                 density = 0.0
-            cells.append({"row": row, "col": col, "density": density})
+            cells.append({"row": row_idx, "col": col_idx, "density": density})
 
     return {
-        "run_id": run_id,
+        **base,
         "tick_id": resolved_tick,
-        "grid_size": grid_size,
         "cells": cells,
     }
 

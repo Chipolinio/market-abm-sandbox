@@ -125,7 +125,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1 text-xs text-slate-400">
+      <label className="flex flex-col gap-1 text-xs text-muted">
         Buyer sample size: {nBuyers.toLocaleString()}
         <input
           type="range"
@@ -141,7 +141,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-xs text-slate-400">
+      <label className="flex flex-col gap-1 text-xs text-muted">
         CatBoost mix: {catboostPct}%
         <input
           type="range"
@@ -157,7 +157,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
         />
       </label>
 
-      <label className="flex flex-col gap-1 text-xs text-slate-400">
+      <label className="flex flex-col gap-1 text-xs text-muted">
         Rule-based mix: {ruleBasedPct}%
         <input
           type="range"
@@ -173,23 +173,23 @@ export function EnvironmentConfigurator({ disabled }: Props) {
         />
       </label>
 
-      <p className="text-xs text-slate-500">Basic mix: {basicPct}% (auto)</p>
+      <p className="text-xs text-muted">Basic mix: {basicPct}% (auto)</p>
 
       {!mixValid ? (
-        <p className="text-xs text-red-400">Seller mix must sum to 100% (±1%)</p>
+        <p className="text-xs text-red-600">Seller mix must sum to 100% (±1%)</p>
       ) : null}
 
       <button
         type="button"
-        className="rounded border border-slate-700 bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 disabled:opacity-50"
+        className="border border-border bg-white px-3 py-2 text-sm text-accent hover:bg-slate-50 disabled:opacity-50"
         disabled={applyDisabled}
         onClick={() => void onApply()}
       >
         Применить
       </button>
 
-      {message !== null ? <p className="text-xs text-green-400">{message}</p> : null}
-      {error !== null ? <p className="text-xs text-red-400">{error}</p> : null}
+      {message !== null ? <p className="text-xs text-emerald-700">{message}</p> : null}
+      {error !== null ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

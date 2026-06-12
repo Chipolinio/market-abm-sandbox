@@ -222,7 +222,7 @@ async def get_demand_matrix(
     tick_id: int = Query(..., ge=0),
     store: AnalyticsStore | None = Depends(_get_analytics_store),
 ) -> DemandMatrixResponse:
-    """10×10 demand density grid (v1 placeholder)."""
+    """Strategy × buyer-segment transaction heatmap."""
     if store is None:
         return DemandMatrixResponse(run_id=_DEFAULT_RUN_ID, tick_id=tick_id, cells=[])
 
@@ -232,5 +232,11 @@ async def get_demand_matrix(
         run_id=str(raw["run_id"]),
         tick_id=int(raw["tick_id"]),
         grid_size=int(raw["grid_size"]),
+        row_count=int(raw["row_count"]),
+        col_count=int(raw["col_count"]),
+        x_labels=[str(label) for label in raw["x_labels"]],
+        y_labels=[str(label) for label in raw["y_labels"]],
+        axis_x=str(raw["axis_x"]),
+        axis_y=str(raw["axis_y"]),
         cells=cells,
     )

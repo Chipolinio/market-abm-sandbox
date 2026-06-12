@@ -18,7 +18,13 @@ function mockResponse(tickId: number) {
   return {
     run_id: "run-1",
     tick_id: tickId,
-    grid_size: 10,
+    grid_size: 3,
+    row_count: 3,
+    col_count: 3,
+    x_labels: ["MaxProfit", "MaxVolume", "RatingMaximizer"],
+    y_labels: ["rich", "standard", "low"],
+    axis_x: "strategy_type",
+    axis_y: "pvd_segment",
     cells: [{ row: 0, col: 0, density: 0.5 }],
   };
 }
@@ -52,6 +58,8 @@ describe("useDemandMatrix", () => {
     expect(fetchDemandMatrix).toHaveBeenCalledTimes(1);
     expect(fetchDemandMatrix).toHaveBeenCalledWith(5);
     expect(result.current.cells).toHaveLength(1);
+    expect(result.current.colCount).toBe(3);
+    expect(result.current.xLabels).toContain("MaxProfit");
   });
 
   it("refetches_on_re_enable_with_latest_tick_id", async () => {

@@ -40,7 +40,7 @@ describe("TradingTerminalLayout", () => {
     expect(leftSidebar).not.toBeNull();
     expect(hasClass(leftSidebar!, "w-80")).toBe(true);
     expect(hasClass(leftSidebar!, "overflow-y-auto")).toBe(true);
-    expect(hasClass(leftSidebar!, "bg-slate-900")).toBe(true);
+    expect(hasClass(leftSidebar!, "bg-white")).toBe(true);
 
     const main = container.querySelector('[data-testid="zone-main"]');
     expect(main).not.toBeNull();
@@ -50,7 +50,7 @@ describe("TradingTerminalLayout", () => {
     const cyberlog = container.querySelector('[data-testid="zone-cyberlog"]');
     expect(cyberlog).not.toBeNull();
     expect(hasClass(cyberlog!, "w-96")).toBe(true);
-    expect(hasClass(cyberlog!, "bg-black")).toBe(true);
+    expect(hasClass(cyberlog!, "bg-white")).toBe(true);
     expect(container.querySelector('[data-testid="top-sellers-dashboard"]')).not.toBeNull();
   });
 
