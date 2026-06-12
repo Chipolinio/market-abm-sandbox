@@ -27,19 +27,35 @@ export function useDemandMatrix(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tickIdRef = useRef(tickId);
+  const aliveRef = useRef(true);
   tickIdRef.current = tickId;
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetchDemandMatrix(tickIdRef.current);
+      if (!aliveRef.current) {
+        return;
+      }
       setCells(response.cells);
       setGridSize(response.grid_size);
       setError(null);
     } catch (err) {
+      if (!aliveRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Demand matrix fetch failed");
     } finally {
-      setLoading(false);
+      if (aliveRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

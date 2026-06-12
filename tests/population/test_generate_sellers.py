@@ -101,6 +101,8 @@ def test_generate_sellers_default_strategy_mix_is_reasonable() -> None:
     )
     shares = {row[COL_STRATEGY_TYPE]: row["share"] for row in freq.to_dicts()}
 
-    assert shares["MaxProfit"] == pytest.approx(0.45, abs=0.03)
-    assert shares["MaxVolume"] == pytest.approx(0.40, abs=0.03)
-    assert shares["RatingMaximizer"] == pytest.approx(0.15, abs=0.03)
+    expected = dict(
+        zip(config.strategy_type.levels, config.strategy_type.probabilities, strict=True)
+    )
+    for level, probability in expected.items():
+        assert shares[level] == pytest.approx(probability, abs=0.03)

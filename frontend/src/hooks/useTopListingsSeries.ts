@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchTopListings } from "@/api/analytics";
 import type { ListingSeriesData } from "@/state/types";
@@ -14,17 +14,33 @@ export function useTopListingsSeries(enabled: boolean = true): UseTopListingsSer
   const [listings, setListings] = useState<ListingSeriesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetchTopListings();
+      if (!aliveRef.current) {
+        return;
+      }
       setListings(response.listings);
       setError(null);
     } catch (err) {
+      if (!aliveRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Top listings backfill failed");
     } finally {
-      setLoading(false);
+      if (aliveRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

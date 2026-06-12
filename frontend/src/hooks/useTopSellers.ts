@@ -17,20 +17,36 @@ export function useTopSellers(tickId: number, live = true): UseTopSellersResult 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tickIdRef = useRef(tickId);
+  const aliveRef = useRef(true);
   tickIdRef.current = tickId;
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetchMarketLeaders(tickIdRef.current, 3);
+      if (!aliveRef.current) {
+        return;
+      }
       if (response.leaders.length > 0) {
         setSellers(response.leaders);
       }
       setError(null);
     } catch (err) {
+      if (!aliveRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Top sellers fetch failed");
     } finally {
-      setLoading(false);
+      if (aliveRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

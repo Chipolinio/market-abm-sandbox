@@ -17,20 +17,36 @@ export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLea
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tickIdRef = useRef(tickId);
+  const aliveRef = useRef(true);
   tickIdRef.current = tickId;
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetchMarketLeaders(tickIdRef.current, 5);
+      if (!aliveRef.current) {
+        return;
+      }
       if (response.leaders.length > 0) {
         setLeaders(response.leaders);
       }
       setError(null);
     } catch (err) {
+      if (!aliveRef.current) {
+        return;
+      }
       setError(err instanceof Error ? err.message : "Market leaders fetch failed");
     } finally {
-      setLoading(false);
+      if (aliveRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 

@@ -248,19 +248,45 @@ class _WorkerLoop:
         """
         Атомарная запись manifest.json через временный файл.
         Гарантирует, что FastAPI никогда не читает полуписанный файл.
+
+        При наличии analytics-manifest (run_id, n_buyers, ticks_completed, …)
+        накладывает только worker-поля state/last_error, не затирая статистику тиков.
         """
         self._artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         last_error = self._last_error_array.raw.rstrip(b"\x00").decode("utf-8")
-        payload = {
+        worker_overlay: dict[str, object] = {
             "state": WorkerState(self._state_value.value).name,
             "last_error": last_error or None,
         }
+        existing = _read_existing_manifest(self._artifacts_dir)
+        if existing is not None and _is_analytics_manifest(existing):
+            payload = {**existing, **worker_overlay}
+        else:
+            payload = worker_overlay
+
         tmp_path = self._artifacts_dir / (_MANIFEST_FILENAME + _MANIFEST_TMP_SUFFIX)
         target_path = self._artifacts_dir / _MANIFEST_FILENAME
 
         tmp_path.write_text(json.dumps(payload), encoding="utf-8")
         os.replace(tmp_path, target_path)
+
+
+def _read_existing_manifest(artifacts_dir: Path) -> dict[str, object] | None:
+    path = artifacts_dir / _MANIFEST_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def _is_analytics_manifest(data: dict[str, object]) -> bool:
+    return "run_id" in data and "n_buyers" in data
 
 
 def _worker_entry(
