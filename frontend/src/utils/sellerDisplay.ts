@@ -65,6 +65,17 @@ export function sellerRankAccent(rank: number): {
   }
 }
 
+export function algorithmTypeLabel(algorithm: MarketLeaderRowDTO["algorithm_type"]): string {
+  switch (algorithm) {
+    case "CB":
+      return "CatBoost";
+    case "REPR":
+      return "Repricing";
+    default:
+      return "Rule-based";
+  }
+}
+
 export function formatCapital(value: number): string {
   if (value >= 1_000_000) {
     return `${(value / 1_000_000).toFixed(1)}M`;

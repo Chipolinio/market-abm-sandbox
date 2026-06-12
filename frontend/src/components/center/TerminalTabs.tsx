@@ -38,7 +38,7 @@ export function TerminalTabs({
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full min-h-0 flex-col">
       <TabsList className="mb-2 shrink-0">
         <TabsTrigger value="dynamics">Динамика рынка</TabsTrigger>
-        <TabsTrigger value="leaders">Лидеры рынка</TabsTrigger>
+        <TabsTrigger value="leaders">Селлеры</TabsTrigger>
         <TabsTrigger value="demand_matrix">Матрица спроса</TabsTrigger>
       </TabsList>
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchMarketLeaders } from "@/api/analytics";
+import { fetchMarketLeaders, TOP_SELLERS_RIBBON_LIMIT } from "@/api/analytics";
 import type { MarketLeaderRowDTO } from "@/types/leaders";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -30,7 +30,7 @@ export function useTopSellers(tickId: number, live = true): UseTopSellersResult 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(tickIdRef.current, 3);
+      const response = await fetchMarketLeaders(tickIdRef.current, TOP_SELLERS_RIBBON_LIMIT);
       if (!aliveRef.current) {
         return;
       }

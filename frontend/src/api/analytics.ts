@@ -34,6 +34,12 @@ export function fetchTopListings(
   return apiFetch<TopListingsResponse>(`/api/v1/analytics/top-listings?limit=${limit}`);
 }
 
+/** Full seller registry (matches max n_sellers in session configure). */
+export const SELLERS_REGISTRY_LIMIT = 1000;
+
+/** Top-N ribbon in Zone D. */
+export const TOP_SELLERS_RIBBON_LIMIT = 3;
+
 export function fetchMarketLeaders(
   tickId: number,
   limit: number = 5,

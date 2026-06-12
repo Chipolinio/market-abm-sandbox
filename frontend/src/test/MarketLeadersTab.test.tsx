@@ -2,13 +2,14 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SELLERS_REGISTRY_LIMIT } from "@/api/analytics";
 import { MarketLeadersTab } from "@/components/center/MarketLeadersTab";
 import type { MarketLeaderRowDTO } from "@/types/leaders";
 
 const useMarketLeaders = vi.fn();
 
 vi.mock("@/hooks/useMarketLeaders", () => ({
-  useMarketLeaders: () => useMarketLeaders(),
+  useMarketLeaders: (...args: unknown[]) => useMarketLeaders(...args),
 }));
 
 const mockLeaders: MarketLeaderRowDTO[] = [
@@ -42,26 +43,6 @@ const mockLeaders: MarketLeaderRowDTO[] = [
     inventory_stock: 0,
     logic_status: "bankrupt",
   },
-  {
-    seller_id: 2,
-    working_capital: 3_200.75,
-    tick_revenue: 45.5,
-    cumulative_revenue: 900.0,
-    is_bankrupt: false,
-    algorithm_type: "RULE",
-    inventory_stock: 5,
-    logic_status: "rule_based",
-  },
-  {
-    seller_id: 9,
-    working_capital: 1_500.0,
-    tick_revenue: 10.0,
-    cumulative_revenue: 400.0,
-    is_bankrupt: false,
-    algorithm_type: "CB",
-    inventory_stock: 3,
-    logic_status: "roi_optimization",
-  },
 ];
 
 beforeEach(() => {
@@ -78,17 +59,17 @@ afterEach(() => {
 });
 
 describe("MarketLeadersTab", () => {
-  it("renders_top5_rows", () => {
-    const { container } = render(<MarketLeadersTab asOfTick={3} />);
-
-    const rows = container.querySelectorAll("tbody tr");
-    expect(rows).toHaveLength(5);
+  it("requests_full_seller_registry", () => {
+    render(<MarketLeadersTab asOfTick={3} />);
+    expect(useMarketLeaders).toHaveBeenCalledWith(true, 3, SELLERS_REGISTRY_LIMIT);
   });
 
-  it("preserves_backend_order_without_client_sort", () => {
+  it("renders_all_seller_cards_in_backend_order", () => {
     render(<MarketLeadersTab asOfTick={3} />);
 
-    const sellerCells = screen.getAllByTestId("leader-seller-id");
-    expect(sellerCells.map((cell) => cell.textContent)).toEqual(["3", "1", "7", "2", "9"]);
+    const cards = screen.getAllByTestId("seller-registry-card");
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.getAttribute("data-seller-id"))).toEqual(["3", "1", "7"]);
+    expect(screen.getByText("Реестр селлеров")).toBeTruthy();
   });
 });

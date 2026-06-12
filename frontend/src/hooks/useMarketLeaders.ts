@@ -12,7 +12,11 @@ export type UseMarketLeadersResult = {
   refresh: () => Promise<void>;
 };
 
-export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLeadersResult {
+export function useMarketLeaders(
+  enabled: boolean,
+  tickId: number,
+  limit: number = 5,
+): UseMarketLeadersResult {
   const [leaders, setLeaders] = useState<MarketLeaderRowDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +34,7 @@ export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLea
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(tickIdRef.current, 5);
+      const response = await fetchMarketLeaders(tickIdRef.current, limit);
       if (!aliveRef.current) {
         return;
       }
@@ -48,7 +52,7 @@ export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLea
         setLoading(false);
       }
     }
-  }, []);
+  }, [limit]);
 
   useEffect(() => {
     if (!enabled) {
@@ -63,7 +67,7 @@ export function useMarketLeaders(enabled: boolean, tickId: number): UseMarketLea
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [enabled, refresh]);
+  }, [enabled, limit, refresh]);
 
   return { leaders, loading, error, refresh };
 }
