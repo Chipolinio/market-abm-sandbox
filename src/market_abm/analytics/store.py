@@ -429,23 +429,34 @@ class AnalyticsStore:
             return []
         return []
 
-    def _recent_system_events_from_sources(
+    def system_events_since(
         self,
-        sources: list[str],
-        limit: int,
+        since_tick: int,
+        *,
+        limit: int = 200,
     ) -> list[dict[str, object]]:
+        """События с tick_id >= since_tick (ASC) — инкрементальный poll cyber-log."""
+        sources = self._system_events_read_sources()
+        if not sources:
+            return []
+
         read_arg = self._read_parquet_arg(sources)
         if not read_arg:
             return []
+
         df = self._query_pl(
             """
             SELECT *
             FROM read_parquet(?)
-            ORDER BY tick_id DESC, event_id DESC
+            WHERE tick_id >= ?
+            ORDER BY tick_id ASC, event_id ASC
             LIMIT ?
             """,
-            [read_arg, limit],
+            [read_arg, since_tick, limit],
         )
+        return self._rows_from_events_df(df)
+
+    def _rows_from_events_df(self, df: pl.DataFrame) -> list[dict[str, object]]:
         rows: list[dict[str, object]] = []
         for row in df.iter_rows(named=True):
             raw_payload = row.get("payload_json")
@@ -464,6 +475,25 @@ class AnalyticsStore:
                 }
             )
         return rows
+
+    def _recent_system_events_from_sources(
+        self,
+        sources: list[str],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        read_arg = self._read_parquet_arg(sources)
+        if not read_arg:
+            return []
+        df = self._query_pl(
+            """
+            SELECT *
+            FROM read_parquet(?)
+            ORDER BY tick_id DESC, event_id DESC
+            LIMIT ?
+            """,
+            [read_arg, limit],
+        )
+        return self._rows_from_events_df(df)
 
     def price_index_by_tick(self) -> pl.DataFrame:
         """Агрегированные цены по тику; nullable Float64 при пустом snapshot."""

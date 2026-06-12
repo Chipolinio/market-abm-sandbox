@@ -38,6 +38,7 @@ class SystemEventType(str, Enum):
     FLASH_CRASH = "flash_crash"
     DEMAND_SHOCK = "demand_shock"
     BANKRUPTCY = "bankruptcy"
+    TICK_PULSE = "tick_pulse"
 
 
 DISPLAY_CODE_BY_TYPE: dict[SystemEventType, str] = {
@@ -45,4 +46,5 @@ DISPLAY_CODE_BY_TYPE: dict[SystemEventType, str] = {
     SystemEventType.FLASH_CRASH: "FLASH_CRASH",
     SystemEventType.DEMAND_SHOCK: "DEMAND_SHOCK",
     SystemEventType.BANKRUPTCY: "BANKRUPTCY",
+    SystemEventType.TICK_PULSE: "TICK_PULSE",
 }

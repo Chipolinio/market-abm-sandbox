@@ -46,7 +46,11 @@ describe("prependEvents", () => {
       message: `old-${index}`,
       severity: "info",
     }));
-    const incoming = [makeEvent("evt-new-1"), makeEvent("evt-new-2"), makeEvent("evt-new-3")];
+    const incoming = [
+      makeEvent("evt-new-1", { tick_id: 200 }),
+      makeEvent("evt-new-2", { tick_id: 201 }),
+      makeEvent("evt-new-3", { tick_id: 202 }),
+    ];
 
     const result = prependEvents(existing, incoming, CYBER_LOG_MAX_LINES, seenIds);
 

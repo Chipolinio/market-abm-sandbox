@@ -75,6 +75,24 @@ def test_start_request_population_size(tmp_path: Path) -> None:
         session.close()
 
 
+def test_live_session_emits_tick_pulse_from_tick_zero(tmp_path: Path) -> None:
+    shock_queue: queue.Queue = queue.Queue(maxsize=32)
+    session = LiveSimulationSession(tmp_path, shock_queue)
+
+    try:
+        session.run_tick(0)
+        from market_abm.analytics.store import AnalyticsStore
+
+        store = AnalyticsStore(tmp_path)
+        rows = store.recent_system_events(limit=10)
+        store.close()
+        pulse = [r for r in rows if r["display_code"] == "TICK_PULSE"]
+        assert len(pulse) >= 1
+        assert pulse[0]["tick_id"] == 0
+    finally:
+        session.close()
+
+
 def test_live_session_produces_positive_gmv_on_first_tick(tmp_path: Path) -> None:
     """Regression: worker choice + economics must yield transactions (not all-outside)."""
     shock_queue: queue.Queue = queue.Queue(maxsize=32)

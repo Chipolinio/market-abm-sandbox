@@ -10,6 +10,7 @@ import polars as pl
 from market_abm.analytics.events import (
     append_system_events,
     build_demand_shock_event,
+    build_tick_pulse_event,
     coalesce_bankruptcy_events,
     detect_system_events,
 )
@@ -159,6 +160,24 @@ def persist_extended_tick(
         config=config,
         seq_start=state.event_seq,
     )
+
+    tick_gmv = float(transactions_df[COL_PRICE_PAID].sum()) if transactions_df.height > 0 else 0.0
+    tx_count = transactions_df.height
+    bankrupt_count = int(state.sellers_state_df.filter(pl.col(COL_IS_BANKRUPT)).height)
+    active_count = int(state.sellers_state_df.height) - bankrupt_count
+    cmd_events.append(
+        build_tick_pulse_event(
+            run_id=run_id,
+            tick_id=tick_id,
+            seq=seq,
+            gmv=tick_gmv,
+            transaction_count=tx_count,
+            active_sellers=active_count,
+            bankrupt_sellers=bankrupt_count,
+        )
+    )
+    seq += 1
+
     if cmd_events:
         append_system_events(run_root, pl.DataFrame(cmd_events), con)
 
@@ -176,7 +195,6 @@ def persist_extended_tick(
         if detected.height > 0:
             append_system_events(run_root, detected, con)
 
-    tick_gmv = float(transactions_df[COL_PRICE_PAID].sum()) if transactions_df.height > 0 else 0.0
     return ExtendedSimulationState(
         sellers_state_df=state.sellers_state_df,
         simulation_context=tick_down_active_shocks(

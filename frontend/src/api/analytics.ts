@@ -47,6 +47,13 @@ export function fetchDemandMatrix(tickId: number): Promise<DemandMatrixResponse>
   return apiFetch<DemandMatrixResponse>(`/api/v1/analytics/demand-matrix?tick_id=${tickId}`);
 }
 
-export function fetchSystemEvents(limit: number = 50): Promise<SystemEventsResponse> {
-  return apiFetch<SystemEventsResponse>(`/api/v1/analytics/system-events?limit=${limit}`);
+export function fetchSystemEvents(
+  limit: number = 200,
+  sinceTick?: number,
+): Promise<SystemEventsResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (sinceTick !== undefined) {
+    params.set("since_tick", String(sinceTick));
+  }
+  return apiFetch<SystemEventsResponse>(`/api/v1/analytics/system-events?${params.toString()}`);
 }

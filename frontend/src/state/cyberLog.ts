@@ -57,6 +57,16 @@ export function toCyberLogLine(event: SystemEventDTO): CyberLogLine {
   };
 }
 
+/** Newest-first order for flex-col-reverse (newest at bottom). */
+export function sortCyberLogLines(lines: CyberLogLine[]): CyberLogLine[] {
+  return [...lines].sort((a, b) => {
+    if (b.tick_id !== a.tick_id) {
+      return b.tick_id - a.tick_id;
+    }
+    return b.event_id.localeCompare(a.event_id);
+  });
+}
+
 /** Prepend-only ring buffer; mutates `seenIds` for O(1) dedupe. */
 export function prependEvents(
   existing: CyberLogLine[],
@@ -74,7 +84,7 @@ export function prependEvents(
     next = [toCyberLogLine(event), ...next];
   }
 
-  return next.slice(0, maxLines);
+  return sortCyberLogLines(next).slice(0, maxLines);
 }
 
 export function formatCyberLine(line: Pick<CyberLogLine, "tick_id" | "display_code" | "message">): string {
@@ -128,6 +138,9 @@ export function severityClass(line: Pick<CyberLogLine, "severity" | "display_cod
   }
   if (line.severity === "warning" || line.display_code === "PRICING_WAR") {
     return "text-amber-400";
+  }
+  if (line.display_code === "TICK_PULSE") {
+    return "text-slate-400";
   }
   return "text-green-400";
 }

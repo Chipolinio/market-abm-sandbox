@@ -4,6 +4,7 @@ import { fetchSystemEvents } from "@/api/analytics";
 import {
   CYBER_LOG_MAX_LINES,
   prependEvents,
+  sortCyberLogLines,
   toCyberLogLine,
   type CyberLogLine,
 } from "@/state/cyberLog";
@@ -39,28 +40,42 @@ export function useCyberLog(
   const [error, setError] = useState<string | null>(null);
   const seenIdsRef = useRef(new Set<string>());
   const lastWsBatchRef = useRef("");
+  const maxTickRef = useRef(-1);
+
+  const bumpMaxTick = useCallback((events: SystemEventDTO[]) => {
+    for (const event of events) {
+      if (event.tick_id > maxTickRef.current) {
+        maxTickRef.current = event.tick_id;
+      }
+    }
+  }, []);
 
   const mergeEvents = useCallback((incoming: SystemEventDTO[]) => {
     if (incoming.length === 0) {
       return;
     }
+    bumpMaxTick(incoming);
     setLines((prev) =>
       prependEvents(prev, incoming, CYBER_LOG_MAX_LINES, seenIdsRef.current),
     );
-  }, []);
+  }, [bumpMaxTick]);
 
   const replaceFromRest = useCallback((incoming: SystemEventDTO[]) => {
     seenIdsRef.current.clear();
+    maxTickRef.current = -1;
     for (const event of incoming) {
       seenIdsRef.current.add(event.event_id);
     }
-    setLines(incoming.slice(0, CYBER_LOG_MAX_LINES).map(toCyberLogLine));
-  }, []);
+    bumpMaxTick(incoming);
+    const mapped = incoming.map(toCyberLogLine);
+    setLines(sortCyberLogLines(mapped).slice(0, CYBER_LOG_MAX_LINES));
+  }, [bumpMaxTick]);
 
   const reset = useCallback(() => {
     setLines([]);
     seenIdsRef.current.clear();
     lastWsBatchRef.current = "";
+    maxTickRef.current = -1;
     setError(null);
   }, []);
 
@@ -70,7 +85,9 @@ export function useCyberLog(
         setLoading(true);
       }
       try {
-        const response = await fetchSystemEvents(REST_BACKFILL_LIMIT);
+        const sinceTick =
+          mode === "merge" && maxTickRef.current >= 0 ? maxTickRef.current : undefined;
+        const response = await fetchSystemEvents(REST_BACKFILL_LIMIT, sinceTick);
         if (mode === "replace") {
           replaceFromRest(response.events);
         } else {

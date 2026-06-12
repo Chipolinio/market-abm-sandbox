@@ -178,14 +178,22 @@ async def get_market_summary(
 
 @router.get("/system-events", response_model=SystemEventsResponse)
 async def get_system_events(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(200, ge=1, le=500),
+    since_tick: int | None = Query(
+        None,
+        ge=-1,
+        description="Incremental poll: events with tick_id >= since_tick (ASC).",
+    ),
     store: AnalyticsStore | None = Depends(_get_analytics_store),
 ) -> SystemEventsResponse:
-    """Cyber-log history: system_events sorted by tick_id desc."""
+    """Cyber-log history: recent DESC by default; since_tick for live incremental poll."""
     if store is None:
         return SystemEventsResponse(events=[])
 
-    rows = store.recent_system_events(limit=limit)
+    if since_tick is not None:
+        rows = store.system_events_since(since_tick, limit=limit)
+    else:
+        rows = store.recent_system_events(limit=limit)
     events = [SystemEventDTO(**row) for row in rows]
     return SystemEventsResponse(events=events)
 

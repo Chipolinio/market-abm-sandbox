@@ -231,6 +231,38 @@ def build_demand_shock_event(
     }
 
 
+def build_tick_pulse_event(
+    *,
+    run_id: str,
+    tick_id: int,
+    seq: int,
+    gmv: float,
+    transaction_count: int,
+    active_sellers: int,
+    bankrupt_sellers: int,
+) -> dict[str, object]:
+    """Один info-пульс на тик — непрерывный cyber-log даже без аномалий."""
+    event_type = SystemEventType.TICK_PULSE
+    payload = {
+        "gmv": gmv,
+        "transaction_count": transaction_count,
+        "active_sellers": active_sellers,
+        "bankrupt_sellers": bankrupt_sellers,
+    }
+    return {
+        COL_EVENT_ID: _event_id(run_id=run_id, tick_id=tick_id, event_type=event_type, seq=seq),
+        COL_TICK_ID: tick_id,
+        COL_EVENT_TYPE: event_type.value,
+        COL_DISPLAY_CODE: DISPLAY_CODE_BY_TYPE[event_type],
+        COL_SEVERITY: "info",
+        COL_MESSAGE: (
+            f"GMV {gmv:.0f}, {transaction_count} tx, "
+            f"{active_sellers} active / {bankrupt_sellers} bankrupt sellers"
+        ),
+        COL_PAYLOAD_JSON: json.dumps(payload, separators=(",", ":")),
+    }
+
+
 def build_bankruptcy_event(
     *,
     run_id: str,
