@@ -36,7 +36,11 @@ from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
-from market_abm.simulation.repricing import apply_ml_repricing_tick, apply_repricing_tick
+from market_abm.simulation.repricing import (
+    apply_ml_repricing_tick,
+    apply_repricing_tick,
+    build_stress_repricing_profile,
+)
 from market_abm.simulation.seller_economics import (
     filter_bankrupt_listings,
     settle_seller_economics,
@@ -247,8 +251,18 @@ def _reprice_to_products(
             analytics_store=analytics_store,
         )
     else:
+        profile = None
+        if simulation_context is not None:
+            profile = build_stress_repricing_profile(
+                simulation_context.macro,
+                config.repricing,
+            )
         repriced = apply_repricing_tick(
-            sellers_df, listings, tick=config.tick_id, config=config.repricing
+            sellers_df,
+            listings,
+            tick=config.tick_id,
+            config=config.repricing,
+            repricing_profile=profile,
         )
     card_features = products_with_demand.select(
         [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]

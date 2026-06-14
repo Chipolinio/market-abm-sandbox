@@ -7,7 +7,7 @@ import math
 import pytest
 from pydantic import ValidationError
 
-from market_abm.config.repricing import ListingInitConfig, RepricingConfig
+from market_abm.config.repricing import ListingInitConfig, RepricingConfig, StressRepricingConfig
 
 
 def test_listing_init_default_market_builds_without_error() -> None:
@@ -62,3 +62,22 @@ def test_repricing_rejects_invalid_thresholds_and_aggression() -> None:
         RepricingConfig(max_profit_demand_low=1.0)
     with pytest.raises(ValidationError):
         RepricingConfig(max_volume_aggression=0.99)
+
+
+def test_repricing_market_with_headroom_preset() -> None:
+    cfg = RepricingConfig.market_with_headroom()
+    assert cfg.min_listing_price == pytest.approx(5.0)
+    assert cfg.relative_step == pytest.approx(0.02)
+
+
+def test_listing_init_market_with_headroom_preset() -> None:
+    cfg = ListingInitConfig.market_with_headroom()
+    assert cfg.initial_margin_markup == pytest.approx(0.35)
+    assert cfg.minimum_price_to_floor_ratio == pytest.approx(1.15)
+
+
+def test_stress_repricing_config_defaults() -> None:
+    stress = StressRepricingConfig()
+    assert stress.stress_repricing_threshold == pytest.approx(0.15)
+    assert stress.stress_step_gain == pytest.approx(2.0)
+    assert stress.forbid_price_below_unit_cost is True

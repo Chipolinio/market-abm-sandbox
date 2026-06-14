@@ -73,10 +73,9 @@ def initialize_listings(
 
     unit_cost = _as_float32(sample_from_spec(config.unit_cost, n, rng))
     base_price = (unit_cost * (1.0 + config.initial_margin_markup)).astype(np.float32)
-    price = np.maximum(
-        base_price,
-        _price_floor(unit_cost, margin_floor, min_listing_price=min_listing_price),
-    ).astype(np.float32)
+    floor = _price_floor(unit_cost, margin_floor, min_listing_price=min_listing_price)
+    target_floor = (floor * config.minimum_price_to_floor_ratio).astype(np.float32)
+    price = np.maximum(base_price, target_floor).astype(np.float32)
     demand_index = np.full(n, config.initial_demand_index, dtype=np.float32)
 
     schema = listings_polars_schema()

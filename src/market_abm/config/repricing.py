@@ -21,6 +21,19 @@ from market_abm.domain.constants import (
 RepricingMode = Literal["rules", "catboost", "hybrid"]
 
 
+class StressRepricingConfig(BaseModel):
+    """Stress-dependent repricing multipliers (Spec 011 §5.3)."""
+
+    model_config = {"frozen": True}
+
+    stress_repricing_threshold: float = Field(default=0.15, ge=0.0, le=2.0)
+    stress_step_gain: float = Field(default=2.0, ge=0.0, le=10.0)
+    stress_volume_gain: float = Field(default=1.5, ge=0.0, le=10.0)
+    stress_dead_zone_shrink: float = Field(default=0.05, ge=0.0, le=0.5)
+    panic_margin_above_unit_cost: float = Field(default=0.05, ge=0.0)
+    forbid_price_below_unit_cost: bool = True
+
+
 class ListingInitConfig(BaseModel):
     """Validated parameters for initial listings_df construction."""
 
@@ -29,6 +42,7 @@ class ListingInitConfig(BaseModel):
     unit_cost: DistributionSpec
     initial_margin_markup: float = Field(default=0.20, gt=0.0)
     initial_demand_index: float = Field(default=DEFAULT_DEMAND_INDEX, ge=0.0)
+    minimum_price_to_floor_ratio: float = Field(default=1.0, ge=1.0, le=2.0)
 
     @classmethod
     def default_market(
@@ -45,6 +59,19 @@ class ListingInitConfig(BaseModel):
             ),
             initial_margin_markup=initial_margin_markup,
             initial_demand_index=initial_demand_index,
+        )
+
+    @classmethod
+    def market_with_headroom(cls) -> ListingInitConfig:
+        """Headroom preset: выше markup и запас над p_min для crash repricing (§5.2)."""
+        return cls(
+            unit_cost=DistributionSpec(
+                family="lognorm",
+                params={"s": 0.35, "scale": math.exp(3.0)},
+            ),
+            initial_margin_markup=0.35,
+            initial_demand_index=DEFAULT_DEMAND_INDEX,
+            minimum_price_to_floor_ratio=1.15,
         )
 
 
@@ -71,6 +98,7 @@ class RepricingConfig(BaseModel):
     mode: RepricingMode = "rules"
     warmup_ticks: int = Field(default=15, ge=0)
     ml: CatBoostRepricingConfig | None = None
+    stress: StressRepricingConfig = Field(default_factory=StressRepricingConfig)
 
     @model_validator(mode="after")
     def _validate_ml_mode(self) -> Self:
@@ -95,4 +123,15 @@ class RepricingConfig(BaseModel):
             max_profit_demand_low=MAX_PROFIT_DEMAND_LOW_DEFAULT,
             max_volume_aggression=MAX_VOLUME_AGGRESSION_DEFAULT,
             min_listing_price=MIN_LISTING_PRICE_DEFAULT,
+        )
+
+    @classmethod
+    def market_with_headroom(cls) -> RepricingConfig:
+        """Headroom preset: ниже absolute floor для crash repricing (Spec 011 §5.2)."""
+        return cls(
+            relative_step=0.02,
+            max_profit_demand_high=MAX_PROFIT_DEMAND_HIGH_DEFAULT,
+            max_profit_demand_low=MAX_PROFIT_DEMAND_LOW_DEFAULT,
+            max_volume_aggression=MAX_VOLUME_AGGRESSION_DEFAULT,
+            min_listing_price=5.0,
         )
