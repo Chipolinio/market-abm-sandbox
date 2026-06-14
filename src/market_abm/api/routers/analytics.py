@@ -2,7 +2,7 @@
 # Базовая идея: читает AnalyticsStore через app.state; CQRS query-side.
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import polars as pl
 from fastapi import APIRouter, Depends, Query, Request
@@ -202,13 +202,17 @@ async def get_system_events(
 async def get_market_leaders(
     tick_id: int = Query(..., ge=0),
     limit: int = Query(5, ge=1, le=1000),
+    rank_by: Literal["working_capital", "tick_revenue", "cumulative_revenue"] = Query(
+        "tick_revenue",
+        description="Leader sort key (default tick_revenue for dynamic ranking).",
+    ),
     store: AnalyticsStore | None = Depends(_get_analytics_store),
 ) -> MarketLeadersResponse:
-    """Sellers ranked by working_capital DESC; limit caps registry size (default top-5)."""
+    """Sellers ranked on backend; default rank_by=tick_revenue (Spec 011 §6.2)."""
     if store is None:
         return MarketLeadersResponse(run_id=_DEFAULT_RUN_ID, tick_id=tick_id, leaders=[])
 
-    raw = query_market_leaders(store, tick_id, limit=limit)
+    raw = query_market_leaders(store, tick_id, limit=limit, rank_by=rank_by)
     leaders = [MarketLeaderRowDTO(**row) for row in raw["leaders"]]
     return MarketLeadersResponse(
         run_id=str(raw["run_id"]),

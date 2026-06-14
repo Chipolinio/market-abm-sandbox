@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import zlib
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -42,6 +43,13 @@ _WORKER_SEED: Final[int] = 42
 _PENDING_SESSION_FILENAME: Final[str] = "pending_session.json"
 
 
+def _default_session_seed(run_root: Path | None) -> int:
+    """Hash run_id when pending has no explicit seed (Spec 011 §6.3)."""
+    if run_root is not None:
+        return zlib.adler32(run_root.name.encode("utf-8")) & 0x7FFFFFFF
+    return _WORKER_SEED
+
+
 def _read_pending_session(run_root: Path) -> dict[str, object] | None:
     pending_path = run_root / _PENDING_SESSION_FILENAME
     if not pending_path.is_file():
@@ -69,7 +77,7 @@ def _population_from_pending(
     """Возвращает (n_buyers, n_sellers, seed); pending приоритетнее env defaults."""
     n_buyers = int(os.environ.get("WORKER_N_BUYERS", "300"))
     n_sellers = int(os.environ.get("WORKER_N_SELLERS", "30"))
-    seed = _WORKER_SEED
+    seed = _default_session_seed(run_root)
 
     source = pending
     if source is None and run_root is not None:
@@ -205,9 +213,10 @@ class LiveSimulationSession:
         n_buyers, n_sellers, seed = _population_from_pending(pending)
 
         buyers_batch_size = min(max(n_buyers, 101), 300)
-        if self._config.choice.buyers_batch_size != buyers_batch_size:
+        if self._config.choice.buyers_batch_size != buyers_batch_size or self._config.seed != seed:
             self._config = self._config.model_copy(
                 update={
+                    "seed": seed,
                     "choice": self._config.choice.model_copy(
                         update={"buyers_batch_size": buyers_batch_size},
                     ),

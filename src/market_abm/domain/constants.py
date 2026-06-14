@@ -93,6 +93,20 @@ LOGIC_STATUS_BANKRUPT: Final = "bankrupt"
 LOGIC_STATUS_ROI: Final = "roi_optimization"
 LOGIC_STATUS_DUMPING: Final = "aggressive_dumping"
 LOGIC_STATUS_RULE: Final = "rule_based"
+LOGIC_STATUS_PROFIT_MAXIMIZATION: Final = "profit_maximization"
+LOGIC_STATUS_RATING_DEFENSE: Final = "rating_defense"
+
+STRATEGY_ALGORITHM_TYPE: Final[dict[str, str]] = {
+    "MaxProfit": "RULE",
+    "MaxVolume": "REPR",
+    "RatingMaximizer": "CB",
+}
+
+STRATEGY_LOGIC_STATUS: Final[dict[str, str]] = {
+    "MaxProfit": LOGIC_STATUS_PROFIT_MAXIMIZATION,
+    "MaxVolume": LOGIC_STATUS_DUMPING,
+    "RatingMaximizer": LOGIC_STATUS_RATING_DEFENSE,
+}
 
 SELLERS_COLUMNS: Final[tuple[str, ...]] = (
     COL_SELLER_ID,

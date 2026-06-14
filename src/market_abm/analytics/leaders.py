@@ -1,7 +1,8 @@
-# Назначение файла: market-leaders и demand-matrix query-side (Slice 8.3).
+# Назначение файла: market-leaders и demand-matrix query-side (Slice 8.3 / Spec 011 §6).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import polars as pl
@@ -9,19 +10,21 @@ import polars as pl
 from market_abm.analytics.persist import reference_buyers_path, reference_sellers_path
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.domain.constants import (
-    ALGORITHM_TYPES,
     COL_IS_BANKRUPT,
     COL_SELLER_ID,
+    COL_STRATEGY_TYPE,
     COL_TICK_ID,
     COL_WORKING_CAPITAL,
     DEMAND_MATRIX_PVD_ORDER,
     DEMAND_MATRIX_STRATEGY_ORDER,
     LOGIC_STATUS_BANKRUPT,
-    LOGIC_STATUS_DUMPING,
-    LOGIC_STATUS_ROI,
     LOGIC_STATUS_RULE,
     SELLERS_STATE_COLUMNS,
+    STRATEGY_ALGORITHM_TYPE,
+    STRATEGY_LOGIC_STATUS,
 )
+
+LeaderRankBy = Literal["working_capital", "tick_revenue", "cumulative_revenue"]
 
 
 def _sellers_state_at_tick(store: AnalyticsStore, tick_id: int) -> pl.DataFrame | None:
@@ -43,19 +46,21 @@ def _resolved_tick_id(store: AnalyticsStore, tick_id: int, subdir: str) -> int:
     return tick_id
 
 
-def _algorithm_type_for_seller(seller_id: int) -> str:
-    return ALGORITHM_TYPES[seller_id % len(ALGORITHM_TYPES)]
+def _reference_sellers(store: AnalyticsStore) -> pl.DataFrame | None:
+    path = reference_sellers_path(store._run_root)
+    if not path.is_file():
+        return None
+    return pl.read_parquet(path).select([COL_SELLER_ID, COL_STRATEGY_TYPE])
 
 
-def _logic_status_for_seller(seller_id: int, *, is_bankrupt: bool) -> str:
+def _algorithm_type_for_strategy(strategy: str) -> str:
+    return STRATEGY_ALGORITHM_TYPE.get(strategy, "RULE")
+
+
+def _logic_status_for_strategy(strategy: str, *, is_bankrupt: bool) -> str:
     if is_bankrupt:
         return LOGIC_STATUS_BANKRUPT
-    algo = _algorithm_type_for_seller(seller_id)
-    if algo == "CB":
-        return LOGIC_STATUS_ROI
-    if algo == "REPR":
-        return LOGIC_STATUS_DUMPING
-    return LOGIC_STATUS_RULE
+    return STRATEGY_LOGIC_STATUS.get(strategy, LOGIC_STATUS_RULE)
 
 
 def _inventory_by_seller(store: AnalyticsStore, tick_id: int) -> dict[int, int]:
@@ -71,8 +76,9 @@ def query_market_leaders(
     tick_id: int,
     *,
     limit: int = 5,
+    rank_by: LeaderRankBy = "tick_revenue",
 ) -> dict[str, object]:
-    """Top-N селлеров по working_capital DESC (backend sort)."""
+    """Top-N селлеров; default rank_by=tick_revenue (Spec 011 §6.2)."""
     run_id = store._run_id_from_manifest()
     resolved_tick = _resolved_tick_id(store, tick_id, "sellers_state")
     sellers_state = _sellers_state_at_tick(store, tick_id)
@@ -117,6 +123,7 @@ def query_market_leaders(
         cumulative_df = empty_cumulative
 
     inventory = _inventory_by_seller(store, resolved_tick)
+    reference_sellers = _reference_sellers(store)
 
     joined = (
         sellers_state.join(tick_revenue_df, on=COL_SELLER_ID, how="left")
@@ -125,9 +132,22 @@ def query_market_leaders(
             pl.col("tick_revenue").fill_null(0.0),
             pl.col("cumulative_revenue").fill_null(0.0),
         )
-        .sort(COL_WORKING_CAPITAL, descending=True)
-        .head(limit)
     )
+    if reference_sellers is not None:
+        joined = joined.join(
+            reference_sellers.with_columns(pl.col(COL_STRATEGY_TYPE).cast(pl.String)),
+            on=COL_SELLER_ID,
+            how="left",
+        )
+    else:
+        joined = joined.with_columns(pl.lit(None, dtype=pl.String).alias(COL_STRATEGY_TYPE))
+
+    sort_col = {
+        "working_capital": COL_WORKING_CAPITAL,
+        "tick_revenue": "tick_revenue",
+        "cumulative_revenue": "cumulative_revenue",
+    }[rank_by]
+    joined = joined.sort(sort_col, descending=True).head(limit)
 
     leaders = [
         {
@@ -136,10 +156,15 @@ def query_market_leaders(
             "tick_revenue": float(row["tick_revenue"]),
             "cumulative_revenue": float(row["cumulative_revenue"]),
             "is_bankrupt": bool(row[COL_IS_BANKRUPT]),
-            "algorithm_type": _algorithm_type_for_seller(int(row[COL_SELLER_ID])),
+            "strategy_type": (
+                str(row[COL_STRATEGY_TYPE]) if row[COL_STRATEGY_TYPE] is not None else None
+            ),
+            "algorithm_type": _algorithm_type_for_strategy(
+                str(row[COL_STRATEGY_TYPE]) if row[COL_STRATEGY_TYPE] is not None else ""
+            ),
             "inventory_stock": inventory.get(int(row[COL_SELLER_ID]), 0),
-            "logic_status": _logic_status_for_seller(
-                int(row[COL_SELLER_ID]),
+            "logic_status": _logic_status_for_strategy(
+                str(row[COL_STRATEGY_TYPE]) if row[COL_STRATEGY_TYPE] is not None else "",
                 is_bankrupt=bool(row[COL_IS_BANKRUPT]),
             ),
         }

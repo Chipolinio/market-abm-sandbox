@@ -107,7 +107,7 @@ def test_market_leaders_sorted_by_working_capital() -> None:
 
         store = AnalyticsStore(run_root)
         try:
-            raw = query_market_leaders(store, tick_id=0, limit=5)
+            raw = query_market_leaders(store, tick_id=0, limit=5, rank_by="working_capital")
         finally:
             store.close()
 
