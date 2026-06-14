@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field, replace
 
 from market_abm.domain.constants import PLATFORM_DEFAULTS, COL_BASE_COMMISSION
+from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.domain.macro import MacroState
 from market_abm.domain.shocks import ActiveShock, ShockType
@@ -90,10 +91,19 @@ def with_tick_id(ctx: SimulationContext, tick_id: int) -> SimulationContext:
     return replace(ctx, tick_id=tick_id)
 
 
-def tick_down_active_shocks(ctx: SimulationContext) -> SimulationContext:
-    """Уменьшает remaining_ticks; снимает шоки с remaining_ticks <= 1 после тика."""
+def tick_down_active_shocks(
+    ctx: SimulationContext,
+    *,
+    macro_config: MacroDynamicsConfig | None = None,
+) -> SimulationContext:
+    """Уменьшает remaining_ticks; demand shocks в stochastic mode не таймерятся."""
+    demand_timed = (
+        macro_config is None or macro_config.shock_mode == "fixed_duration"
+    )
     remaining: list[ActiveShock] = []
     for shock in ctx.active_shocks:
+        if shock.shock_type in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM) and not demand_timed:
+            continue
         if shock.remaining_ticks <= 1:
             continue
         remaining.append(replace(shock, remaining_ticks=shock.remaining_ticks - 1))

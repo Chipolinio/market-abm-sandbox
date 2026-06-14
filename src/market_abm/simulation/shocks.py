@@ -5,8 +5,11 @@ from __future__ import annotations
 import polars as pl
 
 from market_abm.config.shocks import ShockCatalogConfig, ShockEffectSpec
+from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.domain.constants import (
     COL_BUDGET,
+    COL_BUDGET_EFFECTIVE,
+    COL_FREQ_EFFECTIVE,
     COL_PRICE,
     COL_PURCHASE_FREQUENCY,
     COL_UNIT_COST,
@@ -77,6 +80,8 @@ def apply_environment_shocks(
     products_df: pl.DataFrame,
     ctx: SimulationContext | None,
     catalog: ShockCatalogConfig,
+    *,
+    macro_config: MacroDynamicsConfig | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     """
     Применяет активные шоки из ctx к buyers_df и products_df.
@@ -97,6 +102,7 @@ def apply_environment_shocks(
             shock,
             ctx.platform_fee_rate,
             catalog,
+            macro_config=macro_config,
         )
 
     products_out = apply_marketplace_promotion_caps(products_out, ctx, catalog)
@@ -116,6 +122,12 @@ def _apply_demand_shock_to_buyers(
     buyers_df = buyers_df.with_columns(
         (pl.col(COL_BUDGET) * budget_mult).cast(pl.Float32).alias(COL_BUDGET)
     )
+    if COL_BUDGET_EFFECTIVE in buyers_df.columns:
+        buyers_df = buyers_df.with_columns(
+            (pl.col(COL_BUDGET_EFFECTIVE) * budget_mult)
+            .cast(pl.Float32)
+            .alias(COL_BUDGET_EFFECTIVE)
+        )
 
     if spec.scale_purchase_frequency:
         freq_mult = spec.purchase_frequency_multiplier * intensity
@@ -125,6 +137,13 @@ def _apply_demand_shock_to_buyers(
             .cast(pl.Float32)
             .alias(COL_PURCHASE_FREQUENCY)
         )
+        if COL_FREQ_EFFECTIVE in buyers_df.columns:
+            buyers_df = buyers_df.with_columns(
+                (pl.col(COL_FREQ_EFFECTIVE) * freq_mult)
+                .clip(0.0, 1.0)
+                .cast(pl.Float32)
+                .alias(COL_FREQ_EFFECTIVE)
+            )
 
     return buyers_df
 
@@ -135,8 +154,14 @@ def _apply_single_shock(
     shock: ActiveShock,
     platform_fee_rate: float,
     catalog: ShockCatalogConfig,
+    *,
+    macro_config: MacroDynamicsConfig | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
     intensity = shock.intensity
+
+    if shock.shock_type in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
+        if macro_config is not None and macro_config.shock_mode == "stochastic_regime":
+            return buyers_df, products_df
 
     if shock.shock_type == ShockType.DEMAND_CRASH:
         buyers_df = _apply_demand_shock_to_buyers(

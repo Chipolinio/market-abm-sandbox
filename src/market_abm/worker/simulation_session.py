@@ -32,6 +32,7 @@ from market_abm.simulation.extended_runtime import (
     persist_extended_tick,
 )
 from market_abm.simulation.listings import initialize_listings
+from market_abm.simulation.macro import macro_rng, run_macro_tick
 from market_abm.simulation.runner import _bootstrap_products_from_listings, _bootstrap_rng
 from market_abm.simulation.step import step
 _WORKER_SEED: Final[int] = 42
@@ -267,6 +268,18 @@ class LiveSimulationSession:
         )
         sim_ctx = with_tick_id(self._extended_state.simulation_context, tick_id)
 
+        macro_rng_gen = macro_rng(
+            self._config.seed or _WORKER_SEED,
+            tick_id,
+            sim_ctx.macro.episode_id,
+        )
+        sim_ctx, self._buyers_df = run_macro_tick(
+            sim_ctx,
+            self._buyers_df,
+            self._config.macro_dynamics,
+            macro_rng_gen,
+        )
+
         step_config = SimulationStepConfig(
             tick_id=tick_id,
             seed=self._config.seed,
@@ -282,6 +295,7 @@ class LiveSimulationSession:
             sellers_state_df=self._extended_state.sellers_state_df,
             simulation_context=sim_ctx,
             shock_catalog=self._config.shock_catalog,
+            macro_config=self._config.macro_dynamics,
         )
         if sellers_state_next is None:
             raise RuntimeError("extended worker session requires sellers_state_next")

@@ -29,6 +29,21 @@ class SegmentElasticityConfig(BaseModel):
     alpha_freq_rich: float = Field(default=0.05, ge=0.0, le=1.0)
     alpha_freq_standard: float = Field(default=0.20, ge=0.0, le=1.0)
     alpha_freq_low: float = Field(default=0.40, ge=0.0, le=1.0)
+    alpha_budget_boom_rich: float = Field(default=0.04, ge=0.0, le=1.0)
+    alpha_budget_boom_standard: float = Field(default=0.12, ge=0.0, le=1.0)
+    alpha_budget_boom_low: float = Field(default=0.22, ge=0.0, le=1.0)
+    alpha_freq_boom_rich: float = Field(default=0.03, ge=0.0, le=1.0)
+    alpha_freq_boom_standard: float = Field(default=0.10, ge=0.0, le=1.0)
+    alpha_freq_boom_low: float = Field(default=0.20, ge=0.0, le=1.0)
+    k_scar_rich: float = Field(default=0.002, ge=0.0, le=1.0)
+    k_scar_standard: float = Field(default=0.004, ge=0.0, le=1.0)
+    k_scar_low: float = Field(default=0.008, ge=0.0, le=1.0)
+    p_churn_rich: float = Field(default=0.01, ge=0.0, le=1.0)
+    p_churn_standard: float = Field(default=0.05, ge=0.0, le=1.0)
+    p_churn_low: float = Field(default=0.12, ge=0.0, le=1.0)
+    churn_stress_threshold_rich: float = Field(default=0.50, ge=0.0, le=2.0)
+    churn_stress_threshold_standard: float = Field(default=0.45, ge=0.0, le=2.0)
+    churn_stress_threshold_low: float = Field(default=0.40, ge=0.0, le=2.0)
 
 
 class MacroDynamicsConfig(BaseModel):
@@ -60,6 +75,10 @@ class MacroDynamicsConfig(BaseModel):
     scar_threshold: float = Field(default=0.35, ge=0.0, le=2.0)
     scar_cap: float = Field(default=0.25, ge=0.0, le=1.0)
     feedback_gain: float = Field(default=0.15, ge=0.0, le=2.0)
+    beta_budget: float = Field(default=1.0, ge=0.5, le=3.0)
+    beta_freq: float = Field(default=1.2, ge=0.5, le=3.0)
+    beta_boom: float = Field(default=1.0, ge=0.5, le=3.0)
+    freq_mult_cap: float = Field(default=1.0, gt=0.0, le=2.0)
     segment_elasticity: SegmentElasticityConfig = Field(default_factory=SegmentElasticityConfig)
     buyer_bounds: BuyerEconomicBoundsConfig = Field(default_factory=BuyerEconomicBoundsConfig)
 

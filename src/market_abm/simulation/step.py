@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
@@ -12,7 +13,9 @@ from market_abm.domain.constants import (
     COL_BUYER_ID,
     COL_DEMAND_INDEX,
     COL_DELIVERY_DAYS,
+    COL_FREQ_EFFECTIVE,
     COL_GROSS_MARGIN,
+    COL_IS_CHURNED,
     COL_LISTING_ID,
     COL_PRICE,
     COL_PRICE_PAID,
@@ -31,7 +34,7 @@ from typing import TYPE_CHECKING
 
 from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
-from market_abm.simulation.buyers_baseline import ensure_budget_baseline
+from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
 from market_abm.simulation.repricing import apply_ml_repricing_tick, apply_repricing_tick
 from market_abm.simulation.seller_economics import (
@@ -85,10 +88,13 @@ def _empty_transactions_df() -> pl.DataFrame:
 
 
 def _select_active_buyers(buyers_df: pl.DataFrame, rng: np.random.Generator) -> pl.DataFrame:
-    """Оставляет покупателей, которые заходят на рынок в этом тике."""
-    freq = buyers_df[COL_PURCHASE_FREQUENCY].to_numpy()
+    """Оставляет некоторых покупателей по freq_effective; churned исключаются."""
+    active = buyers_df.filter(~pl.col(COL_IS_CHURNED))
+    if active.height == 0:
+        return active
+    freq = active[COL_FREQ_EFFECTIVE].to_numpy()
     active_mask = rng.random(freq.shape[0]) < freq
-    return buyers_df.filter(pl.Series(active_mask))
+    return active.filter(pl.Series(active_mask))
 
 
 def _build_transactions_df(
@@ -284,6 +290,7 @@ def step(
     sellers_state_df: pl.DataFrame | None = None,
     simulation_context: SimulationContext | None = None,
     shock_catalog: ShockCatalogConfig | None = None,
+    macro_config: MacroDynamicsConfig | None = None,
     ml_registry: CatBoostModelRegistry | None = None,
     analytics_store: AnalyticsStore | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None]:
@@ -291,7 +298,7 @@ def step(
     Выполняет один тик: шоки → filter bankrupt → choice → transactions → settle.
     sellers_state_next — None если sellers_state_df не передан (backward compat).
     """
-    buyers_df = ensure_budget_baseline(buyers_df)
+    buyers_df = ensure_buyer_economic_columns(ensure_budget_baseline(buyers_df))
     _validate_buyers_df(buyers_df)
     _validate_sellers_df(sellers_df)
     _validate_products_df(products_df)
@@ -302,6 +309,7 @@ def step(
         products_df,
         simulation_context,
         catalog,
+        macro_config=macro_config,
     )
     products_pool = filter_bankrupt_listings(products_work, sellers_state_df)
 

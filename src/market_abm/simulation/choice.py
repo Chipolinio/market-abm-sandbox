@@ -9,15 +9,15 @@ import numpy as np
 import polars as pl
 
 from market_abm.config.simulation import ChoiceModelConfig
-from market_abm.simulation.buyers_baseline import ensure_budget_baseline
+from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.domain.constants import (
     BUYERS_CHOICE_INPUT_COLUMNS,
     CHOICES_COLUMNS,
     COL_BETA_DELIVERY,
     COL_BETA_PRICE,
     COL_BETA_RATING,
-    COL_BUDGET,
     COL_BUDGET_BASELINE,
+    COL_BUDGET_EFFECTIVE,
     COL_BUYER_ID,
     COL_CHOICE_PROBABILITY,
     COL_DELIVERY_DAYS,
@@ -156,7 +156,7 @@ def _choose_one_buyer(
     outside_utility_bias: float,
 ) -> tuple[int | None, float]:
     """Выбирает один оффер для покупателя или возвращает отказ от покупки."""
-    budget = float(buyer_row[COL_BUDGET])
+    budget = float(buyer_row[COL_BUDGET_EFFECTIVE])
     all_prices = products_df[COL_PRICE].to_numpy()
     affordable_indices = np.flatnonzero(all_prices <= budget)
     if affordable_indices.size == 0:
@@ -220,7 +220,7 @@ def choose_listings_for_buyers(
     Возвращает choices_df: buyer_id, listing_id (или null), choice_probability.
     Если задан base_seed, seed для каждого покупателя считается отдельно (для батчей).
     """
-    buyers_batch_df = ensure_budget_baseline(buyers_batch_df)
+    buyers_batch_df = ensure_buyer_economic_columns(ensure_budget_baseline(buyers_batch_df))
     _validate_buyers_batch(buyers_batch_df)
     _validate_products(products_df)
 
@@ -290,7 +290,7 @@ def choose_listings_for_all_buyers(
     if buyers_df.height == 0:
         raise ValueError("buyers_df must be non-empty")
 
-    buyers_df = ensure_budget_baseline(buyers_df)
+    buyers_df = ensure_buyer_economic_columns(ensure_budget_baseline(buyers_df))
 
     chunks: list[pl.DataFrame] = []
     batch_size = config.buyers_batch_size

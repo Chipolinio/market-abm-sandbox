@@ -219,7 +219,8 @@ def persist_extended_tick(
     return ExtendedSimulationState(
         sellers_state_df=state.sellers_state_df,
         simulation_context=tick_down_active_shocks(
-            with_tick_id(state.simulation_context, tick_id + 1)
+            with_tick_id(state.simulation_context, tick_id + 1),
+            macro_config=config.macro_dynamics,
         ),
         cumulative_gmv=state.cumulative_gmv + tick_gmv,
         event_seq=seq,

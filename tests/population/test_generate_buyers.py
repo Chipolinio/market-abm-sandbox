@@ -14,9 +14,14 @@ from market_abm.domain.constants import (
     COL_BETA_RATING,
     COL_BUDGET,
     COL_BUDGET_BASELINE,
+    COL_BUDGET_EFFECTIVE,
     COL_BUYER_ID,
     COL_DEVICE_TYPE,
+    COL_FREQ_BASELINE,
+    COL_FREQ_EFFECTIVE,
+    COL_IS_CHURNED,
     COL_PURCHASE_FREQUENCY,
+    COL_SCAR_FACTOR,
     DEVICE_TYPES,
     PVD_SEGMENTS,
 )
@@ -136,3 +141,14 @@ def test_generate_buyers_budget_baseline_strictly_positive(
 ) -> None:
     df = generate_buyers(small_config)
     assert df[COL_BUDGET_BASELINE].min() > 0
+
+
+def test_generate_buyers_economic_columns_initialized(
+    small_config: BuyerPopulationConfig,
+) -> None:
+    df = generate_buyers(small_config)
+    assert df[COL_FREQ_BASELINE].equals(df[COL_PURCHASE_FREQUENCY])
+    assert df[COL_BUDGET_EFFECTIVE].equals(df[COL_BUDGET_BASELINE])
+    assert df[COL_FREQ_EFFECTIVE].equals(df[COL_FREQ_BASELINE])
+    assert df[COL_SCAR_FACTOR].max() == pytest.approx(0.0)
+    assert not df[COL_IS_CHURNED].any()

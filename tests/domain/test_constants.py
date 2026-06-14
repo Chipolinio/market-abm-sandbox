@@ -6,9 +6,9 @@ import pytest
 from market_abm.domain import constants as c
 
 
-def test_buyers_schema_has_eleven_columns() -> None:
-    assert len(c.BUYERS_COLUMNS) == 11
-    assert len(c.BUYERS_SCHEMA_DTYPES) == 11
+def test_buyers_schema_has_sixteen_columns() -> None:
+    assert len(c.BUYERS_COLUMNS) == 16
+    assert len(c.BUYERS_SCHEMA_DTYPES) == 16
 
 
 def test_buyers_columns_match_schema_keys() -> None:
@@ -28,6 +28,11 @@ def test_buyers_required_column_names() -> None:
         "activity_hour",
         "is_impulsive",
         "purchase_frequency",
+        "freq_baseline",
+        "budget_effective",
+        "freq_effective",
+        "scar_factor",
+        "is_churned",
     }
     assert set(c.BUYERS_COLUMNS) == expected
 

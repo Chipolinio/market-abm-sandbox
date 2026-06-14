@@ -1,14 +1,27 @@
-# Назначение файла: чистые функции макро-динамики (Slice 11.1, Spec 011 §3, §9.1).
-# Базовая идея: impulse + advance на MacroState в SimulationContext, без buyers_df.
+# Назначение файла: чистые функции макро-динамики (Slice 11.1–11.2, Spec 011 §3, §9.1).
+# Базовая идея: impulse + advance на MacroState; buyer economic state — новый DataFrame.
 from __future__ import annotations
 
 import numpy as np
+import polars as pl
 from dataclasses import replace
 
-from market_abm.config.macro import CrisisScenarioConfig, MacroDynamicsConfig
+from market_abm.config.macro import CrisisScenarioConfig, MacroDynamicsConfig, SegmentElasticityConfig
+from market_abm.domain.constants import (
+    COL_BUDGET_BASELINE,
+    COL_BUDGET_EFFECTIVE,
+    COL_FREQ_BASELINE,
+    COL_FREQ_EFFECTIVE,
+    COL_IS_CHURNED,
+    COL_PVD_SEGMENT,
+    COL_SCAR_FACTOR,
+)
 from market_abm.domain.macro import MacroRegime, MacroState
 from market_abm.domain.shocks import ShockType
+from market_abm.simulation.buyers_baseline import ensure_buyer_economic_columns
 from market_abm.simulation.context import ShockCommand, SimulationContext
+
+_MACRO_SALT = 0x110011
 
 
 def relax_multiplier_to_one(multiplier: float, recovery_rate: float) -> float:
@@ -193,3 +206,242 @@ def advance_macro_state(
         ticks_in_episode=macro.ticks_in_episode + 1,
     )
     return replace(ctx, macro=macro_next)
+
+
+def macro_rng(seed: int, tick_id: int, episode_id: int = 0) -> np.random.Generator:
+    """Детерминированный RNG для macro/churn (Spec 011 §9.5)."""
+    sub = int(
+        np.random.SeedSequence([seed, tick_id, _MACRO_SALT, episode_id]).generate_state(1)[0]
+    )
+    return np.random.default_rng(sub)
+
+
+def _segment_strings(pvd_col: pl.Series) -> np.ndarray:
+    if pvd_col.dtype == pl.Categorical:
+        return pvd_col.cast(pl.String).to_numpy()
+    return pvd_col.to_numpy().astype(str)
+
+
+def _segment_lookup(segments: np.ndarray, values: dict[str, float]) -> np.ndarray:
+    out = np.zeros(segments.shape[0], dtype=np.float64)
+    for seg, value in values.items():
+        out[segments == seg] = value
+    return out
+
+
+def _segment_alpha_budget(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.alpha_budget_rich,
+        "standard": elasticity.alpha_budget_standard,
+        "low": elasticity.alpha_budget_low,
+    }
+
+
+def _segment_alpha_freq(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.alpha_freq_rich,
+        "standard": elasticity.alpha_freq_standard,
+        "low": elasticity.alpha_freq_low,
+    }
+
+
+def _segment_alpha_budget_boom(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.alpha_budget_boom_rich,
+        "standard": elasticity.alpha_budget_boom_standard,
+        "low": elasticity.alpha_budget_boom_low,
+    }
+
+
+def _segment_alpha_freq_boom(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.alpha_freq_boom_rich,
+        "standard": elasticity.alpha_freq_boom_standard,
+        "low": elasticity.alpha_freq_boom_low,
+    }
+
+
+def _segment_k_scar(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.k_scar_rich,
+        "standard": elasticity.k_scar_standard,
+        "low": elasticity.k_scar_low,
+    }
+
+
+def _segment_p_churn(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.p_churn_rich,
+        "standard": elasticity.p_churn_standard,
+        "low": elasticity.p_churn_low,
+    }
+
+
+def _segment_churn_threshold(elasticity: SegmentElasticityConfig) -> dict[str, float]:
+    return {
+        "rich": elasticity.churn_stress_threshold_rich,
+        "standard": elasticity.churn_stress_threshold_standard,
+        "low": elasticity.churn_stress_threshold_low,
+    }
+
+
+def _update_scar_factors(
+    scar: np.ndarray,
+    segments: np.ndarray,
+    macro: MacroState,
+    config: MacroDynamicsConfig,
+) -> np.ndarray:
+    if macro.regime != MacroRegime.STRESS or macro.stress <= config.scar_threshold:
+        return scar
+    excess = max(0.0, macro.stress - config.scar_threshold)
+    if excess <= 0.0:
+        return scar
+    k_scar = _segment_lookup(segments, _segment_k_scar(config.segment_elasticity))
+    return np.clip(scar + k_scar * excess, 0.0, config.scar_cap).astype(np.float32)
+
+
+def _compute_effective_columns(
+    baseline: np.ndarray,
+    freq_baseline: np.ndarray,
+    scar: np.ndarray,
+    segments: np.ndarray,
+    macro: MacroState,
+    config: MacroDynamicsConfig,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Полный пересчёт mult и effective из baseline + macro (§3.4, §3.9)."""
+    bounds = config.buyer_bounds
+    elasticity = config.segment_elasticity
+    stress = float(macro.stress)
+    expansion = float(macro.expansion)
+
+    alpha_budget = _segment_lookup(segments, _segment_alpha_budget(elasticity))
+    alpha_freq = _segment_lookup(segments, _segment_alpha_freq(elasticity))
+    alpha_budget_boom = _segment_lookup(segments, _segment_alpha_budget_boom(elasticity))
+    alpha_freq_boom = _segment_lookup(segments, _segment_alpha_freq_boom(elasticity))
+
+    budget_mult_crash = 1.0 - alpha_budget * (stress ** config.beta_budget)
+    freq_mult_crash = 1.0 - alpha_freq * (stress ** config.beta_freq)
+    budget_mult_boom = 1.0 + alpha_budget_boom * (expansion ** config.beta_boom)
+    freq_mult_boom = 1.0 + alpha_freq_boom * (expansion ** config.beta_boom)
+
+    budget_mult = budget_mult_crash * budget_mult_boom
+    freq_mult = np.minimum(freq_mult_crash * freq_mult_boom, config.freq_mult_cap)
+
+    budget_mult = np.clip(
+        budget_mult,
+        bounds.min_budget_mult,
+        bounds.max_budget_mult,
+    )
+
+    budget_effective = baseline * (1.0 - scar) * budget_mult
+    freq_effective = freq_baseline * freq_mult
+
+    floor = np.maximum(
+        baseline.astype(np.float64) * bounds.min_budget_fraction,
+        bounds.budget_floor_epsilon,
+    )
+    ceiling = baseline.astype(np.float64) * bounds.max_budget_mult * (1.0 - scar)
+    budget_effective = np.clip(budget_effective, floor, ceiling).astype(np.float32)
+
+    freq_cap = np.minimum(1.0, freq_baseline.astype(np.float64) * config.freq_mult_cap)
+    freq_effective = np.clip(freq_effective, 0.0, freq_cap).astype(np.float32)
+    freq_floor = freq_baseline.astype(np.float64) * bounds.min_freq_fraction
+    freq_effective = np.maximum(freq_effective, freq_floor).astype(np.float32)
+
+    return budget_mult, freq_mult, budget_effective, freq_effective
+
+
+def apply_buyer_economic_state(
+    buyers_df: pl.DataFrame,
+    macro: MacroState,
+    config: MacroDynamicsConfig,
+    rng: np.random.Generator,
+) -> pl.DataFrame:
+    """
+    Пересчитывает scar/churn и effective-колонки из baseline + macro.
+    Legacy budget / purchase_frequency не мутируются.
+    """
+    if buyers_df.height == 0:
+        return buyers_df.clone()
+
+    df = ensure_buyer_economic_columns(buyers_df).clone()
+    segments = _segment_strings(df[COL_PVD_SEGMENT])
+
+    baseline = df[COL_BUDGET_BASELINE].to_numpy().astype(np.float64)
+    freq_baseline = df[COL_FREQ_BASELINE].to_numpy().astype(np.float64)
+    scar = df[COL_SCAR_FACTOR].to_numpy().astype(np.float64)
+    is_churned = df[COL_IS_CHURNED].to_numpy()
+
+    scar = _update_scar_factors(scar, segments, macro, config).astype(np.float64)
+    budget_mult, freq_mult, budget_effective, freq_effective = _compute_effective_columns(
+        baseline,
+        freq_baseline,
+        scar,
+        segments,
+        macro,
+        config,
+    )
+
+    if macro.stress > 0.0:
+        p_churn = _segment_lookup(segments, _segment_p_churn(config.segment_elasticity))
+        churn_threshold = _segment_lookup(
+            segments,
+            _segment_churn_threshold(config.segment_elasticity),
+        )
+        churn_draw = rng.random(is_churned.shape[0])
+        new_churn = (
+            (~is_churned)
+            & (macro.stress > churn_threshold)
+            & (churn_draw < p_churn * macro.stress)
+        )
+        is_churned = is_churned | new_churn
+
+    freq_effective = np.where(is_churned, 0.0, freq_effective).astype(np.float32)
+
+    return df.with_columns(
+        pl.Series(COL_SCAR_FACTOR, scar.astype(np.float32)),
+        pl.Series(COL_BUDGET_EFFECTIVE, budget_effective),
+        pl.Series(COL_FREQ_EFFECTIVE, freq_effective),
+        pl.Series(COL_IS_CHURNED, is_churned),
+    )
+
+
+def resolve_demand_shocks_to_macro(
+    ctx: SimulationContext,
+    config: MacroDynamicsConfig,
+    rng: np.random.Generator,
+) -> SimulationContext:
+    """Stochastic mode: demand ActiveShock → macro impulse, без timed overlay."""
+    if config.shock_mode == "fixed_duration":
+        return ctx
+
+    ctx_next = ctx
+    kept: list = []
+    for shock in ctx.active_shocks:
+        if shock.shock_type in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
+            cmd = ShockCommand(
+                shock_type=shock.shock_type,
+                intensity=shock.intensity,
+                duration_ticks=shock.remaining_ticks,
+            )
+            ctx_next = apply_demand_impulse(ctx_next, cmd, config, rng)
+        else:
+            kept.append(shock)
+    return replace(ctx_next, active_shocks=tuple(kept))
+
+
+def run_macro_tick(
+    ctx: SimulationContext,
+    buyers_df: pl.DataFrame,
+    config: MacroDynamicsConfig,
+    rng: np.random.Generator,
+) -> tuple[SimulationContext, pl.DataFrame]:
+    """Полный macro-тик: resolve impulses → advance → buyer economic state."""
+    if config.shock_mode == "fixed_duration":
+        return ctx, ensure_buyer_economic_columns(buyers_df)
+
+    ctx = resolve_demand_shocks_to_macro(ctx, config, rng)
+    ctx = advance_macro_state(ctx, config, rng)
+    buyers_out = apply_buyer_economic_state(buyers_df, ctx.macro, config, rng)
+    return ctx, buyers_out
+

@@ -16,10 +16,15 @@ from market_abm.domain.constants import (
     COL_BUDGET,
     COL_BUDGET_BASELINE,
     COL_BUYER_ID,
+    COL_BUDGET_EFFECTIVE,
     COL_DEVICE_TYPE,
+    COL_FREQ_BASELINE,
+    COL_FREQ_EFFECTIVE,
+    COL_IS_CHURNED,
     COL_IS_IMPULSIVE,
     COL_PURCHASE_FREQUENCY,
     COL_PVD_SEGMENT,
+    COL_SCAR_FACTOR,
     PVD_BUDGET_MULTIPLIERS,
 )
 from market_abm.population.distributions import (
@@ -139,6 +144,11 @@ def generate_buyers(config: BuyerPopulationConfig) -> pl.DataFrame:
             COL_ACTIVITY_HOUR: activity_hour,
             COL_IS_IMPULSIVE: is_impulsive,
             COL_PURCHASE_FREQUENCY: purchase_frequency,
+            COL_FREQ_BASELINE: purchase_frequency.copy(),
+            COL_BUDGET_EFFECTIVE: budget.copy(),
+            COL_FREQ_EFFECTIVE: purchase_frequency.copy(),
+            COL_SCAR_FACTOR: np.zeros(n, dtype=np.float32),
+            COL_IS_CHURNED: np.zeros(n, dtype=bool),
         },
         schema=schema,
     )

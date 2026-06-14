@@ -15,6 +15,11 @@ COL_PVD_SEGMENT: Final = "pvd_segment"
 COL_ACTIVITY_HOUR: Final = "activity_hour"
 COL_IS_IMPULSIVE: Final = "is_impulsive"
 COL_PURCHASE_FREQUENCY: Final = "purchase_frequency"
+COL_FREQ_BASELINE: Final = "freq_baseline"
+COL_BUDGET_EFFECTIVE: Final = "budget_effective"
+COL_FREQ_EFFECTIVE: Final = "freq_effective"
+COL_SCAR_FACTOR: Final = "scar_factor"
+COL_IS_CHURNED: Final = "is_churned"
 
 DEVICE_TYPES: Final[tuple[str, ...]] = ("ios", "android", "desktop")
 PVD_SEGMENTS: Final[tuple[str, ...]] = ("rich", "standard", "low")
@@ -37,6 +42,11 @@ BUYERS_COLUMNS: Final[tuple[str, ...]] = (
     COL_ACTIVITY_HOUR,
     COL_IS_IMPULSIVE,
     COL_PURCHASE_FREQUENCY,
+    COL_FREQ_BASELINE,
+    COL_BUDGET_EFFECTIVE,
+    COL_FREQ_EFFECTIVE,
+    COL_SCAR_FACTOR,
+    COL_IS_CHURNED,
 )
 
 # String Polars dtype names are mapped to pl.* in population layer.
@@ -52,6 +62,11 @@ BUYERS_SCHEMA_DTYPES: Final[dict[str, str]] = {
     COL_ACTIVITY_HOUR: "UInt8",
     COL_IS_IMPULSIVE: "Boolean",
     COL_PURCHASE_FREQUENCY: "Float32",
+    COL_FREQ_BASELINE: "Float32",
+    COL_BUDGET_EFFECTIVE: "Float32",
+    COL_FREQ_EFFECTIVE: "Float32",
+    COL_SCAR_FACTOR: "Float32",
+    COL_IS_CHURNED: "Boolean",
 }
 
 # --- Sellers (sellers_df) ---
@@ -168,8 +183,9 @@ CHOICES_COLUMNS: Final[tuple[str, ...]] = (
 
 BUYERS_CHOICE_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_BUYER_ID,
-    COL_BUDGET,
+    COL_BUDGET_EFFECTIVE,
     COL_BUDGET_BASELINE,
+    COL_FREQ_BASELINE,
     COL_BETA_PRICE,
     COL_BETA_DELIVERY,
     COL_BETA_RATING,

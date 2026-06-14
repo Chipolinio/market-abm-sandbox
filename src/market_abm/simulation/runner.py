@@ -32,6 +32,7 @@ from market_abm.simulation.extended_runtime import (
     init_extended_state,
     persist_extended_tick,
 )
+from market_abm.simulation.macro import macro_rng, run_macro_tick
 from market_abm.simulation.step import step
 
 PRODUCTS_RECHUNK_N_CHUNKS_THRESHOLD: Final[int] = 16
@@ -129,6 +130,8 @@ def run_simulation(
     if _is_extended(config):
         extended_state = init_extended_state(sellers_df)
 
+    buyers_runtime = buyers_df
+
     for tick_id in range(n_ticks):
         step_config = SimulationStepConfig(
             tick_id=tick_id,
@@ -142,15 +145,27 @@ def run_simulation(
         if extended_state is not None:
             sim_ctx = with_tick_id(extended_state.simulation_context, tick_id)
             sellers_state_df = extended_state.sellers_state_df
+            tick_rng = macro_rng(
+                config.seed or 0,
+                tick_id,
+                sim_ctx.macro.episode_id,
+            )
+            sim_ctx, buyers_runtime = run_macro_tick(
+                sim_ctx,
+                buyers_runtime,
+                config.macro_dynamics,
+                tick_rng,
+            )
 
         products_next, transactions_df, sellers_state_next = step(
-            buyers_df,
+            buyers_runtime,
             sellers_df,
             products_df,
             step_config,
             sellers_state_df=sellers_state_df,
             simulation_context=sim_ctx,
             shock_catalog=config.shock_catalog,
+            macro_config=config.macro_dynamics,
         )
         products_next = _maybe_rechunk_products(products_next)
         products_df = products_next
@@ -167,7 +182,10 @@ def run_simulation(
 
             extended_state = replace(
                 extended_state,
-                simulation_context=tick_down_active_shocks(extended_state.simulation_context),
+                simulation_context=tick_down_active_shocks(
+                    extended_state.simulation_context,
+                    macro_config=config.macro_dynamics,
+                ),
             )
 
         yield tick_id, products_next, transactions_df
