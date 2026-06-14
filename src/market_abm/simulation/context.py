@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import queue
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from market_abm.domain.constants import PLATFORM_DEFAULTS, COL_BASE_COMMISSION
 from market_abm.config.shocks import ShockCatalogConfig
+from market_abm.domain.macro import MacroState
 from market_abm.domain.shocks import ActiveShock, ShockType
 
 
@@ -27,6 +28,7 @@ class SimulationContext:
     tick_id: int
     active_shocks: tuple[ActiveShock, ...]
     platform_fee_rate: float
+    macro: MacroState = field(default_factory=MacroState.empty)
 
 
 def default_simulation_context(*, tick_id: int = 0) -> SimulationContext:
