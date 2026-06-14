@@ -41,6 +41,7 @@ from market_abm.domain.constants import (
 )
 from market_abm.ml.catboost_repricing import CatBoostModelRegistry
 from market_abm.simulation.step import step
+from tests.helpers.reference_snapshots import stub_buyers_df
 
 pytestmark = pytest.mark.ml
 
@@ -198,9 +199,7 @@ def _persist_run(
         repricing=RepricingConfig.default_market(),
         persistence=PersistenceConfig(enabled=True, base_dir=str(tmp_path), run_id=run_id),
     )
-    buyers = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(
-        pl.col(COL_BUYER_ID).cast(pl.Int32)
-    )
+    buyers = stub_buyers_df([0])
     ctx = init_run_directory(
         config,
         run_id=run_id,

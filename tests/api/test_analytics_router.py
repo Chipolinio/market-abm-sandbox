@@ -38,6 +38,7 @@ from market_abm.domain.constants import (
     TRANSACTIONS_SCHEMA_DTYPES,
 )
 from market_abm.worker.process import WorkerState
+from tests.helpers.reference_snapshots import stub_buyers_df, stub_sellers_df
 
 
 def _run_config(tmp_path: Path, *, run_id: str = "api-analytics-run") -> SimulationRunConfig:
@@ -88,10 +89,8 @@ def _products_snapshot(n: int, *, prices: list[float] | None = None) -> pl.DataF
 def _persist_mini_run(tmp_path: Path) -> AnalyticsStore:
     run_id = "api-analytics-run"
     config = _run_config(tmp_path, run_id=run_id)
-    buyers = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(pl.col(COL_BUYER_ID).cast(pl.Int32))
-    sellers = pl.DataFrame({COL_SELLER_ID: [0, 1]}).with_columns(
-        pl.col(COL_SELLER_ID).cast(pl.Int32)
-    )
+    buyers = stub_buyers_df([0])
+    sellers = stub_sellers_df([0, 1], strategy_types=["MaxProfit", "MaxVolume"])
     listings = pl.DataFrame({COL_LISTING_ID: [0, 1], COL_SELLER_ID: [0, 1]}).with_columns(
         pl.col(COL_LISTING_ID).cast(pl.Int32),
         pl.col(COL_SELLER_ID).cast(pl.Int32),

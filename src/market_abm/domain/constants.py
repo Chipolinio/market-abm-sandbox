@@ -6,6 +6,7 @@ from typing import Final
 
 COL_BUYER_ID: Final = "buyer_id"
 COL_BUDGET: Final = "budget"
+COL_BUDGET_BASELINE: Final = "budget_baseline"
 COL_BETA_PRICE: Final = "beta_price"
 COL_BETA_DELIVERY: Final = "beta_delivery"
 COL_BETA_RATING: Final = "beta_rating"
@@ -27,6 +28,7 @@ PVD_BUDGET_MULTIPLIERS: Final[dict[str, float]] = {
 BUYERS_COLUMNS: Final[tuple[str, ...]] = (
     COL_BUYER_ID,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BETA_PRICE,
     COL_BETA_DELIVERY,
     COL_BETA_RATING,
@@ -41,6 +43,7 @@ BUYERS_COLUMNS: Final[tuple[str, ...]] = (
 BUYERS_SCHEMA_DTYPES: Final[dict[str, str]] = {
     COL_BUYER_ID: "Int32",
     COL_BUDGET: "Float32",
+    COL_BUDGET_BASELINE: "Float32",
     COL_BETA_PRICE: "Float32",
     COL_BETA_DELIVERY: "Float32",
     COL_BETA_RATING: "Float32",
@@ -166,6 +169,7 @@ CHOICES_COLUMNS: Final[tuple[str, ...]] = (
 BUYERS_CHOICE_INPUT_COLUMNS: Final[tuple[str, ...]] = (
     COL_BUYER_ID,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BETA_PRICE,
     COL_BETA_DELIVERY,
     COL_BETA_RATING,

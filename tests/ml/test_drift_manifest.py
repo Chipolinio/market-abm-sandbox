@@ -12,7 +12,8 @@ from market_abm.analytics.persist import append_drift_alerts, init_run_directory
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.config.ml_repricing import DriftMonitorConfig
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
-from market_abm.domain.constants import COL_BUYER_ID, COL_TICK_ID
+from market_abm.domain.constants import COL_BUYER_ID, COL_LISTING_ID, COL_SELLER_ID, COL_TICK_ID
+from tests.helpers.reference_snapshots import stub_buyers_df, stub_sellers_df
 from market_abm.ml.drift import (
     compute_feature_drift_report,
     drift_reports_to_alerts,
@@ -29,13 +30,18 @@ def _run_root(tmp_path: Path, *, run_id: str = "drift-manifest") -> Path:
         seed=1,
         persistence=PersistenceConfig(enabled=True, base_dir=str(tmp_path), run_id=run_id),
     )
-    one = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(pl.col(COL_BUYER_ID).cast(pl.Int32))
+    buyers = stub_buyers_df([0])
+    sellers = stub_sellers_df([0])
+    listings = pl.DataFrame({COL_LISTING_ID: [0], COL_SELLER_ID: [0]}).with_columns(
+        pl.col(COL_LISTING_ID).cast(pl.Int32),
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+    )
     ctx = init_run_directory(
         config,
         run_id=run_id,
-        buyers_df=one,
-        sellers_df=one,
-        listings_df=one,
+        buyers_df=buyers,
+        sellers_df=sellers,
+        listings_df=listings,
         n_ticks=5,
     )
     return ctx.run_root

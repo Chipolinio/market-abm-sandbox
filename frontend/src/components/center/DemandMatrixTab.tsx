@@ -37,7 +37,11 @@ export function DemandMatrixGrid({
     <div className="flex h-full min-h-0 w-full max-w-xl flex-col gap-2">
       <div
         className="grid flex-1 gap-2"
-        style={{ gridTemplateColumns: `5.5rem repeat(${colCount}, minmax(0, 1fr))` }}
+        aria-rowcount={rowCount}
+        style={{
+          gridTemplateColumns: `5.5rem repeat(${colCount}, minmax(0, 1fr))`,
+          gridTemplateRows: `auto repeat(${rowCount}, minmax(0, 1fr))`,
+        }}
       >
         <div />
         {xLabels.map((label) => (

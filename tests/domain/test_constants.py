@@ -6,9 +6,9 @@ import pytest
 from market_abm.domain import constants as c
 
 
-def test_buyers_schema_has_ten_columns() -> None:
-    assert len(c.BUYERS_COLUMNS) == 10
-    assert len(c.BUYERS_SCHEMA_DTYPES) == 10
+def test_buyers_schema_has_eleven_columns() -> None:
+    assert len(c.BUYERS_COLUMNS) == 11
+    assert len(c.BUYERS_SCHEMA_DTYPES) == 11
 
 
 def test_buyers_columns_match_schema_keys() -> None:
@@ -19,6 +19,7 @@ def test_buyers_required_column_names() -> None:
     expected = {
         "buyer_id",
         "budget",
+        "budget_baseline",
         "beta_price",
         "beta_delivery",
         "beta_rating",

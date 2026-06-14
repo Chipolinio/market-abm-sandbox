@@ -31,6 +31,7 @@ from market_abm.simulation.context import (
     SimulationContext,
     default_simulation_context,
     demand_shock_pct_drop,
+    demand_shock_pct_frequency_change,
     tick_down_active_shocks,
     with_tick_id,
 )
@@ -93,18 +94,38 @@ def _build_command_side_events(
         if shock.shock_type in seen_demand:
             continue
         seen_demand.add(shock.shock_type)
-        pct = demand_shock_pct_drop(
+        spec = (
+            config.shock_catalog.demand_crash
+            if shock.shock_type == ShockType.DEMAND_CRASH
+            else config.shock_catalog.demand_boom
+        )
+        intensity = shock.intensity
+        pct_budget = demand_shock_pct_drop(
             shock.shock_type,
             catalog=config.shock_catalog,
-            intensity=shock.intensity,
+            intensity=intensity,
+        )
+        pct_freq = demand_shock_pct_frequency_change(
+            shock.shock_type,
+            catalog=config.shock_catalog,
+            intensity=intensity,
+        )
+        budget_mult = spec.budget_multiplier * intensity
+        freq_mult = (
+            spec.purchase_frequency_multiplier * intensity
+            if spec.scale_purchase_frequency
+            else None
         )
         events.append(
             build_demand_shock_event(
                 run_id=run_id,
                 tick_id=tick_id,
                 seq=seq,
-                pct_drop=pct,
+                pct_drop=pct_budget,
                 shock_type=shock.shock_type,
+                pct_frequency_change=pct_freq if freq_mult is not None else None,
+                budget_multiplier=budget_mult,
+                purchase_frequency_multiplier=freq_mult,
             )
         )
         seq += 1

@@ -1,4 +1,4 @@
-# Тесты generate_buyers: buyers_df, схема, инварианты, детерминизм (spec 001 §9.3).
+# Тесты generate_buyers: buyers_df, схема, инварианты, детерминизм (spec 001 §9.3, 010 §10.1).
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from market_abm.domain.constants import (
     COL_BETA_PRICE,
     COL_BETA_RATING,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BUYER_ID,
     COL_DEVICE_TYPE,
     COL_PURCHASE_FREQUENCY,
@@ -118,3 +119,20 @@ def test_generate_buyers_activity_hour_in_range(small_config: BuyerPopulationCon
 def test_default_market_smoke() -> None:
     df = generate_buyers(BuyerPopulationConfig.default_market(n_buyers=100, seed=0))
     assert df.height == 100
+
+
+# --- Spec 010 §10.1-T* ---
+
+
+def test_generate_buyers_sets_budget_baseline_equal_budget(
+    small_config: BuyerPopulationConfig,
+) -> None:
+    df = generate_buyers(small_config)
+    assert df[COL_BUDGET].equals(df[COL_BUDGET_BASELINE])
+
+
+def test_generate_buyers_budget_baseline_strictly_positive(
+    small_config: BuyerPopulationConfig,
+) -> None:
+    df = generate_buyers(small_config)
+    assert df[COL_BUDGET_BASELINE].min() > 0

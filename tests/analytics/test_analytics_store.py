@@ -17,6 +17,7 @@ from market_abm.analytics.store import AnalyticsStore
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.config.simulation import ChoiceModelConfig
 from market_abm.config.repricing import RepricingConfig
+from tests.helpers.reference_snapshots import stub_buyers_df, stub_sellers_df
 from market_abm.domain.constants import (
     COL_BUYER_ID,
     COL_DELIVERY_DAYS,
@@ -53,10 +54,8 @@ def _persist_run(
     ticks: list[tuple[pl.DataFrame, pl.DataFrame]],
 ) -> Path:
     config = _run_config(tmp_path, run_id=run_id)
-    buyers = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(pl.col(COL_BUYER_ID).cast(pl.Int32))
-    sellers = pl.DataFrame({COL_SELLER_ID: [0, 1]}).with_columns(
-        pl.col(COL_SELLER_ID).cast(pl.Int32)
-    )
+    buyers = stub_buyers_df([0])
+    sellers = stub_sellers_df([0, 1], strategy_types=["MaxProfit", "MaxVolume"])
     listings = pl.DataFrame({COL_LISTING_ID: [0, 1], COL_SELLER_ID: [0, 1]}).with_columns(
         pl.col(COL_LISTING_ID).cast(pl.Int32),
         pl.col(COL_SELLER_ID).cast(pl.Int32),

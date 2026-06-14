@@ -218,6 +218,27 @@ def test_demand_shock_emits_system_event() -> None:
     assert "30" in event[COL_MESSAGE]
 
 
+def test_demand_shock_message_mentions_frequency() -> None:
+    event = build_demand_shock_event(
+        run_id="r1",
+        tick_id=12,
+        seq=0,
+        pct_drop=30.0,
+        shock_type=ShockType.DEMAND_CRASH,
+        pct_frequency_change=30.0,
+        budget_multiplier=0.7,
+        purchase_frequency_multiplier=0.7,
+    )
+    message = str(event[COL_MESSAGE]).lower()
+    assert "budget" in message
+    assert "active buyer rate" in message
+    payload = json.loads(str(event[COL_PAYLOAD_JSON]))
+    assert payload["pct_drop"] == 30.0
+    assert payload["shock_type"] == ShockType.DEMAND_CRASH.value
+    assert payload["budget_multiplier"] == 0.7
+    assert payload["purchase_frequency_multiplier"] == 0.7
+
+
 def test_bankruptcy_emits_system_event() -> None:
     event = build_bankruptcy_event(run_id="r1", tick_id=87, seller_id=3, seq=0)
     assert event[COL_DISPLAY_CODE] == "BANKRUPTCY"

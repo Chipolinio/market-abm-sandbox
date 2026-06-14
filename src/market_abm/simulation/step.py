@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 
 from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
+from market_abm.simulation.buyers_baseline import ensure_budget_baseline
 from market_abm.simulation.choice import choose_listings_for_all_buyers
 from market_abm.simulation.repricing import apply_ml_repricing_tick, apply_repricing_tick
 from market_abm.simulation.seller_economics import (
@@ -290,6 +291,7 @@ def step(
     Выполняет один тик: шоки → filter bankrupt → choice → transactions → settle.
     sellers_state_next — None если sellers_state_df не передан (backward compat).
     """
+    buyers_df = ensure_budget_baseline(buyers_df)
     _validate_buyers_df(buyers_df)
     _validate_sellers_df(sellers_df)
     _validate_products_df(products_df)

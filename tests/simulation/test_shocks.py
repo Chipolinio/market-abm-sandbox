@@ -1,16 +1,17 @@
-# Назначение файла: unit-тесты apply_environment_shocks (Slice 8.1).
+# Назначение файла: unit-тесты apply_environment_shocks (Slice 8.1, Spec 010 §10.2).
 # Базовая идея: векторные шоки среды — чистые трансформеры DataFrame без мутации входа.
 from __future__ import annotations
 
 import polars as pl
 import pytest
 
-from market_abm.config.shocks import ShockCatalogConfig
+from market_abm.config.shocks import ShockCatalogConfig, ShockEffectSpec
 from market_abm.domain.constants import (
     COL_BETA_DELIVERY,
     COL_BETA_PRICE,
     COL_BETA_RATING,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BUYER_ID,
     COL_DELIVERY_DAYS,
     COL_DEMAND_INDEX,
@@ -32,6 +33,7 @@ def _buyers_df(budgets: list[float]) -> pl.DataFrame:
         {
             COL_BUYER_ID: list(range(n)),
             COL_BUDGET: budgets,
+            COL_BUDGET_BASELINE: budgets,
             COL_BETA_PRICE: [-0.2] * n,
             COL_BETA_DELIVERY: [-0.3] * n,
             COL_BETA_RATING: [-0.5] * n,
@@ -44,6 +46,7 @@ def _buyers_df(budgets: list[float]) -> pl.DataFrame:
     ).with_columns(
         pl.col(COL_BUYER_ID).cast(pl.Int32),
         pl.col(COL_BUDGET).cast(pl.Float32),
+        pl.col(COL_BUDGET_BASELINE).cast(pl.Float32),
         pl.col(COL_BETA_PRICE).cast(pl.Float32),
         pl.col(COL_BETA_DELIVERY).cast(pl.Float32),
         pl.col(COL_BETA_RATING).cast(pl.Float32),
@@ -144,3 +147,57 @@ def test_marketplace_promotion_lowers_price_with_cap() -> None:
     assert products_out["price"].max() < products["price"].max()
     assert products_out["price"][0] == pytest.approx(100.0 * (1.0 - discount), rel=1e-4)
     assert "promotion_anchor_price" in products_out.columns
+
+
+# --- Spec 010 §10.2-T* ---
+
+
+def test_demand_crash_scales_purchase_frequency() -> None:
+    buyers = _buyers_df([1000.0, 2000.0, 3000.0])
+    products = _products_df([100.0])
+    catalog = ShockCatalogConfig()
+    ctx = _ctx_with_shock(ShockType.DEMAND_CRASH)
+
+    buyers_out, _ = apply_environment_shocks(buyers, products, ctx, catalog)
+
+    assert buyers_out[COL_PURCHASE_FREQUENCY].mean() == pytest.approx(0.7, rel=1e-5)
+
+
+def test_demand_crash_preserves_budget_baseline() -> None:
+    buyers = _buyers_df([1000.0, 2000.0])
+    products = _products_df([100.0])
+    catalog = ShockCatalogConfig()
+    ctx = _ctx_with_shock(ShockType.DEMAND_CRASH)
+
+    buyers_out, _ = apply_environment_shocks(buyers, products, ctx, catalog)
+
+    assert buyers_out[COL_BUDGET_BASELINE].equals(buyers[COL_BUDGET_BASELINE])
+
+
+def test_demand_boom_scales_frequency_up_capped_at_one() -> None:
+    buyers = _buyers_df([500.0])
+    buyers = buyers.with_columns(pl.col(COL_PURCHASE_FREQUENCY).cast(pl.Float32) * 0.8)
+    products = _products_df([100.0])
+    catalog = ShockCatalogConfig()
+    ctx = _ctx_with_shock(ShockType.DEMAND_BOOM)
+
+    buyers_out, _ = apply_environment_shocks(buyers, products, ctx, catalog)
+
+    assert buyers_out[COL_PURCHASE_FREQUENCY][0] == pytest.approx(1.0, rel=1e-5)
+
+
+def test_scale_purchase_frequency_false_skips_freq() -> None:
+    buyers = _buyers_df([500.0])
+    products = _products_df([100.0])
+    catalog = ShockCatalogConfig(
+        demand_crash=ShockEffectSpec(
+            budget_multiplier=0.7,
+            purchase_frequency_multiplier=0.7,
+            scale_purchase_frequency=False,
+        )
+    )
+    ctx = _ctx_with_shock(ShockType.DEMAND_CRASH)
+
+    buyers_out, _ = apply_environment_shocks(buyers, products, ctx, catalog)
+
+    assert buyers_out[COL_PURCHASE_FREQUENCY].equals(buyers[COL_PURCHASE_FREQUENCY])

@@ -19,6 +19,12 @@ class ChoiceModelConfig(BaseModel):
     engine: Literal["choice_learn", "numpy_softmax"] = "choice_learn"
     outside_utility_bias: float = -1.5
     outside_utility_bias_by_pvd_segment: dict[str, float] | None = None
+    income_utility_gamma: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=5.0,
+        description="γ in U += γ·log(budget/budget_baseline)",
+    )
     max_products_per_choice_set: int = Field(default=200, gt=1, le=10_000)
     buyers_batch_size: int = Field(default=5_000, gt=100, le=100_000)
 

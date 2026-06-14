@@ -2,12 +2,14 @@
 # Базовая идея: считаем полезность по beta, softmax и случайный выбор внутри витрины.
 from __future__ import annotations
 
+import math
 import warnings
 
 import numpy as np
 import polars as pl
 
 from market_abm.config.simulation import ChoiceModelConfig
+from market_abm.simulation.buyers_baseline import ensure_budget_baseline
 from market_abm.domain.constants import (
     BUYERS_CHOICE_INPUT_COLUMNS,
     CHOICES_COLUMNS,
@@ -15,6 +17,7 @@ from market_abm.domain.constants import (
     COL_BETA_PRICE,
     COL_BETA_RATING,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BUYER_ID,
     COL_CHOICE_PROBABILITY,
     COL_DELIVERY_DAYS,
@@ -129,6 +132,20 @@ def _compute_utilities_choice_learn(
     )
 
 
+def _income_utility_shift(
+    budget: float,
+    budget_baseline: float,
+    gamma: float,
+) -> float:
+    """Скалярный shift U += γ·log(budget/baseline) для всех SKU (Spec 010 §3.2)."""
+    if gamma <= 0.0 or budget_baseline <= 0.0:
+        return 0.0
+    wealth_ratio = budget / budget_baseline
+    if wealth_ratio <= 0.0:
+        return float("-inf")
+    return float(gamma * math.log(wealth_ratio))
+
+
 def _choose_one_buyer(
     buyer_row: dict[str, float | int],
     products_df: pl.DataFrame,
@@ -170,6 +187,14 @@ def _choose_one_buyer(
     # Budget constraint: price > budget → probability strictly 0 (outside option only).
     product_utils = np.where(prices <= budget, product_utils, -np.inf)
 
+    income_shift = _income_utility_shift(
+        budget,
+        float(buyer_row[COL_BUDGET_BASELINE]),
+        config.income_utility_gamma,
+    )
+    if np.isfinite(income_shift):
+        product_utils = product_utils + np.float32(income_shift)
+
     utilities = np.concatenate(
         [product_utils, np.array([outside_utility_bias], dtype=np.float32)]
     )
@@ -195,6 +220,7 @@ def choose_listings_for_buyers(
     Возвращает choices_df: buyer_id, listing_id (или null), choice_probability.
     Если задан base_seed, seed для каждого покупателя считается отдельно (для батчей).
     """
+    buyers_batch_df = ensure_budget_baseline(buyers_batch_df)
     _validate_buyers_batch(buyers_batch_df)
     _validate_products(products_df)
 
@@ -263,6 +289,8 @@ def choose_listings_for_all_buyers(
     """Считает выбор для всех покупателей, разбивая их на батчи по config.buyers_batch_size."""
     if buyers_df.height == 0:
         raise ValueError("buyers_df must be non-empty")
+
+    buyers_df = ensure_budget_baseline(buyers_df)
 
     chunks: list[pl.DataFrame] = []
     batch_size = config.buyers_batch_size

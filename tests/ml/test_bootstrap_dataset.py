@@ -40,6 +40,7 @@ from market_abm.domain.constants import (
 
 # --- SUT (ещё не существует → RED на импорте) ---
 from market_abm.ml.bootstrap import collect_bootstrap_training_frame
+from tests.helpers.reference_snapshots import stub_buyers_df
 
 LABEL_COL = "label_log_price_delta"
 
@@ -137,9 +138,7 @@ def _persist_run(
     listings_df: pl.DataFrame,
 ) -> Path:
     config = _run_config(tmp_path, run_id=run_id)
-    buyers = pl.DataFrame({COL_BUYER_ID: [0]}).with_columns(
-        pl.col(COL_BUYER_ID).cast(pl.Int32)
-    )
+    buyers = stub_buyers_df([0])
     ctx = init_run_directory(
         config,
         run_id=run_id,

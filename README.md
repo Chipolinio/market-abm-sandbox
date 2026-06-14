@@ -179,6 +179,49 @@ cd frontend && npm test && npm run build
 
 ---
 
+## Ручной smoke — demand shock (Spec 010)
+
+Проверка, что **«Запустить шок спроса»** даёт видимый отклик на графиках и в cyber-log. Ориентир: ~5 минут после базового чеклиста 7.6.
+
+Спека: [`specs/010-demand-shock-income-and-engagement.md`](specs/010-demand-shock-income-and-engagement.md).
+
+### Локальный стек (`:5173` + `:8000`)
+
+```bash
+ENABLE_CORS=1 .venv/bin/uvicorn market_abm.main:app --reload --host 0.0.0.0 --port 8000
+cd frontend && npm run dev
+```
+
+### Подготовка
+
+- [ ] Configure: `n_buyers` ≥ 300, `n_sellers` ≥ 20 → **Start**
+- [ ] State `RUNNING`, `current_tick` растёт
+- [ ] Вкладка **Динамика рынка**: график **GMV** уже набирает точки (не пустой)
+
+### Шок спроса
+
+- [ ] Кнопка **«Запустить шок спроса»** (sidebar Zone A)
+- [ ] Cyber-log (Zone D): строка `DEMAND_SHOCK` с текстом про **budget** и **active buyer rate**, например:
+  - `Buyer budgets cut by 30%; active buyer rate scaled by 30%`
+- [ ] В течение **1–3 тиков** после шока:
+  - [ ] GMV на графике **снижается** или стабилизируется ниже уровня непосредственно до шока
+  - [ ] (опционально) индекс цены может реагировать с лагом — главный сигнал для 010 — **GMV / число сделок**
+
+### Регрессия thin client
+
+- [ ] Квантили цен **не** пересчитываются в браузере (значения = backend DTO)
+- [ ] После **Reset** → новый Start графики и cyber-log обновляются без stale данных
+
+### Автоматический smoke (CI / локально)
+
+```bash
+.venv/bin/python -m pytest tests/worker/test_demand_shock_smoke.py -q
+```
+
+Проверяет `LiveSimulationSession`: тик с `DEMAND_CRASH` → GMV и txn count ниже, чем на тике до шока; cyber-log message содержит frequency channel.
+
+---
+
 ## Архитектура (кратко)
 
 - **Симуляция** пишет Parquet; **AnalyticsStore** (DuckDB) — read-only query-side.

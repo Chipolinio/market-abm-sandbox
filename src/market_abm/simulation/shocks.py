@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import polars as pl
 
-from market_abm.config.shocks import ShockCatalogConfig
-from market_abm.domain.constants import COL_BUDGET, COL_PRICE, COL_UNIT_COST
+from market_abm.config.shocks import ShockCatalogConfig, ShockEffectSpec
+from market_abm.domain.constants import (
+    COL_BUDGET,
+    COL_PRICE,
+    COL_PURCHASE_FREQUENCY,
+    COL_UNIT_COST,
+)
 from market_abm.domain.shocks import ActiveShock, ShockType
 from market_abm.simulation.context import SimulationContext
 
@@ -98,6 +103,32 @@ def apply_environment_shocks(
     return buyers_out, products_out
 
 
+def _apply_demand_shock_to_buyers(
+    buyers_df: pl.DataFrame,
+    spec: ShockEffectSpec,
+    intensity: float,
+) -> pl.DataFrame:
+    """Масштабирует budget и (опционально) purchase_frequency; baseline не трогает."""
+    if buyers_df.height == 0:
+        return buyers_df
+
+    budget_mult = spec.budget_multiplier * intensity
+    buyers_df = buyers_df.with_columns(
+        (pl.col(COL_BUDGET) * budget_mult).cast(pl.Float32).alias(COL_BUDGET)
+    )
+
+    if spec.scale_purchase_frequency:
+        freq_mult = spec.purchase_frequency_multiplier * intensity
+        buyers_df = buyers_df.with_columns(
+            (pl.col(COL_PURCHASE_FREQUENCY) * freq_mult)
+            .clip(0.0, 1.0)
+            .cast(pl.Float32)
+            .alias(COL_PURCHASE_FREQUENCY)
+        )
+
+    return buyers_df
+
+
 def _apply_single_shock(
     buyers_df: pl.DataFrame,
     products_df: pl.DataFrame,
@@ -108,18 +139,14 @@ def _apply_single_shock(
     intensity = shock.intensity
 
     if shock.shock_type == ShockType.DEMAND_CRASH:
-        if buyers_df.height > 0:
-            mult = catalog.demand_crash.budget_multiplier * intensity
-            buyers_df = buyers_df.with_columns(
-                (pl.col(COL_BUDGET) * mult).cast(pl.Float32).alias(COL_BUDGET)
-            )
+        buyers_df = _apply_demand_shock_to_buyers(
+            buyers_df, catalog.demand_crash, intensity
+        )
 
     elif shock.shock_type == ShockType.DEMAND_BOOM:
-        if buyers_df.height > 0:
-            mult = catalog.demand_boom.budget_multiplier * intensity
-            buyers_df = buyers_df.with_columns(
-                (pl.col(COL_BUDGET) * mult).cast(pl.Float32).alias(COL_BUDGET)
-            )
+        buyers_df = _apply_demand_shock_to_buyers(
+            buyers_df, catalog.demand_boom, intensity
+        )
 
     elif shock.shock_type == ShockType.PLATFORM_FEE_HIKE:
         if products_df.height > 0:

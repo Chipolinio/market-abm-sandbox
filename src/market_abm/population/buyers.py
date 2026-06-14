@@ -14,6 +14,7 @@ from market_abm.domain.constants import (
     COL_BETA_PRICE,
     COL_BETA_RATING,
     COL_BUDGET,
+    COL_BUDGET_BASELINE,
     COL_BUYER_ID,
     COL_DEVICE_TYPE,
     COL_IS_IMPULSIVE,
@@ -118,12 +119,14 @@ def generate_buyers(config: BuyerPopulationConfig) -> pl.DataFrame:
         config.ios_price_beta_multiplier,
     )
     budget = _apply_pvd_budget_multiplier(budget, pvd_segment)
+    budget_baseline = budget.copy()
 
     schema = buyers_polars_schema()
     return pl.DataFrame(
         {
             COL_BUYER_ID: buyer_id,
             COL_BUDGET: budget,
+            COL_BUDGET_BASELINE: budget_baseline,
             COL_BETA_PRICE: beta_price,
             COL_BETA_DELIVERY: arrays[COL_BETA_DELIVERY],
             COL_BETA_RATING: arrays[COL_BETA_RATING],

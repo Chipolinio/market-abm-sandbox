@@ -119,3 +119,23 @@ def demand_shock_pct_drop(
         return max(0.0, (1.0 - mult) * 100.0)
     mult = catalog.demand_boom.budget_multiplier * intensity
     return max(0.0, (mult - 1.0) * 100.0)
+
+
+def demand_shock_pct_frequency_change(
+    shock_type: ShockType,
+    *,
+    catalog: ShockCatalogConfig,
+    intensity: float,
+) -> float:
+    """Процент изменения purchase_frequency (канал A, Spec 010 §7.1)."""
+    spec = (
+        catalog.demand_crash
+        if shock_type == ShockType.DEMAND_CRASH
+        else catalog.demand_boom
+    )
+    if not spec.scale_purchase_frequency:
+        return 0.0
+    mult = spec.purchase_frequency_multiplier * intensity
+    if shock_type == ShockType.DEMAND_CRASH:
+        return max(0.0, (1.0 - mult) * 100.0)
+    return max(0.0, (mult - 1.0) * 100.0)

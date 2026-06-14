@@ -396,9 +396,10 @@ def test_make_lazy_payload_fn_reads_store_when_parquet_exists(tmp_path: Path) ->
     run_root = build_mini_run(tmp_path, run_id="lazy-e2e")
     payload = make_lazy_payload_fn(str(run_root))(0)
 
-    assert payload.market_summary.mean_price == pytest.approx(150.0, rel=0.02)
+    # mini_run: products [100, 200, 80×7] → mean ≈ 95.56; 2 transactions at tick 0
+    assert payload.market_summary.mean_price == pytest.approx(860 / 9, rel=0.02)
     assert payload.market_summary.price_quantiles is not None
-    assert payload.market_summary.total_transactions == 1
+    assert payload.market_summary.total_transactions == 2
 
 
 def test_make_lazy_payload_fn_is_callable() -> None:

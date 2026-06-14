@@ -213,13 +213,34 @@ def build_demand_shock_event(
     seq: int,
     pct_drop: float,
     shock_type: ShockType = ShockType.DEMAND_CRASH,
+    pct_frequency_change: float | None = None,
+    budget_multiplier: float | None = None,
+    purchase_frequency_multiplier: float | None = None,
 ) -> dict[str, object]:
     event_type = SystemEventType.DEMAND_SHOCK
     if shock_type == ShockType.DEMAND_BOOM:
-        message = f"Buyer budgets increased by {pct_drop:.0f}%"
+        budget_part = f"Buyer budgets increased by {pct_drop:.0f}%"
+        if pct_frequency_change is not None:
+            message = (
+                f"{budget_part}; active buyer rate scaled by {pct_frequency_change:.0f}%"
+            )
+        else:
+            message = budget_part
     else:
-        message = f"Buyer budgets cut by {pct_drop:.0f}%"
-    payload = {"pct_drop": pct_drop, "shock_type": shock_type.value}
+        budget_part = f"Buyer budgets cut by {pct_drop:.0f}%"
+        if pct_frequency_change is not None:
+            message = (
+                f"{budget_part}; active buyer rate scaled by {pct_frequency_change:.0f}%"
+            )
+        else:
+            message = budget_part
+
+    payload: dict[str, object] = {"pct_drop": pct_drop, "shock_type": shock_type.value}
+    if budget_multiplier is not None:
+        payload["budget_multiplier"] = budget_multiplier
+    if purchase_frequency_multiplier is not None:
+        payload["purchase_frequency_multiplier"] = purchase_frequency_multiplier
+
     return {
         COL_EVENT_ID: _event_id(run_id=run_id, tick_id=tick_id, event_type=event_type, seq=seq),
         COL_TICK_ID: tick_id,
