@@ -37,7 +37,27 @@ describe("ShocksControlPanel", () => {
     expect(triggerShock).toHaveBeenCalledWith({
       shock_type: "demand_crash",
       intensity: 1.0,
-      duration_ticks: 10,
+      scenario: "standard",
+    });
+  });
+
+  it("posts_severe_scenario_when_selected", async () => {
+    triggerShock.mockResolvedValue({
+      status: "queued",
+      shock_type: "demand_crash",
+      queue_depth: 1,
+    });
+
+    render(<ShocksControlPanel />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "severe" } });
+    fireEvent.click(screen.getByRole("button", { name: "Запустить шок спроса" }));
+
+    await waitFor(() => {
+      expect(triggerShock).toHaveBeenCalledWith({
+        shock_type: "demand_crash",
+        intensity: 1.0,
+        scenario: "severe",
+      });
     });
   });
 

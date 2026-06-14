@@ -17,7 +17,7 @@ from market_abm.domain.constants import (
     COL_PVD_SEGMENT,
     COL_SCAR_FACTOR,
 )
-from market_abm.domain.macro import MacroRegime, MacroState
+from market_abm.domain.macro import DemandImpulseLog, MacroRegime, MacroState
 from market_abm.domain.shocks import ShockType
 from market_abm.simulation.buyers_baseline import ensure_buyer_economic_columns
 from market_abm.simulation.context import ShockCommand, SimulationContext
@@ -469,6 +469,34 @@ def apply_buyer_economic_state(
     )
 
 
+def crisis_scenario_config(name: str | None) -> CrisisScenarioConfig:
+    """Разрешает preset сценария кризиса (Spec 011 §8.2)."""
+    if name == "mild":
+        return CrisisScenarioConfig.mild()
+    if name == "severe":
+        return CrisisScenarioConfig.severe()
+    return CrisisScenarioConfig.standard()
+
+
+def estimate_stress_half_life_ticks(stress: float, config: MacroDynamicsConfig) -> float:
+    """Оценка ticks до stress/2 для cyber-log narrative (Spec 011 §10.3)."""
+    if stress <= 0.0:
+        return 0.0
+    target = stress / 2.0
+    current = stress
+    ticks = 0
+    while current > target and ticks < 500:
+        if config.decay_mode == "nonlinear_drain":
+            current = max(
+                current - config.decay_rate * (current ** config.decay_exponent),
+                0.0,
+            )
+        else:
+            current *= config.persistence_stress
+        ticks += 1
+    return float(ticks)
+
+
 def resolve_demand_shocks_to_macro(
     ctx: SimulationContext,
     config: MacroDynamicsConfig,
@@ -480,17 +508,50 @@ def resolve_demand_shocks_to_macro(
 
     ctx_next = ctx
     kept: list = []
+    impulse_logs: list[DemandImpulseLog] = list(ctx.pending_demand_impulse_logs)
     for shock in ctx.active_shocks:
         if shock.shock_type in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
+            scenario_name = shock.scenario or "standard"
+            scenario_cfg = crisis_scenario_config(scenario_name)
             cmd = ShockCommand(
                 shock_type=shock.shock_type,
                 intensity=shock.intensity,
                 duration_ticks=shock.remaining_ticks,
+                scenario=scenario_name,
             )
-            ctx_next = apply_demand_impulse(ctx_next, cmd, config, rng)
+            stress_before = ctx_next.macro.stress
+            expansion_before = ctx_next.macro.expansion
+            ctx_next = apply_demand_impulse(
+                ctx_next, cmd, config, rng, scenario=scenario_cfg
+            )
+            if shock.shock_type == ShockType.DEMAND_BOOM:
+                impulse = max(ctx_next.macro.expansion - expansion_before, 0.0)
+                half_life = estimate_stress_half_life_ticks(
+                    ctx_next.macro.expansion,
+                    config,
+                )
+            else:
+                impulse = max(ctx_next.macro.stress - stress_before, 0.0)
+                half_life = estimate_stress_half_life_ticks(
+                    ctx_next.macro.stress,
+                    config,
+                )
+            impulse_logs.append(
+                DemandImpulseLog(
+                    shock_type=shock.shock_type.value,
+                    scenario=scenario_name,
+                    impulse=float(impulse),
+                    stress_after=ctx_next.macro.stress,
+                    est_half_life_ticks=half_life,
+                )
+            )
         else:
             kept.append(shock)
-    return replace(ctx_next, active_shocks=tuple(kept))
+    return replace(
+        ctx_next,
+        active_shocks=tuple(kept),
+        pending_demand_impulse_logs=tuple(impulse_logs),
+    )
 
 
 def run_macro_tick(

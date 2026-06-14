@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from market_abm.domain.constants import PLATFORM_DEFAULTS, COL_BASE_COMMISSION
 from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.config.shocks import ShockCatalogConfig
-from market_abm.domain.macro import MacroState
+from market_abm.domain.macro import DemandImpulseLog, MacroState
 from market_abm.domain.shocks import ActiveShock, ShockType
 
 
@@ -20,6 +20,7 @@ class ShockCommand:
     shock_type: ShockType
     intensity: float
     duration_ticks: int
+    scenario: str | None = None
 
 
 @dataclass
@@ -31,6 +32,7 @@ class SimulationContext:
     platform_fee_rate: float
     macro: MacroState = field(default_factory=MacroState.empty)
     pre_crisis_price_index: float | None = None
+    pending_demand_impulse_logs: tuple[DemandImpulseLog, ...] = ()
 
 
 def default_simulation_context(*, tick_id: int = 0) -> SimulationContext:
@@ -49,6 +51,7 @@ def merge_shock(ctx: SimulationContext, cmd: ShockCommand) -> SimulationContext:
         intensity=cmd.intensity,
         remaining_ticks=cmd.duration_ticks,
         applied_at_tick=ctx.tick_id,
+        scenario=cmd.scenario,
     )
     return replace(ctx, active_shocks=ctx.active_shocks + (shock,))
 

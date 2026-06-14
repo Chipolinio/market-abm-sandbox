@@ -54,7 +54,7 @@ def test_live_session_demand_crash_lowers_gmv(tmp_path: Path) -> None:
     assert txn_before > 0
 
     shock_queue.put_nowait(
-        ShockCommand(ShockType.DEMAND_CRASH, intensity=1.0, duration_ticks=10)
+        ShockCommand(ShockType.DEMAND_CRASH, intensity=1.0, duration_ticks=0, scenario="standard")
     )
     session.run_tick(4)
 
@@ -74,7 +74,12 @@ def test_live_session_demand_crash_cyber_log_message(tmp_path: Path) -> None:
 
     session.run_tick(0)
     shock_queue.put_nowait(
-        ShockCommand(ShockType.DEMAND_CRASH, intensity=1.0, duration_ticks=5)
+        ShockCommand(
+            ShockType.DEMAND_CRASH,
+            intensity=1.0,
+            duration_ticks=0,
+            scenario="standard",
+        )
     )
     session.run_tick(1)
 
@@ -85,7 +90,7 @@ def test_live_session_demand_crash_cyber_log_message(tmp_path: Path) -> None:
     demand_rows = events.filter(pl.col("display_code") == "DEMAND_SHOCK")
     assert demand_rows.height >= 1
     message = str(demand_rows[COL_MESSAGE][0]).lower()
-    assert "budget" in message
-    assert "active buyer rate" in message
+    assert "stress" in message
+    assert "10 ticks" not in message
 
     session.close()

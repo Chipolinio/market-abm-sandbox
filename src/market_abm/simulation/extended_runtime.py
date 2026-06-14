@@ -1,7 +1,7 @@
 # Назначение файла: extended runtime state и post-tick pipeline (Slice 8.4).
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import duckdb
@@ -10,6 +10,7 @@ import polars as pl
 from market_abm.analytics.events import (
     append_system_events,
     build_demand_shock_event,
+    build_macro_demand_shock_event,
     build_tick_pulse_event,
     coalesce_bankruptcy_events,
     detect_system_events,
@@ -87,48 +88,64 @@ def _build_command_side_events(
     events: list[dict[str, object]] = []
     seq = seq_start
 
-    seen_demand: set[ShockType] = set()
-    for shock in simulation_context.active_shocks:
-        if shock.shock_type not in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
-            continue
-        if shock.shock_type in seen_demand:
-            continue
-        seen_demand.add(shock.shock_type)
-        spec = (
-            config.shock_catalog.demand_crash
-            if shock.shock_type == ShockType.DEMAND_CRASH
-            else config.shock_catalog.demand_boom
-        )
-        intensity = shock.intensity
-        pct_budget = demand_shock_pct_drop(
-            shock.shock_type,
-            catalog=config.shock_catalog,
-            intensity=intensity,
-        )
-        pct_freq = demand_shock_pct_frequency_change(
-            shock.shock_type,
-            catalog=config.shock_catalog,
-            intensity=intensity,
-        )
-        budget_mult = spec.budget_multiplier * intensity
-        freq_mult = (
-            spec.purchase_frequency_multiplier * intensity
-            if spec.scale_purchase_frequency
-            else None
-        )
-        events.append(
-            build_demand_shock_event(
-                run_id=run_id,
-                tick_id=tick_id,
-                seq=seq,
-                pct_drop=pct_budget,
-                shock_type=shock.shock_type,
-                pct_frequency_change=pct_freq if freq_mult is not None else None,
-                budget_multiplier=budget_mult,
-                purchase_frequency_multiplier=freq_mult,
+    if config.macro_dynamics.shock_mode == "stochastic_regime":
+        for log in simulation_context.pending_demand_impulse_logs:
+            events.append(
+                build_macro_demand_shock_event(
+                    run_id=run_id,
+                    tick_id=tick_id,
+                    seq=seq,
+                    shock_type=ShockType(log.shock_type),
+                    scenario=log.scenario,
+                    impulse=log.impulse,
+                    stress=log.stress_after,
+                    est_half_life_ticks=log.est_half_life_ticks,
+                )
             )
-        )
-        seq += 1
+            seq += 1
+    else:
+        seen_demand: set[ShockType] = set()
+        for shock in simulation_context.active_shocks:
+            if shock.shock_type not in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
+                continue
+            if shock.shock_type in seen_demand:
+                continue
+            seen_demand.add(shock.shock_type)
+            spec = (
+                config.shock_catalog.demand_crash
+                if shock.shock_type == ShockType.DEMAND_CRASH
+                else config.shock_catalog.demand_boom
+            )
+            intensity = shock.intensity
+            pct_budget = demand_shock_pct_drop(
+                shock.shock_type,
+                catalog=config.shock_catalog,
+                intensity=intensity,
+            )
+            pct_freq = demand_shock_pct_frequency_change(
+                shock.shock_type,
+                catalog=config.shock_catalog,
+                intensity=intensity,
+            )
+            budget_mult = spec.budget_multiplier * intensity
+            freq_mult = (
+                spec.purchase_frequency_multiplier * intensity
+                if spec.scale_purchase_frequency
+                else None
+            )
+            events.append(
+                build_demand_shock_event(
+                    run_id=run_id,
+                    tick_id=tick_id,
+                    seq=seq,
+                    pct_drop=pct_budget,
+                    shock_type=shock.shock_type,
+                    pct_frequency_change=pct_freq if freq_mult is not None else None,
+                    budget_multiplier=budget_mult,
+                    purchase_frequency_multiplier=freq_mult,
+                )
+            )
+            seq += 1
 
     bankrupt_ids = [int(s) for s in new_bankruptcy_seller_ids(prev_sellers_state, next_sellers_state)]
     top_ids = _top_seller_ids(prev_sellers_state)
@@ -218,9 +235,12 @@ def persist_extended_tick(
 
     return ExtendedSimulationState(
         sellers_state_df=state.sellers_state_df,
-        simulation_context=tick_down_active_shocks(
-            with_tick_id(state.simulation_context, tick_id + 1),
-            macro_config=config.macro_dynamics,
+        simulation_context=replace(
+            tick_down_active_shocks(
+                with_tick_id(state.simulation_context, tick_id + 1),
+                macro_config=config.macro_dynamics,
+            ),
+            pending_demand_impulse_logs=(),
         ),
         cumulative_gmv=state.cumulative_gmv + tick_gmv,
         event_seq=seq,

@@ -43,7 +43,7 @@ def test_post_shock_returns_202() -> None:
     assert body["queue_depth"] >= 1
 
     cmd = worker.shock_queue.get_nowait()
-    assert cmd == ShockCommand(ShockType.DEMAND_CRASH, 1.0, 10)
+    assert cmd == ShockCommand(ShockType.DEMAND_CRASH, 1.0, 10, scenario="standard")
 
 
 def test_post_shock_queue_full_429() -> None:

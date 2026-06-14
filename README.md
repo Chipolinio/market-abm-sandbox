@@ -200,12 +200,22 @@ cd frontend && npm run dev
 
 ### Шок спроса
 
-- [ ] Кнопка **«Запустить шок спроса»** (sidebar Zone A)
-- [ ] Cyber-log (Zone D): строка `DEMAND_SHOCK` с текстом про **budget** и **active buyer rate**, например:
-  - `Buyer budgets cut by 30%; active buyer rate scaled by 30%`
+- [ ] Кнопка **«Запустить шок спроса»** (sidebar Zone A); сценарий mild / standard / severe — **без** `duration_ticks`
+- [ ] Cyber-log (Zone D): строка `DEMAND_SHOCK` с **macro narrative**, например:
+  - `Demand stress elevated (impulse=0.48, stress=0.52, est. half-life ~28 ticks). Budget/frequency curves active; low segment elasticity highest.`
 - [ ] В течение **1–3 тиков** после шока:
   - [ ] GMV на графике **снижается** или стабилизируется ниже уровня непосредственно до шока
-  - [ ] (опционально) индекс цены может реагировать с лагом — главный сигнал для 010 — **GMV / число сделок**
+  - [ ] (опционально) индекс цены может реагировать с лагом — главный сигнал — **GMV / число сделок**
+
+### Recession scenario (Spec 011)
+
+1. Configure **≥300 buyers**, **≥20 sellers** → **Start**
+2. Дождитесь **~30 тиков** baseline (график GMV стабилен)
+3. Sidebar → сценарий **«Рецессия»** → **Запустить шок спроса**
+4. Наблюдайте **90+ тиков**: GMV падает, recovery медленнее crash; после recovery plateau **ниже** pre-crisis
+5. Вкладки **Селлеры** (rank by tick revenue) и **Demand matrix** — low×MaxVolume растёт в кризис
+
+Проверка автоматически: `pytest tests/simulation/test_recession_integration.py -m slow`
 
 ### Регрессия thin client
 

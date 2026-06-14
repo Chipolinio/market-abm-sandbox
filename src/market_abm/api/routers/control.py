@@ -27,6 +27,22 @@ from market_abm.worker.process import WorkerCommand, WorkerState
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
 
 
+def _shock_command_from_body(body: SimulationShockRequest) -> ShockCommand:
+    """Maps REST body → pickle-safe ShockCommand (Spec 011 §8.4)."""
+    duration = body.duration_ticks
+    if duration is None:
+        if body.shock_type in ("demand_crash", "demand_boom"):
+            duration = 0
+        else:
+            duration = 10
+    return ShockCommand(
+        shock_type=ShockType(body.shock_type),
+        intensity=body.intensity,
+        duration_ticks=duration,
+        scenario=body.scenario,
+    )
+
+
 def _get_worker(request: Request) -> Any:
     return request.app.state.worker
 
@@ -123,11 +139,7 @@ async def post_shock(
             detail="Worker does not expose shock_queue.",
         )
 
-    cmd = ShockCommand(
-        shock_type=ShockType(body.shock_type),
-        intensity=body.intensity,
-        duration_ticks=body.duration_ticks,
-    )
+    cmd = _shock_command_from_body(body)
     depth = await _enqueue_shock(shock_queue, cmd)
     return SimulationShockResponse(
         shock_type=body.shock_type,

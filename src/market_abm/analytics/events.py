@@ -252,6 +252,43 @@ def build_demand_shock_event(
     }
 
 
+def build_macro_demand_shock_event(
+    *,
+    run_id: str,
+    tick_id: int,
+    seq: int,
+    shock_type: ShockType,
+    scenario: str,
+    impulse: float,
+    stress: float,
+    est_half_life_ticks: float,
+) -> dict[str, object]:
+    """Stochastic macro narrative — без countdown remaining_ticks (Spec 011 §10.3)."""
+    event_type = SystemEventType.DEMAND_SHOCK
+    message = (
+        f"Demand stress elevated (impulse={impulse:.2f}, stress={stress:.2f}, "
+        f"est. half-life ~{est_half_life_ticks:.0f} ticks). "
+        "Budget/frequency curves active; low segment elasticity highest."
+    )
+    payload = {
+        "shock_type": shock_type.value,
+        "scenario": scenario,
+        "impulse": impulse,
+        "stress": stress,
+        "est_half_life_ticks": est_half_life_ticks,
+        "macro_mode": "stochastic_regime",
+    }
+    return {
+        COL_EVENT_ID: _event_id(run_id=run_id, tick_id=tick_id, event_type=event_type, seq=seq),
+        COL_TICK_ID: tick_id,
+        COL_EVENT_TYPE: event_type.value,
+        COL_DISPLAY_CODE: DISPLAY_CODE_BY_TYPE[event_type],
+        COL_SEVERITY: "info",
+        COL_MESSAGE: message,
+        COL_PAYLOAD_JSON: json.dumps(payload, separators=(",", ":")),
+    }
+
+
 def build_tick_pulse_event(
     *,
     run_id: str,

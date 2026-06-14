@@ -25,3 +25,4 @@ class ActiveShock:
     intensity: float
     remaining_ticks: int
     applied_at_tick: int
+    scenario: str | None = None

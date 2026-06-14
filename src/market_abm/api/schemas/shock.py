@@ -1,4 +1,4 @@
-# Назначение файла: Pydantic DTO REST shock API (Slice 8.1).
+# Назначение файла: Pydantic DTO REST shock API (Slice 8.1 / Spec 011 §8.4).
 from __future__ import annotations
 
 from typing import Literal
@@ -16,7 +16,9 @@ class SimulationShockRequest(BaseModel):
         "supply_shock",
     ]
     intensity: float = Field(default=1.0, gt=0.0, le=3.0)
-    duration_ticks: int = Field(default=10, ge=1, le=10_000)
+    duration_ticks: int | None = Field(default=None, ge=1, le=10_000)
+    scenario: Literal["mild", "standard", "severe"] | None = "standard"
+    shock_mode: Literal["stochastic_regime", "fixed_duration"] | None = None
 
 
 class SimulationShockResponse(BaseModel):

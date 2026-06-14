@@ -22,6 +22,7 @@ from market_abm.analytics.persist import (
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.ml_repricing import CatBoostRepricingConfig
+from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.config.repricing import ListingInitConfig, RepricingConfig
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.config.sellers import SellerPopulationConfig
@@ -122,6 +123,7 @@ def _worker_run_config(run_root: Path) -> SimulationRunConfig:
             outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
         ),
         repricing=RepricingConfig.default_market(),
+        macro_dynamics=MacroDynamicsConfig(shock_mode="stochastic_regime"),
         persistence=PersistenceConfig(
             enabled=True,
             base_dir=str(run_root.parent),

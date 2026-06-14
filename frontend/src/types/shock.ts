@@ -1,4 +1,6 @@
-/** Shock command DTO (Spec 009 §3.2). */
+/** Shock command DTO (Spec 009 §3.2 / Spec 011 §8.4). */
+
+export type CrisisScenario = "mild" | "standard" | "severe";
 
 export type SimulationShockRequest = {
   shock_type:
@@ -9,7 +11,9 @@ export type SimulationShockRequest = {
     | "marketplace_promotion"
     | "supply_shock";
   intensity: number;
-  duration_ticks: number;
+  duration_ticks?: number | null;
+  scenario?: CrisisScenario | null;
+  shock_mode?: "stochastic_regime" | "fixed_duration" | null;
 };
 
 export type SimulationShockResponse = {

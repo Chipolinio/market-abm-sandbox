@@ -31,3 +31,14 @@ class MacroState:
     def empty(cls) -> MacroState:
         """Начальное состояние до первого импульса."""
         return cls()
+
+
+@dataclass(frozen=True)
+class DemandImpulseLog:
+    """Снимок импульса demand shock для cyber-log (Spec 011 §10.3)."""
+
+    shock_type: str
+    scenario: str
+    impulse: float
+    stress_after: float
+    est_half_life_ticks: float
