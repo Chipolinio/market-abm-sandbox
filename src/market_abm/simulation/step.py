@@ -2,10 +2,13 @@
 # Базовая идея: чистая функция step(...) возвращает новые products и transactions.
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import polars as pl
 
 from market_abm.config.macro import MacroDynamicsConfig
+from market_abm.config.ml_runtime import MlRuntimeConfig
 from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
@@ -189,10 +192,15 @@ def _ml_reprice(
     *,
     ml_registry: CatBoostModelRegistry,
     analytics_store: AnalyticsStore,
-) -> pl.DataFrame:
-    """Один ML-репрайс-тик: features (as_of=tick) → predict_next_prices → apply_ml_repricing_tick."""
+    ml_runtime: MlRuntimeConfig | None = None,
+) -> pl.DataFrame | None:
+    """
+    ML-репрайс-тик с бюджетом inference (Spec 011 §5A.3).
+    None → caller falls back to rules path.
+    """
     from market_abm.ml.catboost_repricing import predict_next_prices
 
+    runtime = ml_runtime or MlRuntimeConfig()
     ml_config = config.repricing.ml
     listings_sorted = listings_df.sort(COL_LISTING_ID)
     features = build_repricing_feature_matrix(
@@ -203,7 +211,11 @@ def _ml_reprice(
         spec=ml_config.feature_spec,
         config=ml_config,
     )
+    if features.height > runtime.max_listings_per_ml_tick:
+        return None
+
     current_prices = features[COL_PRICE].to_numpy().astype(np.float32)
+    started = time.perf_counter()
     next_prices = predict_next_prices(
         ml_registry,
         features,
@@ -212,12 +224,38 @@ def _ml_reprice(
         rng=_ml_explore_rng(config),
         min_listing_price=config.repricing.min_listing_price,
     )
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    if elapsed_ms > runtime.inference_timeout_ms and runtime.fallback_to_rules_on_timeout:
+        return None
+
     return apply_ml_repricing_tick(
         sellers_df,
         listings_sorted,
         next_prices=next_prices,
         tick=config.tick_id,
         config=config.repricing,
+    )
+
+
+def _rules_repricing(
+    sellers_df: pl.DataFrame,
+    listings: pl.DataFrame,
+    config: SimulationStepConfig,
+    *,
+    simulation_context: SimulationContext | None,
+) -> pl.DataFrame:
+    profile = None
+    if simulation_context is not None:
+        profile = build_stress_repricing_profile(
+            simulation_context.macro,
+            config.repricing,
+        )
+    return apply_repricing_tick(
+        sellers_df,
+        listings,
+        tick=config.tick_id,
+        config=config.repricing,
+        repricing_profile=profile,
     )
 
 
@@ -230,6 +268,7 @@ def _reprice_to_products(
     analytics_store: AnalyticsStore | None,
     simulation_context: SimulationContext | None = None,
     shock_catalog: ShockCatalogConfig | None = None,
+    ml_runtime: MlRuntimeConfig | None = None,
 ) -> pl.DataFrame:
     """Выбирает rules/ML-путь репрайса и пришивает карточные фичи обратно в products."""
     catalog = shock_catalog or ShockCatalogConfig()
@@ -249,20 +288,21 @@ def _reprice_to_products(
             config,
             ml_registry=ml_registry,
             analytics_store=analytics_store,
+            ml_runtime=ml_runtime,
         )
-    else:
-        profile = None
-        if simulation_context is not None:
-            profile = build_stress_repricing_profile(
-                simulation_context.macro,
-                config.repricing,
+        if repriced is None:
+            repriced = _rules_repricing(
+                sellers_df,
+                listings,
+                config,
+                simulation_context=simulation_context,
             )
-        repriced = apply_repricing_tick(
+    else:
+        repriced = _rules_repricing(
             sellers_df,
             listings,
-            tick=config.tick_id,
-            config=config.repricing,
-            repricing_profile=profile,
+            config,
+            simulation_context=simulation_context,
         )
     card_features = products_with_demand.select(
         [COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE]
@@ -307,6 +347,7 @@ def step(
     macro_config: MacroDynamicsConfig | None = None,
     ml_registry: CatBoostModelRegistry | None = None,
     analytics_store: AnalyticsStore | None = None,
+    ml_runtime: MlRuntimeConfig | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None]:
     """
     Выполняет один тик: шоки → filter bankrupt → choice → transactions → settle.
@@ -350,6 +391,7 @@ def step(
             analytics_store=analytics_store,
             simulation_context=simulation_context,
             shock_catalog=catalog,
+            ml_runtime=ml_runtime,
         )
         return drop_promotion_columns(products_next), empty_tx, _settle_if_needed(
             sellers_state_df, empty_tx, config
@@ -380,6 +422,7 @@ def step(
         analytics_store=analytics_store,
         simulation_context=simulation_context,
         shock_catalog=catalog,
+        ml_runtime=ml_runtime,
     )
     products_next = drop_promotion_columns(products_next)
     return (

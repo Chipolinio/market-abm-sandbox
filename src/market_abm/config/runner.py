@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 from market_abm.config.economics import SellerEconomicsConfig
 from market_abm.config.events import SystemEventsConfig
 from market_abm.config.macro import MacroDynamicsConfig
+from market_abm.config.ml_runtime import MlRuntimeConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.config.shocks import ShockCatalogConfig
 from market_abm.config.simulation import ChoiceModelConfig
@@ -62,3 +63,4 @@ class SimulationRunConfig(BaseModel):
     macro_dynamics: MacroDynamicsConfig = Field(
         default_factory=lambda: MacroDynamicsConfig(shock_mode="fixed_duration")
     )
+    ml_runtime: MlRuntimeConfig = Field(default_factory=MlRuntimeConfig)

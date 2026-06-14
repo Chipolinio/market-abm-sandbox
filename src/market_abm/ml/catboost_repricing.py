@@ -232,6 +232,26 @@ def save_registry(registry: CatBoostModelRegistry, *, run_root: Path) -> Path:
     return registry_path
 
 
+def load_frozen_registry_for_run(
+    run_root: Path,
+    *,
+    strict_version: bool = False,
+    strict_platform: bool = False,
+) -> CatBoostModelRegistry | None:
+    """Загружает frozen registry из run_root/ml/; None если missing или corrupt (Spec 011 §5A.2)."""
+    registry_path = Path(run_root) / "ml" / _REGISTRY_JSON
+    if not registry_path.is_file():
+        return None
+    try:
+        return load_registry(
+            registry_path,
+            strict_version=strict_version,
+            strict_platform=strict_platform,
+        )
+    except Exception:
+        return None
+
+
 def load_registry(
     registry_path: Path,
     *,

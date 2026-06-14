@@ -30,6 +30,7 @@ class SimulationContext:
     active_shocks: tuple[ActiveShock, ...]
     platform_fee_rate: float
     macro: MacroState = field(default_factory=MacroState.empty)
+    pre_crisis_price_index: float | None = None
 
 
 def default_simulation_context(*, tick_id: int = 0) -> SimulationContext:

@@ -32,7 +32,7 @@ from market_abm.simulation.extended_runtime import (
     init_extended_state,
     persist_extended_tick,
 )
-from market_abm.simulation.macro import macro_rng, run_macro_tick
+from market_abm.simulation.macro import macro_rng, median_listing_price, run_macro_tick
 from market_abm.simulation.step import step
 
 PRODUCTS_RECHUNK_N_CHUNKS_THRESHOLD: Final[int] = 16
@@ -155,6 +155,7 @@ def run_simulation(
                 buyers_runtime,
                 config.macro_dynamics,
                 tick_rng,
+                current_median_p50=median_listing_price(products_df),
             )
 
         products_next, transactions_df, sellers_state_next = step(

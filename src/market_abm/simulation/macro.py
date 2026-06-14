@@ -13,6 +13,7 @@ from market_abm.domain.constants import (
     COL_FREQ_BASELINE,
     COL_FREQ_EFFECTIVE,
     COL_IS_CHURNED,
+    COL_PRICE,
     COL_PVD_SEGMENT,
     COL_SCAR_FACTOR,
 )
@@ -206,6 +207,68 @@ def advance_macro_state(
         ticks_in_episode=macro.ticks_in_episode + 1,
     )
     return replace(ctx, macro=macro_next)
+
+
+def median_listing_price(products_df: pl.DataFrame) -> float:
+    """Медиана listing price для market feedback (Spec 011 §5.4)."""
+    if products_df.height == 0:
+        return 0.0
+    return float(products_df[COL_PRICE].median())
+
+
+def apply_market_price_feedback(
+    ctx: SimulationContext,
+    config: MacroDynamicsConfig,
+    current_median_p50: float,
+) -> SimulationContext:
+    """
+    Ускоряет decay stress при падении median price vs pre-crisis snapshot.
+    price_response = (pre - current) / pre; stress -= gain * max(0, response) * stress.
+    """
+    if config.feedback_gain <= 0.0:
+        return ctx
+    baseline = ctx.pre_crisis_price_index
+    if baseline is None or baseline <= 0.0 or current_median_p50 <= 0.0:
+        return ctx
+
+    price_response = (baseline - current_median_p50) / baseline
+    if price_response <= 0.0:
+        return ctx
+
+    macro = ctx.macro
+    if macro.stress <= 0.0:
+        return ctx
+
+    stress = max(
+        macro.stress - config.feedback_gain * price_response * macro.stress,
+        0.0,
+    )
+    macro_next = MacroState(
+        stress=stress,
+        expansion=macro.expansion,
+        regime=macro.regime,
+        peak_stress=macro.peak_stress,
+        peak_expansion=macro.peak_expansion,
+        episode_id=macro.episode_id,
+        ticks_in_episode=macro.ticks_in_episode,
+    )
+    return replace(ctx, macro=macro_next)
+
+
+def update_pre_crisis_price_index(
+    ctx: SimulationContext,
+    *,
+    previous_regime: MacroRegime,
+    current_median_p50: float,
+) -> SimulationContext:
+    """Фиксирует pre-crisis median при входе в STRESS."""
+    if (
+        ctx.macro.regime == MacroRegime.STRESS
+        and previous_regime != MacroRegime.STRESS
+        and current_median_p50 > 0.0
+    ):
+        return replace(ctx, pre_crisis_price_index=current_median_p50)
+    return ctx
 
 
 def macro_rng(seed: int, tick_id: int, episode_id: int = 0) -> np.random.Generator:
@@ -435,12 +498,22 @@ def run_macro_tick(
     buyers_df: pl.DataFrame,
     config: MacroDynamicsConfig,
     rng: np.random.Generator,
+    *,
+    current_median_p50: float | None = None,
 ) -> tuple[SimulationContext, pl.DataFrame]:
-    """Полный macro-тик: resolve impulses → advance → buyer economic state."""
+    """Полный macro-тик: resolve impulses → feedback → advance → buyer economic state."""
     if config.shock_mode == "fixed_duration":
         return ctx, ensure_buyer_economic_columns(buyers_df)
 
+    previous_regime = ctx.macro.regime
     ctx = resolve_demand_shocks_to_macro(ctx, config, rng)
+    if current_median_p50 is not None:
+        ctx = update_pre_crisis_price_index(
+            ctx,
+            previous_regime=previous_regime,
+            current_median_p50=current_median_p50,
+        )
+        ctx = apply_market_price_feedback(ctx, config, current_median_p50)
     ctx = advance_macro_state(ctx, config, rng)
     buyers_out = apply_buyer_economic_state(buyers_df, ctx.macro, config, rng)
     return ctx, buyers_out

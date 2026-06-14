@@ -18,7 +18,9 @@ from market_abm.analytics.persist import (
     open_duckdb_connection,
     write_reference_snapshots,
 )
+from market_abm.analytics.store import AnalyticsStore
 from market_abm.config.buyers import BuyerPopulationConfig
+from market_abm.config.ml_repricing import CatBoostRepricingConfig
 from market_abm.config.repricing import ListingInitConfig, RepricingConfig
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.config.sellers import SellerPopulationConfig
@@ -32,9 +34,10 @@ from market_abm.simulation.extended_runtime import (
     persist_extended_tick,
 )
 from market_abm.simulation.listings import initialize_listings
-from market_abm.simulation.macro import macro_rng, run_macro_tick
+from market_abm.simulation.macro import macro_rng, median_listing_price, run_macro_tick
 from market_abm.simulation.runner import _bootstrap_products_from_listings, _bootstrap_rng
 from market_abm.simulation.step import step
+from market_abm.ml.catboost_repricing import CatBoostModelRegistry, load_frozen_registry_for_run
 _WORKER_SEED: Final[int] = 42
 _PENDING_SESSION_FILENAME: Final[str] = "pending_session.json"
 
@@ -127,6 +130,21 @@ class LiveSimulationSession:
         self._shock_queue = shock_queue
         self._config = _worker_run_config(self._run_root)
         self._con = open_duckdb_connection(self._config.persistence)
+        self._ml_registry: CatBoostModelRegistry | None = load_frozen_registry_for_run(
+            self._run_root
+        )
+        self._analytics_store: AnalyticsStore | None = None
+        if self._ml_registry is not None:
+            self._config = self._config.model_copy(
+                update={
+                    "repricing": self._config.repricing.model_copy(
+                        update={
+                            "mode": "hybrid",
+                            "ml": CatBoostRepricingConfig(),
+                        }
+                    ),
+                }
+            )
         self._buyers_df: pl.DataFrame | None = None
         self._sellers_df: pl.DataFrame | None = None
         self._products_df: pl.DataFrame | None = None
@@ -144,6 +162,7 @@ class LiveSimulationSession:
         self._products_df = None
         self._extended_state = None
         self._last_external_tick = None
+        self._analytics_store = None
 
     def _write_initial_manifest(self, *, n_ticks: int) -> None:
         assert self._buyers_df is not None
@@ -166,6 +185,10 @@ class LiveSimulationSession:
             "n_listings": listings.height,
             "config_hash": _config_hash(self._config),
             "engine": self._config.choice.engine,
+            "ml_registry_loaded": self._ml_registry is not None,
+            "repricing_effective_mode": (
+                "hybrid" if self._ml_registry is not None else self._config.repricing.mode
+            ),
             "ticks_completed": 0,
             "last_tick_id": None,
             "paths": {
@@ -221,6 +244,8 @@ class LiveSimulationSession:
             sellers_df=self._sellers_df,
         )
         self._write_initial_manifest(n_ticks=1_000_000)
+        if self._ml_registry is not None:
+            self._analytics_store = AnalyticsStore(self._run_root)
 
     def _tick_artifacts_exist(self, tick_id: int) -> bool:
         tx = self._run_root / "transactions" / f"tick_{tick_id:06d}.parquet"
@@ -278,6 +303,7 @@ class LiveSimulationSession:
             self._buyers_df,
             self._config.macro_dynamics,
             macro_rng_gen,
+            current_median_p50=median_listing_price(self._products_df),
         )
 
         step_config = SimulationStepConfig(
@@ -296,6 +322,9 @@ class LiveSimulationSession:
             simulation_context=sim_ctx,
             shock_catalog=self._config.shock_catalog,
             macro_config=self._config.macro_dynamics,
+            ml_registry=self._ml_registry,
+            analytics_store=self._analytics_store,
+            ml_runtime=self._config.ml_runtime,
         )
         if sellers_state_next is None:
             raise RuntimeError("extended worker session requires sellers_state_next")
