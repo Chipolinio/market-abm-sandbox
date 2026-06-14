@@ -44,6 +44,17 @@ class SegmentElasticityConfig(BaseModel):
     churn_stress_threshold_rich: float = Field(default=0.50, ge=0.0, le=2.0)
     churn_stress_threshold_standard: float = Field(default=0.45, ge=0.0, le=2.0)
     churn_stress_threshold_low: float = Field(default=0.40, ge=0.0, le=2.0)
+    gamma_mult_rich: float = Field(default=0.6, gt=0.0, le=5.0)
+    gamma_mult_standard: float = Field(default=1.0, gt=0.0, le=5.0)
+    gamma_mult_low: float = Field(default=1.3, gt=0.0, le=5.0)
+
+    def gamma_mult_for(self, pvd_segment: str) -> float:
+        """Множитель γ для income utility по PVD-сегменту (Spec 011 §4.2)."""
+        return {
+            "rich": self.gamma_mult_rich,
+            "standard": self.gamma_mult_standard,
+            "low": self.gamma_mult_low,
+        }.get(pvd_segment, 1.0)
 
 
 class MacroDynamicsConfig(BaseModel):

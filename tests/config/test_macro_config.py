@@ -63,6 +63,13 @@ def test_buyer_bounds_nested_defaults() -> None:
     assert bounds.budget_floor_epsilon == pytest.approx(1.0)
 
 
+def test_segment_elasticity_gamma_mult_defaults() -> None:
+    seg = SegmentElasticityConfig()
+    assert seg.gamma_mult_rich == pytest.approx(0.6)
+    assert seg.gamma_mult_standard == pytest.approx(1.0)
+    assert seg.gamma_mult_low == pytest.approx(1.3)
+
+
 def test_invalid_persistence_rejected() -> None:
     with pytest.raises(ValidationError):
         MacroDynamicsConfig(persistence_stress=1.5)

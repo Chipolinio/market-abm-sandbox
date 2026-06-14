@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 import polars as pl
 
+from market_abm.config.macro import SegmentElasticityConfig
 from market_abm.config.simulation import ChoiceModelConfig
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.domain.constants import (
@@ -132,6 +133,18 @@ def _compute_utilities_choice_learn(
     )
 
 
+def resolve_income_utility_gamma(
+    pvd_segment: str,
+    config: ChoiceModelConfig,
+    segment_elasticity: SegmentElasticityConfig | None,
+) -> float:
+    """γ_seg = income_utility_gamma × gamma_mult[segment] (Spec 011 §4.2)."""
+    base = config.income_utility_gamma
+    if base <= 0.0 or segment_elasticity is None:
+        return base
+    return base * segment_elasticity.gamma_mult_for(pvd_segment)
+
+
 def _income_utility_shift(
     budget: float,
     budget_baseline: float,
@@ -154,6 +167,7 @@ def _choose_one_buyer(
     *,
     use_choice_learn: bool,
     outside_utility_bias: float,
+    segment_elasticity: SegmentElasticityConfig | None = None,
 ) -> tuple[int | None, float]:
     """Выбирает один оффер для покупателя или возвращает отказ от покупки."""
     budget = float(buyer_row[COL_BUDGET_EFFECTIVE])
@@ -190,7 +204,11 @@ def _choose_one_buyer(
     income_shift = _income_utility_shift(
         budget,
         float(buyer_row[COL_BUDGET_BASELINE]),
-        config.income_utility_gamma,
+        resolve_income_utility_gamma(
+            str(buyer_row[COL_PVD_SEGMENT]),
+            config,
+            segment_elasticity,
+        ),
     )
     if np.isfinite(income_shift):
         product_utils = product_utils + np.float32(income_shift)
@@ -215,12 +233,17 @@ def choose_listings_for_buyers(
     config: ChoiceModelConfig,
     base_seed: int | None = None,
     allow_choice_learn_fallback: bool = True,
+    segment_elasticity: SegmentElasticityConfig | None = None,
 ) -> pl.DataFrame:
     """
     Возвращает choices_df: buyer_id, listing_id (или null), choice_probability.
     Если задан base_seed, seed для каждого покупателя считается отдельно (для батчей).
     """
     buyers_batch_df = ensure_buyer_economic_columns(ensure_budget_baseline(buyers_batch_df))
+    if COL_PVD_SEGMENT not in buyers_batch_df.columns:
+        buyers_batch_df = buyers_batch_df.with_columns(
+            pl.lit("standard").cast(pl.Categorical).alias(COL_PVD_SEGMENT)
+        )
     _validate_buyers_batch(buyers_batch_df)
     _validate_products(products_df)
 
@@ -259,6 +282,7 @@ def choose_listings_for_buyers(
             row_rng,
             use_choice_learn=use_choice_learn,
             outside_utility_bias=float(bias_vector[i]),
+            segment_elasticity=segment_elasticity,
         )
         buyer_ids.append(buyer_id)
         listing_ids.append(listing_id)
@@ -285,6 +309,7 @@ def choose_listings_for_all_buyers(
     seed: int | None,
     config: ChoiceModelConfig,
     allow_choice_learn_fallback: bool = True,
+    segment_elasticity: SegmentElasticityConfig | None = None,
 ) -> pl.DataFrame:
     """Считает выбор для всех покупателей, разбивая их на батчи по config.buyers_batch_size."""
     if buyers_df.height == 0:
@@ -305,6 +330,7 @@ def choose_listings_for_all_buyers(
                 config=config,
                 base_seed=seed,
                 allow_choice_learn_fallback=allow_choice_learn_fallback,
+                segment_elasticity=segment_elasticity,
             )
         )
     if len(chunks) == 1:

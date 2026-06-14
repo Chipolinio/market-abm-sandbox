@@ -346,6 +346,9 @@ def step(
         products_pool,
         seed=config.seed,
         config=config.choice,
+        segment_elasticity=(
+            macro_config.segment_elasticity if macro_config is not None else None
+        ),
     )
     transactions = _build_transactions_df(
         choices, products_pool, tick_id=config.tick_id
