@@ -8,6 +8,7 @@ import { TickerRibbon } from "@/components/header/TickerRibbon";
 import type { WorkerState } from "@/api/types";
 import type { CyberLogLine } from "@/state/cyberLog";
 import type { TickerRibbonProps } from "@/types/ticker";
+import type { SimulationShockRequest } from "@/types/shock";
 
 const EMPTY_DYNAMICS: DynamicsTabProps = {
   priceChartData: [],
@@ -18,6 +19,7 @@ const EMPTY_DYNAMICS: DynamicsTabProps = {
 
 export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onActionComplete?: (beforeState: WorkerState, action: SimulationAction) => Promise<void>;
+  onShockQueued?: (body: SimulationShockRequest) => void;
   dynamics?: DynamicsTabProps;
   asOfTick?: number;
   cyberLogLines?: CyberLogLine[];
@@ -36,6 +38,7 @@ export function TradingTerminalLayout({
   priceIndexDelta,
   flashCrashActive,
   onActionComplete,
+  onShockQueued,
   dynamics = EMPTY_DYNAMICS,
   asOfTick = 0,
   cyberLogLines = [],
@@ -70,7 +73,11 @@ export function TradingTerminalLayout({
           data-testid="zone-left-sidebar"
           className="flex h-full w-80 shrink-0 flex-col overflow-y-auto border-r border-border bg-white p-4"
         >
-          <ControlPanel workerState={workerState} onActionComplete={handleActionComplete} />
+          <ControlPanel
+            workerState={workerState}
+            onActionComplete={handleActionComplete}
+            onShockQueued={onShockQueued}
+          />
         </aside>
 
         <main
@@ -83,6 +90,8 @@ export function TradingTerminalLayout({
             activeTab={activeTab}
             onTabChange={onTabChange}
             pollMatrixLive={pollMatrixLive}
+            highlightedSellerId={highlightedSellerId}
+            onHighlightSeller={handleHighlightSeller}
           />
         </main>
 

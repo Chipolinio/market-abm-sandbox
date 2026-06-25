@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SELLERS_REGISTRY_LIMIT } from "@/api/analytics";
@@ -71,5 +71,13 @@ describe("MarketLeadersTab", () => {
     expect(cards).toHaveLength(3);
     expect(cards.map((card) => card.getAttribute("data-seller-id"))).toEqual(["3", "1", "7"]);
     expect(screen.getByText("Реестр селлеров")).toBeTruthy();
+  });
+
+  it("propagates_selected_seller_click", () => {
+    const onHighlightSeller = vi.fn();
+    render(<MarketLeadersTab asOfTick={3} highlightedSellerId={1} onHighlightSeller={onHighlightSeller} />);
+
+    fireEvent.click(screen.getAllByTestId("seller-registry-card")[0]!);
+    expect(onHighlightSeller).toHaveBeenCalledWith(3);
   });
 });

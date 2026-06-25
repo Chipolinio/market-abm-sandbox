@@ -37,6 +37,17 @@ export function algorithmAvatarClass(algorithm: MarketLeaderRowDTO["algorithm_ty
   }
 }
 
+export function algorithmAvatarGlyph(algorithm: MarketLeaderRowDTO["algorithm_type"]): string {
+  switch (algorithm) {
+    case "CB":
+      return "AI";
+    case "REPR":
+      return "GEAR";
+    default:
+      return "RULE";
+  }
+}
+
 /** Rank stripe + badge for top-3 leaderboard (0 = gold tier). */
 export function sellerRankAccent(rank: number): {
   stripeClass: string;
@@ -84,4 +95,62 @@ export function formatCapital(value: number): string {
     return `${(value / 1_000).toFixed(1)}k`;
   }
   return value.toFixed(0);
+}
+
+export type SellerHealth = "healthy" | "fragile" | "critical" | "bankrupt";
+
+export function sellerHealthStatus(
+  seller: Pick<MarketLeaderRowDTO, "is_bankrupt" | "working_capital" | "inventory_stock">,
+  maxCapital: number,
+): SellerHealth {
+  if (seller.is_bankrupt) {
+    return "bankrupt";
+  }
+  const capitalRatio = maxCapital > 0 ? seller.working_capital / maxCapital : 0;
+  if (capitalRatio <= 0.2 || (seller.inventory_stock > 0 && seller.working_capital <= seller.inventory_stock * 10)) {
+    return "critical";
+  }
+  if (capitalRatio <= 0.45) {
+    return "fragile";
+  }
+  return "healthy";
+}
+
+export function sellerHealthLabel(health: SellerHealth): string {
+  switch (health) {
+    case "healthy":
+      return "Здоровье: устойчив";
+    case "fragile":
+      return "Здоровье: хрупкий";
+    case "critical":
+      return "Здоровье: тревога";
+    default:
+      return "Здоровье: банкрот";
+  }
+}
+
+export function sellerHealthCardClass(health: SellerHealth): string {
+  switch (health) {
+    case "healthy":
+      return "";
+    case "fragile":
+      return "bg-amber-50/40";
+    case "critical":
+      return "border-orange-300 bg-orange-50";
+    default:
+      return "border-slate-300 bg-slate-100 grayscale";
+  }
+}
+
+export function sellerHealthBadgeClass(health: SellerHealth): string {
+  switch (health) {
+    case "healthy":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "fragile":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "critical":
+      return "border-orange-200 bg-orange-50 text-orange-800";
+    default:
+      return "border-slate-300 bg-slate-200 text-slate-700";
+  }
 }

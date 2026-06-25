@@ -16,6 +16,26 @@ vi.mock("recharts", () => ({
   Line: () => null,
   Area: () => null,
   Bar: () => null,
+  ReferenceLine: () => null,
+  Label: () => null,
+}));
+
+vi.mock("@/hooks/useTopListingsSeries", () => ({
+  useTopListingsSeries: () => ({
+    listings: [
+      {
+        listing_id: 101,
+        seller_id: 7,
+        points: [
+          { tick_id: 1, price: 10, gmv: 0, volume: 0 },
+          { tick_id: 2, price: 9.5, gmv: 0, volume: 0 },
+        ],
+      },
+    ],
+    loading: false,
+    error: null,
+    reload: vi.fn(async () => undefined),
+  }),
 }));
 
 afterEach(() => {
@@ -65,5 +85,21 @@ describe("MarketDynamicsTab", () => {
     );
 
     expect(screen.getByText(/Backfill: network error/)).toBeTruthy();
+  });
+
+  it("shows_highlight_banner_for_selected_seller", () => {
+    render(
+      <MarketDynamicsTab
+        priceChartData={[
+          { tick_id: 1, p10: 9, p50: 10, p90: 11, mean_price: 10 },
+          { tick_id: 2, p10: 8, p50: 9, p90: 10, mean_price: 9 },
+        ]}
+        gmvChartData={[{ tick_id: 1, gmv: 100, transaction_count: 2 }]}
+        highlightedSellerId={7}
+        crashMarkers={[{ tickId: 2, label: "CRASH" }]}
+      />,
+    );
+
+    expect(screen.getByText(/Seller #7 price/)).toBeTruthy();
   });
 });

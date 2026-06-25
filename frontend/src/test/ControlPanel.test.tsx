@@ -27,11 +27,11 @@ describe("ControlPanel", () => {
     expect(screen.getByTestId("control-panel-environment")).toBeTruthy();
     expect(screen.getByTestId("control-panel-shocks")).toBeTruthy();
     expect(screen.getByTestId("control-panel-simulation")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Запустить шок спроса" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Запустить — Шок спроса" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Старт" })).toBeTruthy();
   });
 
-  it("disables_environment_when_running", () => {
+  it("locks_environment_and_enables_shocks_when_running", () => {
     render(<ControlPanel workerState="RUNNING" onActionComplete={onActionComplete} />);
 
     const sliders = screen.getAllByRole("slider");
@@ -41,6 +41,10 @@ describe("ControlPanel", () => {
 
     const applyButton = screen.getByRole("button", { name: "Применить" }) as HTMLButtonElement;
     expect(applyButton.disabled).toBe(true);
+    expect(screen.getByText("Параметры заблокированы во время рантайма")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Запустить — Шок спроса" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   it("disables_environment_when_paused", () => {
@@ -48,6 +52,15 @@ describe("ControlPanel", () => {
 
     const applyButton = screen.getByRole("button", { name: "Применить" }) as HTMLButtonElement;
     expect(applyButton.disabled).toBe(true);
+  });
+
+  it("disables_shocks_before_start", () => {
+    render(<ControlPanel workerState="IDLE" onActionComplete={onActionComplete} />);
+
+    expect((screen.getByRole("button", { name: "Запустить — Шок спроса" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByText("Шоки доступны только после запуска симуляции.")).toBeTruthy();
   });
 
   it("disables_start_when_running", () => {

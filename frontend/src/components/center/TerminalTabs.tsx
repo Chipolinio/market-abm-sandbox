@@ -13,6 +13,8 @@ type Props = {
   activeTab?: TerminalTabId;
   onTabChange?: (tab: TerminalTabId) => void;
   pollMatrixLive?: boolean;
+  highlightedSellerId?: number | null;
+  onHighlightSeller?: (sellerId: number | null) => void;
 };
 
 export function TerminalTabs({
@@ -22,6 +24,8 @@ export function TerminalTabs({
   activeTab: controlledTab,
   onTabChange,
   pollMatrixLive = false,
+  highlightedSellerId = null,
+  onHighlightSeller,
 }: Props) {
   const [internalTab, setInternalTab] = useState<TerminalTabId>(defaultTab);
   const activeTab = controlledTab ?? internalTab;
@@ -51,7 +55,11 @@ export function TerminalTabs({
 
         {activeTab === "leaders" ? (
           <TabsContent value="leaders" className="mt-0 h-full overflow-y-auto">
-            <MarketLeadersTab asOfTick={asOfTick} />
+            <MarketLeadersTab
+              asOfTick={asOfTick}
+              highlightedSellerId={highlightedSellerId}
+              onHighlightSeller={onHighlightSeller}
+            />
           </TabsContent>
         ) : null}
 

@@ -1,6 +1,7 @@
 import { GmvChart } from "@/components/GmvChart";
 import { PriceQuantileChart } from "@/components/PriceQuantileChart";
 import type { DynamicsTabProps } from "@/components/center/types";
+import { useTopListingsSeries } from "@/hooks/useTopListingsSeries";
 
 export function MarketDynamicsTab({
   priceChartData,
@@ -8,7 +9,14 @@ export function MarketDynamicsTab({
   backfillLoading = false,
   backfillError = null,
   highlightedSellerId = null,
+  crashMarkers = [],
 }: DynamicsTabProps) {
+  const { listings, loading: listingsLoading } = useTopListingsSeries(true);
+  const highlightedListing =
+    highlightedSellerId === null
+      ? null
+      : listings.find((listing) => listing.seller_id === highlightedSellerId) ?? null;
+
   return (
     <div
       data-testid="market-dynamics-panel"
@@ -19,7 +27,11 @@ export function MarketDynamicsTab({
           data-testid="highlighted-seller-banner"
           className="shrink-0 border-b border-border px-0 py-1 text-xs text-accent"
         >
-          Подсветка тренда: селлер #{highlightedSellerId}
+          {highlightedListing !== null
+            ? `Подсветка тренда: Seller #${highlightedSellerId} price`
+            : listingsLoading
+              ? `Подсветка тренда: загружаем серию селлера #${highlightedSellerId}`
+              : `Подсветка тренда: для селлера #${highlightedSellerId} нет серии в top SKU`}
         </p>
       ) : null}
       {backfillLoading ? (
@@ -34,7 +46,20 @@ export function MarketDynamicsTab({
           Квантили цен (p10 / p50 / p90)
         </h2>
         <div className="min-h-0 flex-1">
-          <PriceQuantileChart data={priceChartData} />
+          <PriceQuantileChart
+            data={priceChartData}
+            highlightedSellerSeries={
+              highlightedListing === null
+                ? null
+                : {
+                    sellerId: highlightedSellerId!,
+                    points: highlightedListing.points.map((point) => ({
+                      tick_id: point.tick_id,
+                      price: point.price,
+                    })),
+                  }
+            }
+          />
         </div>
       </section>
 
@@ -43,7 +68,7 @@ export function MarketDynamicsTab({
           GMV по тикам
         </h2>
         <div className="min-h-0 flex-1">
-          <GmvChart data={gmvChartData} />
+          <GmvChart data={gmvChartData} eventMarkers={crashMarkers} />
         </div>
       </section>
     </div>

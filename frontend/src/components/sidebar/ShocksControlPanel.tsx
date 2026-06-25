@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { ApiError } from "@/api/client";
 import { triggerShock } from "@/api/simulation";
-import { MCK_BUTTON_MD } from "@/styles/mckinsey";
+import { MCK_BUTTON_MD, MCK_BUTTON_SHOCK_ACCENT } from "@/styles/mckinsey";
 import type { CrisisScenario, SimulationShockRequest } from "@/types/shock";
 
 const DEMAND_CRASH_BODY: SimulationShockRequest = {
@@ -23,7 +23,22 @@ const SCENARIO_OPTIONS: { value: CrisisScenario; label: string }[] = [
   { value: "severe", label: "Рецессия" },
 ];
 
-export function ShocksControlPanel() {
+function scenarioButtonLabel(scenario: CrisisScenario): string {
+  const option = SCENARIO_OPTIONS.find((item) => item.value === scenario);
+  return option ? `Запустить — ${option.label}` : "Запустить шок спроса";
+}
+
+type Props = {
+  disabled?: boolean;
+  accent?: boolean;
+  onShockQueued?: (body: SimulationShockRequest) => void;
+};
+
+export function ShocksControlPanel({
+  disabled = false,
+  accent = false,
+  onShockQueued,
+}: Props) {
   const [scenario, setScenario] = useState<CrisisScenario>("standard");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +51,7 @@ export function ShocksControlPanel() {
     try {
       const response = await triggerShock(body);
       setMessage(`Shock queued (depth=${response.queue_depth})`);
+      onShockQueued?.(body);
     } catch (err) {
       const text =
         err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Shock failed";
@@ -47,12 +63,17 @@ export function ShocksControlPanel() {
 
   return (
     <div className="flex flex-col gap-2">
+      {disabled ? (
+        <p className="rounded-md border border-border bg-slate-50 px-3 py-2 text-xs text-muted">
+          Шоки доступны только после запуска симуляции.
+        </p>
+      ) : null}
       <label className="flex flex-col gap-1 text-xs text-muted">
         Сценарий шока
         <select
           className="border border-border bg-background px-2 py-1.5 text-sm text-foreground"
           value={scenario}
-          disabled={busy}
+          disabled={busy || disabled}
           onChange={(event) => setScenario(event.target.value as CrisisScenario)}
         >
           {SCENARIO_OPTIONS.map((option) => (
@@ -64,8 +85,8 @@ export function ShocksControlPanel() {
       </label>
       <button
         type="button"
-        className={MCK_BUTTON_MD}
-        disabled={busy}
+        className={accent ? MCK_BUTTON_SHOCK_ACCENT : MCK_BUTTON_MD}
+        disabled={busy || disabled}
         onClick={() =>
           void runShock({
             ...DEMAND_CRASH_BODY,
@@ -73,12 +94,12 @@ export function ShocksControlPanel() {
           })
         }
       >
-        Запустить шок спроса
+        {scenarioButtonLabel(scenario)}
       </button>
       <button
         type="button"
         className={MCK_BUTTON_MD}
-        disabled={busy}
+        disabled={busy || disabled}
         onClick={() => void runShock(MARKETPLACE_PROMOTION_BODY)}
       >
         Принудительная акция маркетплейса

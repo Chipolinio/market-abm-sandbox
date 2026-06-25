@@ -22,6 +22,10 @@ const BAND_FILL = "rgba(241, 245, 249, 0.5)";
 
 type Props = {
   data: PriceChartRow[];
+  highlightedSellerSeries?: {
+    sellerId: number;
+    points: Array<{ tick_id: number; price: number | null }>;
+  } | null;
 };
 
 function warnIfQuantileOrderBroken(row: PriceChartRow): void {
@@ -33,7 +37,7 @@ function warnIfQuantileOrderBroken(row: PriceChartRow): void {
   }
 }
 
-export function PriceQuantileChart({ data }: Props) {
+export function PriceQuantileChart({ data, highlightedSellerSeries = null }: Props) {
   if (data.length === 0 || !hasPlottablePriceData(data)) {
     return (
       <p className="flex h-full items-center justify-center text-xs italic text-muted">
@@ -43,10 +47,17 @@ export function PriceQuantileChart({ data }: Props) {
   }
 
   data.forEach(warnIfQuantileOrderBroken);
+  const highlightedPointByTick = new Map(
+    (highlightedSellerSeries?.points ?? []).map((point) => [point.tick_id, point.price] as const),
+  );
+  const chartData = data.map((row) => ({
+    ...row,
+    highlightedSellerPrice: highlightedPointByTick.get(row.tick_id) ?? null,
+  }));
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid horizontal vertical={false} stroke="#F1F5F9" />
         <XAxis
           dataKey="tick_id"
@@ -134,6 +145,19 @@ export function PriceQuantileChart({ data }: Props) {
           dot={false}
           name="P90 (Макс)"
         />
+        {highlightedSellerSeries !== null ? (
+          <Line
+            type="monotone"
+            dataKey="highlightedSellerPrice"
+            stroke="#2563EB"
+            strokeWidth={2}
+            strokeDasharray="5 4"
+            isAnimationActive={false}
+            dot={false}
+            connectNulls
+            name={`Seller #${highlightedSellerSeries.sellerId} price`}
+          />
+        ) : null}
       </ComposedChart>
     </ResponsiveContainer>
   );

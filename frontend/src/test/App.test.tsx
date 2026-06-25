@@ -21,6 +21,7 @@ vi.mock("@/hooks/useDashboardSeries", () => ({
     backfillError: null,
     handlePayload: vi.fn(),
     reloadBackfill: vi.fn(async () => true),
+    clearSeries: vi.fn(),
   }),
 }));
 
@@ -56,6 +57,7 @@ vi.mock("@/hooks/useCyberLog", () => ({
     lines: [],
     loading: false,
     error: null,
+    reset: vi.fn(),
   }),
 }));
 
@@ -74,6 +76,7 @@ describe("App", () => {
     expect(screen.getByText(/t=\s*7/)).toBeTruthy();
     expect(screen.getByText(/GMV:/)).toBeTruthy();
     expect(screen.getByText("STABLE")).toBeTruthy();
+    expect(screen.getByText("Система готова к настройке")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Старт" })).toBeTruthy();
   });
 });

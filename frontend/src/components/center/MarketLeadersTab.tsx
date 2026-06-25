@@ -4,9 +4,15 @@ import { useMarketLeaders } from "@/hooks/useMarketLeaders";
 
 type Props = {
   asOfTick: number;
+  highlightedSellerId?: number | null;
+  onHighlightSeller?: (sellerId: number | null) => void;
 };
 
-export function MarketLeadersTab({ asOfTick }: Props) {
+export function MarketLeadersTab({
+  asOfTick,
+  highlightedSellerId = null,
+  onHighlightSeller,
+}: Props) {
   const { leaders, loading, error } = useMarketLeaders(true, asOfTick, SELLERS_REGISTRY_LIMIT);
   const maxCapital = leaders.reduce((max, seller) => Math.max(max, seller.working_capital), 0);
 
@@ -30,6 +36,8 @@ export function MarketLeadersTab({ asOfTick }: Props) {
               seller={seller}
               rank={index}
               maxCapital={maxCapital}
+              selected={highlightedSellerId === seller.seller_id}
+              onSelect={onHighlightSeller}
             />
           ))}
         </div>

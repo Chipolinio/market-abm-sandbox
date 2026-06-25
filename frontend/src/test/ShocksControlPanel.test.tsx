@@ -29,7 +29,7 @@ describe("ShocksControlPanel", () => {
 
     render(<ShocksControlPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Запустить шок спроса" }));
+    fireEvent.click(screen.getByRole("button", { name: "Запустить — Шок спроса" }));
 
     await waitFor(() => {
       expect(triggerShock).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ describe("ShocksControlPanel", () => {
 
     render(<ShocksControlPanel />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "severe" } });
-    fireEvent.click(screen.getByRole("button", { name: "Запустить шок спроса" }));
+    fireEvent.click(screen.getByRole("button", { name: "Запустить — Рецессия" }));
 
     await waitFor(() => {
       expect(triggerShock).toHaveBeenCalledWith({
@@ -59,6 +59,18 @@ describe("ShocksControlPanel", () => {
         scenario: "severe",
       });
     });
+  });
+
+  it("updates_button_label_when_scenario_changes", () => {
+    render(<ShocksControlPanel />);
+
+    expect(screen.getByRole("button", { name: "Запустить — Шок спроса" })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "mild" } });
+    expect(screen.getByRole("button", { name: "Запустить — Слабый спад" })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "severe" } });
+    expect(screen.getByRole("button", { name: "Запустить — Рецессия" })).toBeTruthy();
   });
 
   it("posts_marketplace_promotion_on_click", async () => {
@@ -92,10 +104,20 @@ describe("ShocksControlPanel", () => {
     });
 
     render(<ShocksControlPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Запустить шок спроса" }));
+    fireEvent.click(screen.getByRole("button", { name: "Запустить — Шок спроса" }));
 
     await waitFor(() => {
       expect(screen.getByText(/Shock queued \(depth=3\)/)).toBeTruthy();
     });
+  });
+
+  it("disables_all_controls_when_runtime_not_started", () => {
+    render(<ShocksControlPanel disabled />);
+
+    expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Запустить — Шок спроса" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByText("Шоки доступны только после запуска симуляции.")).toBeTruthy();
   });
 });

@@ -1,10 +1,15 @@
 import type { MarketLeaderRowDTO } from "@/types/leaders";
 import {
+  algorithmAvatarGlyph,
   algorithmAvatarClass,
   algorithmTypeLabel,
   formatCapital,
   logicStatusClass,
   logicStatusLabel,
+  sellerHealthBadgeClass,
+  sellerHealthCardClass,
+  sellerHealthLabel,
+  sellerHealthStatus,
   sellerRankAccent,
 } from "@/utils/sellerDisplay";
 
@@ -12,21 +17,35 @@ type Props = {
   seller: MarketLeaderRowDTO;
   rank: number;
   maxCapital: number;
+  selected?: boolean;
+  onSelect?: (sellerId: number | null) => void;
 };
 
 function formatRevenue(value: number): string {
   return value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 }
 
-export function SellerRegistryCard({ seller, rank, maxCapital }: Props) {
+export function SellerRegistryCard({
+  seller,
+  rank,
+  maxCapital,
+  selected = false,
+  onSelect,
+}: Props) {
   const accent = sellerRankAccent(Math.min(rank, 2));
   const capitalPct = maxCapital > 0 ? Math.min(100, (seller.working_capital / maxCapital) * 100) : 0;
+  const health = sellerHealthStatus(seller, maxCapital);
 
   return (
-    <article
+    <button
+      type="button"
       data-testid="seller-registry-card"
       data-seller-id={seller.seller_id}
-      className={`flex items-start gap-3 border border-l-4 p-3 ${accent.stripeClass} border-border bg-white`}
+      aria-pressed={selected}
+      onClick={() => onSelect?.(selected ? null : seller.seller_id)}
+      className={`relative flex w-full items-start gap-3 border border-l-4 p-3 text-left ${accent.stripeClass} ${sellerHealthCardClass(health)} ${
+        selected ? "border-accent ring-1 ring-accent/25" : "border-border"
+      }`}
     >
       <span
         data-testid="seller-rank-badge"
@@ -40,7 +59,8 @@ export function SellerRegistryCard({ seller, rank, maxCapital }: Props) {
         title={algorithmTypeLabel(seller.algorithm_type)}
         className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center text-[9px] font-medium leading-tight ring-1 ${algorithmAvatarClass(seller.algorithm_type)}`}
       >
-        <span>{seller.algorithm_type}</span>
+        <span>{algorithmAvatarGlyph(seller.algorithm_type)}</span>
+        <span className="text-[8px]">{seller.algorithm_type}</span>
       </span>
 
       <div className="min-w-0 flex-1">
@@ -54,10 +74,15 @@ export function SellerRegistryCard({ seller, rank, maxCapital }: Props) {
           </span>
         </div>
 
-        <p className="mt-0.5 text-[10px] text-muted">
-          Алгоритм: {algorithmTypeLabel(seller.algorithm_type)}
-          {seller.is_bankrupt ? " · Банкрот" : " · Активен"}
-        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted">
+          <span>Алгоритм: {algorithmTypeLabel(seller.algorithm_type)}</span>
+          <span
+            className={`border px-1.5 py-0.5 ${sellerHealthBadgeClass(health)}`}
+            data-testid="seller-health-status"
+          >
+            {sellerHealthLabel(health)}
+          </span>
+        </div>
 
         <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] sm:grid-cols-4">
           <div>
@@ -86,6 +111,11 @@ export function SellerRegistryCard({ seller, rank, maxCapital }: Props) {
           <div className={`h-full ${accent.barClass}`} style={{ width: `${capitalPct}%` }} />
         </div>
       </div>
-    </article>
+      {seller.is_bankrupt ? (
+        <span className="absolute right-3 top-3 rotate-[-8deg] border border-slate-400 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+          Bankrupt
+        </span>
+      ) : null}
+    </button>
   );
 }

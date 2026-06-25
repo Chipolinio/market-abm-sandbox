@@ -51,12 +51,45 @@ function SkeletonItem() {
   );
 }
 
+function statusBadgeConfig(workerState: TickerRibbonProps["workerState"]): {
+  label: string;
+  className: string;
+} {
+  switch (workerState) {
+    case "RUNNING":
+      return {
+        label: "Симуляция активна (1 Гц)",
+        className: "border-emerald-200 bg-emerald-50 text-emerald-800 animate-pulse",
+      };
+    case "PAUSED":
+      return {
+        label: "Симуляция приостановлена",
+        className: "border-amber-200 bg-amber-50 text-amber-800",
+      };
+    case "FAILED":
+      return {
+        label: "Система требует вмешательства",
+        className: "border-red-200 bg-red-50 text-red-800",
+      };
+    case "STOPPED":
+    case "IDLE":
+    default:
+      return {
+        label: "Система готова к настройке",
+        className: "border-slate-200 bg-slate-50 text-slate-700",
+      };
+  }
+}
+
 export function TickerRibbon({
   metrics,
   connectionState,
+  workerState,
   priceIndexDelta = 0,
   flashCrashActive = false,
 }: TickerRibbonProps) {
+  const statusBadge = statusBadgeConfig(workerState);
+
   return (
     <div className="flex w-full flex-row items-center gap-6">
       <span
@@ -64,6 +97,13 @@ export function TickerRibbon({
         className={`inline-block h-2 w-2 shrink-0 rounded-full ${connectionDotClass(connectionState)}`}
         aria-hidden
       />
+
+      <span
+        data-testid="worker-status-badge"
+        className={`rounded-full border px-3 py-1 text-xs font-medium ${statusBadge.className}`}
+      >
+        {statusBadge.label}
+      </span>
 
       {metrics === null ? (
         <>

@@ -2,6 +2,8 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Label,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -11,13 +13,15 @@ import {
 import { hasPlottableGmvData } from "@/state/chartSeries";
 import type { GmvTickPoint } from "@/state/types";
 import { MCK_CHART } from "@/styles/chartPalette";
+import type { EventMarker } from "@/components/center/types";
 const AXIS_TICK = { fontSize: 10, fill: "#64748B" };
 
 type Props = {
   data: GmvTickPoint[];
+  eventMarkers?: EventMarker[];
 };
 
-export function GmvChart({ data }: Props) {
+export function GmvChart({ data, eventMarkers = [] }: Props) {
   if (data.length === 0) {
     return (
       <p className="flex h-full items-center justify-center text-xs italic text-muted">
@@ -86,6 +90,17 @@ export function GmvChart({ data }: Props) {
           isAnimationActive={false}
           name="gmv"
         />
+        {eventMarkers.map((marker) => (
+          <ReferenceLine
+            key={`${marker.label}-${marker.tickId}`}
+            x={marker.tickId}
+            stroke="#B91C1C"
+            strokeDasharray="4 4"
+            isFront
+          >
+            <Label value={marker.label} position="top" fill="#B91C1C" fontSize={10} />
+          </ReferenceLine>
+        ))}
       </ComposedChart>
     </ResponsiveContainer>
   );

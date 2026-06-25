@@ -12,11 +12,13 @@ import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
 import { resolveSimulationTick } from "@/utils/simulationTick";
+import type { SimulationShockRequest } from "@/types/shock";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
+  const [crashMarkers, setCrashMarkers] = useState<Array<{ tickId: number; label: string }>>([]);
   const { status, refresh } = useSimulationStatus();
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
@@ -72,8 +74,9 @@ export default function App() {
       backfillLoading,
       backfillError,
       highlightedSellerId,
+      crashMarkers,
     }),
-    [priceChartData, gmvChartData, backfillLoading, backfillError, highlightedSellerId],
+    [priceChartData, gmvChartData, backfillLoading, backfillError, highlightedSellerId, crashMarkers],
   );
 
   const onActionComplete = useCallback(
@@ -89,12 +92,28 @@ export default function App() {
       if (action === "reset") {
         clearSeries();
         resetCyberLog();
+        setCrashMarkers([]);
         void reloadBackfill();
       }
 
       setCyberLogBackfillKey((key) => key + 1);
     },
     [refresh, reloadBackfill, clearSeries, resetCyberLog],
+  );
+
+  const onShockQueued = useCallback(
+    (body: SimulationShockRequest) => {
+      if (body.shock_type !== "demand_crash") {
+        return;
+      }
+      const markerTick = Math.max(resolveSimulationTick(status, lastPayload), 0);
+      setCrashMarkers((prev) => {
+        const next = [...prev, { tickId: markerTick, label: "CRASH" }];
+        const deduped = new Map(next.map((marker) => [`${marker.label}-${marker.tickId}`, marker] as const));
+        return [...deduped.values()].slice(-8);
+      });
+    },
+    [lastPayload, status],
   );
 
   return (
@@ -114,6 +133,7 @@ export default function App() {
         workerState={workerState}
         priceIndexDelta={priceIndexDelta}
         flashCrashActive={flashCrashActive}
+        onShockQueued={onShockQueued}
         onActionComplete={onActionComplete}
         cyberLogLines={cyberLogLines}
         activeTab={activeTab}

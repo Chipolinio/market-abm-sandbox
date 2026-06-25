@@ -32,6 +32,7 @@ describe("TickerRibbon", () => {
     expect(screen.getByText(/1\.3M/)).toBeTruthy();
     expect(screen.getByText(/Index:\s*1\.03\s*▲/)).toBeTruthy();
     expect(screen.getByText("STABLE")).toBeTruthy();
+    expect(screen.getByText("Симуляция активна (1 Гц)")).toBeTruthy();
     expect(screen.getAllByTestId("ticker-card")).toHaveLength(4);
   });
 
@@ -61,12 +62,13 @@ describe("TickerRibbon", () => {
     expect(screen.getByText(/Index:\s*1\.03\s*▼/)).toBeTruthy();
   });
 
-  it("shows_skeleton_when_metrics_null", () => {
+  it("shows_status_badge_and_skeleton_when_metrics_null", () => {
     render(<TickerRibbon metrics={null} connectionState="open" workerState="IDLE" />);
 
     expect(screen.queryByText(/t=\s*42/)).toBeNull();
     expect(screen.queryByText(/GMV:/)).toBeNull();
     expect(screen.queryByText(/Index:/)).toBeNull();
+    expect(screen.getByText("Система готова к настройке")).toBeTruthy();
     expect(screen.getAllByTestId("ticker-skeleton")).toHaveLength(4);
   });
 
