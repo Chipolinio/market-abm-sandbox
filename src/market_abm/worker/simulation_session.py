@@ -122,7 +122,7 @@ def _worker_run_config(run_root: Path) -> SimulationRunConfig:
             outside_utility_bias=-100.0,
             outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
         ),
-        repricing=RepricingConfig.default_market(),
+        repricing=RepricingConfig.market_with_headroom(),
         macro_dynamics=MacroDynamicsConfig(shock_mode="stochastic_regime"),
         persistence=PersistenceConfig(
             enabled=True,
@@ -179,7 +179,7 @@ class LiveSimulationSession:
         assert self._sellers_df is not None
         listings = initialize_listings(
             self._sellers_df,
-            ListingInitConfig.default_market(),
+            ListingInitConfig.market_with_headroom(),
             seed=_WORKER_SEED,
             min_listing_price=self._config.repricing.min_listing_price,
         )
@@ -237,7 +237,7 @@ class LiveSimulationSession:
         )
         listings = initialize_listings(
             self._sellers_df,
-            ListingInitConfig.default_market(),
+            ListingInitConfig.market_with_headroom(),
             seed=seed,
             min_listing_price=self._config.repricing.min_listing_price,
         )
