@@ -12,6 +12,26 @@ from market_abm.config.repricing import RepricingConfig
 from market_abm.domain.constants import PVD_SEGMENTS
 
 
+class DynamicRatingConfig(BaseModel):
+    """EMA rating update from seed-aware transaction reviews (Spec 012 §6).
+
+    Rating_j,t = (1−γ)·Rating_j,t−1 + γ·Score_tx
+    Score_tx ~ U(score_min, score_max) adjusted for price-vs-cat-median penalty.
+    """
+
+    model_config = {"frozen": True}
+
+    enabled: bool = True
+    gamma: float = Field(default=0.08, gt=0.0, le=1.0, description="EMA smoothing factor")
+    score_min: float = Field(default=1.0, ge=0.0)
+    score_max: float = Field(default=5.0, ge=0.0)
+    price_penalty_scale: float = Field(
+        default=2.0,
+        ge=0.0,
+        description="Max score penalty when price = 2× cat_median; linear in (ratio-1)",
+    )
+
+
 class ReferencePriceConfig(BaseModel):
     """Reference-price penalty term in MNL utility (Spec 012 §3.2).
 
@@ -87,3 +107,4 @@ class SimulationStepConfig(BaseModel):
     choice: ChoiceModelConfig = Field(default_factory=ChoiceModelConfig)
     repricing: RepricingConfig = Field(default_factory=RepricingConfig.default_market)
     economics: SellerEconomicsConfig = Field(default_factory=SellerEconomicsConfig)
+    rating: DynamicRatingConfig = Field(default_factory=DynamicRatingConfig)

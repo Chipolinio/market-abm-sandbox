@@ -196,20 +196,27 @@ def test_run_simulation_does_not_mutate_inputs() -> None:
 
 
 def test_run_simulation_preserves_card_features() -> None:
+    """
+    delivery_days must remain constant across ticks (bootstrap-only field).
+    rating_value is now dynamic (EMA from Spec 012 §6) — check range [1, 5] only.
+    """
     buyers = _buyers_df(15, freq=1.0)
     sellers = _sellers_df(3)
     listings = _listings_df(3)
     config = _run_config(seed=99)
-    card_at_tick0: pl.DataFrame | None = None
+    delivery_at_tick0: pl.DataFrame | None = None
     for tick_id, products, _ in run_simulation(
         buyers, sellers, listings, n_ticks=3, config=config
     ):
-        card = products.select([COL_LISTING_ID, COL_DELIVERY_DAYS, COL_RATING_VALUE])
+        delivery = products.select([COL_LISTING_ID, COL_DELIVERY_DAYS])
+        ratings = products[COL_RATING_VALUE].to_numpy()
         if tick_id == 0:
-            card_at_tick0 = card.clone()
+            delivery_at_tick0 = delivery.clone()
         else:
-            assert card_at_tick0 is not None
-            assert card.equals(card_at_tick0)
+            assert delivery_at_tick0 is not None
+            assert delivery.equals(delivery_at_tick0), "delivery_days must not change"
+        # rating_value is dynamic post-012 §6; validate range only
+        assert all(1.0 <= r <= 5.0 for r in ratings), f"tick {tick_id}: ratings out of range: {ratings}"
 
 
 def test_run_simulation_invalid_n_ticks() -> None:

@@ -145,6 +145,7 @@ def run_simulation(
             choice=config.choice,
             repricing=config.repricing,
             economics=config.economics,
+            rating=config.rating,
         )
         sim_ctx = None
         sellers_state_df = None
@@ -288,6 +289,7 @@ def _stream_extended_persist(
             choice=config.choice,
             repricing=config.repricing,
             economics=config.economics,
+            rating=config.rating,
         )
         sim_ctx = with_tick_id(extended_state.simulation_context, tick_id)
         products_next, transactions_df, sellers_state_next = step(

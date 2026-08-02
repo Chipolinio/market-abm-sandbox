@@ -12,7 +12,7 @@ from market_abm.config.macro import MacroDynamicsConfig
 from market_abm.config.ml_runtime import MlRuntimeConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.config.shocks import ShockCatalogConfig
-from market_abm.config.simulation import ChoiceModelConfig
+from market_abm.config.simulation import ChoiceModelConfig, DynamicRatingConfig
 
 
 class ProductsBootstrapConfig(BaseModel):
@@ -64,3 +64,4 @@ class SimulationRunConfig(BaseModel):
         default_factory=lambda: MacroDynamicsConfig(shock_mode="fixed_duration")
     )
     ml_runtime: MlRuntimeConfig = Field(default_factory=MlRuntimeConfig)
+    rating: DynamicRatingConfig = Field(default_factory=DynamicRatingConfig)

@@ -40,6 +40,7 @@ from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
+from market_abm.simulation.rating import update_rating_ema
 from market_abm.simulation.repricing import (
     apply_ml_repricing_tick,
     apply_repricing_tick,
@@ -425,8 +426,16 @@ def step(
     transactions = _build_transactions_df(
         choices, products_pool, tick_id=config.tick_id
     )
+    # Spec 012 §6: EMA rating update from seed-aware reviews after settle
+    products_rated = update_rating_ema(
+        products_pool,
+        transactions,
+        seed=config.seed,
+        tick_id=config.tick_id,
+        cfg=config.rating,
+    )
     products_with_demand = _update_demand_index(
-        products_pool.clone(),
+        products_rated,
         transactions,
         active_buyers_count=active_buyers.height,
     )
