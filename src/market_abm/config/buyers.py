@@ -112,8 +112,8 @@ class BuyerPopulationConfig(BaseModel):
             activity_hour="uniform_discrete",
             impulsive_probability=0.15,
             purchase_frequency=DistributionSpec(
-                family="uniform",
-                params={"loc": 0.0, "scale": 1.0},
+                family="lognorm",
+                params={"s": 1.9, "scale": 0.05},
             ),
             ios_price_beta_multiplier=0.85,
         )

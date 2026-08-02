@@ -8,6 +8,7 @@ import polars as pl
 from market_abm.config.repricing import ListingInitConfig
 from market_abm.domain.constants import (
     COL_BASE_COMMISSION,
+    COL_CATEGORY_ID,
     COL_DEMAND_INDEX,
     COL_LISTING_ID,
     COL_LOGISTIC_FEE,
@@ -55,14 +56,37 @@ def _validate_sellers_df_contract(sellers_df: pl.DataFrame) -> None:
         raise ValueError("sellers_df must be non-empty")
 
 
+def _assign_category_ids(
+    seller_ids: np.ndarray,
+    n_categories: int,
+    seed: int,
+) -> np.ndarray:
+    """
+    Assign category_id to each listing via seeded modular hash (§16.4).
+    Guarantees each category gets at least 1 listing when n_sellers ≥ n_categories.
+    """
+    rng = np.random.default_rng([seed, 0xC07012])  # salt for category assignment
+    n = len(seller_ids)
+    if n_categories <= 0:
+        return np.zeros(n, dtype=np.int32)
+    # Shuffle full cycle first to ensure coverage, then assign remainder uniformly
+    base = np.tile(np.arange(n_categories, dtype=np.int32), (n // n_categories) + 1)[:n]
+    rng.shuffle(base)
+    return base
+
+
 def initialize_listings(
     sellers_df: pl.DataFrame,
     config: ListingInitConfig,
     *,
     seed: int,
     min_listing_price: float = 0.0,
+    n_categories: int = 5,
 ) -> pl.DataFrame:
-    """Initialize listings_df with one listing per seller (listing_id == seller_id)."""
+    """Initialize listings_df with one listing per seller (listing_id == seller_id).
+
+    Adds `category_id` column (Spec 012 §7.1) via seeded shuffle-cycle assignment.
+    """
     _validate_sellers_df_contract(sellers_df)
 
     n = sellers_df.height
@@ -77,6 +101,7 @@ def initialize_listings(
     target_floor = (floor * config.minimum_price_to_floor_ratio).astype(np.float32)
     price = np.maximum(base_price, target_floor).astype(np.float32)
     demand_index = np.full(n, config.initial_demand_index, dtype=np.float32)
+    category_id = _assign_category_ids(seller_id, n_categories, seed)
 
     schema = listings_polars_schema()
     return pl.DataFrame(
@@ -88,4 +113,4 @@ def initialize_listings(
             COL_DEMAND_INDEX: demand_index,
         },
         schema=schema,
-    )
+    ).with_columns(pl.Series(COL_CATEGORY_ID, category_id, dtype=pl.Int32))

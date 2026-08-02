@@ -1,7 +1,7 @@
 import { apiFetch } from "./client";
 import type { DemandMatrixResponse } from "@/types/demandMatrix";
 import type { SystemEventsResponse } from "@/types/events";
-import type { MarketLeadersResponse } from "@/types/leaders";
+import type { LeaderRankBy, MarketLeadersResponse } from "@/types/leaders";
 import type { GmvPoint, ListingSeries, PriceIndexPoint } from "./types";
 import { DEFAULT_TOP_LISTINGS_LIMIT } from "@/state/listingSeries";
 
@@ -43,10 +43,14 @@ export const TOP_SELLERS_RIBBON_LIMIT = 3;
 export function fetchMarketLeaders(
   tickId: number,
   limit: number = 5,
+  rankBy: LeaderRankBy = "tick_revenue",
 ): Promise<MarketLeadersResponse> {
-  return apiFetch<MarketLeadersResponse>(
-    `/api/v1/analytics/market-leaders?tick_id=${tickId}&limit=${limit}`,
-  );
+  const params = new URLSearchParams({
+    tick_id: String(tickId),
+    limit: String(limit),
+    rank_by: rankBy,
+  });
+  return apiFetch<MarketLeadersResponse>(`/api/v1/analytics/market-leaders?${params.toString()}`);
 }
 
 export function fetchDemandMatrix(tickId: number): Promise<DemandMatrixResponse> {

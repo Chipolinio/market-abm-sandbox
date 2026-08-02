@@ -176,7 +176,102 @@ def test_crash_lowers_p50_over_20_ticks() -> None:
         )
 
     p50_end = float(current[COL_PRICE].median())
-    assert p50_end < p50_start * 0.97
+    assert p50_end < p50_start * 0.93
+
+
+def test_severe_panic_profile_stronger_than_standard_profile() -> None:
+    config = RepricingConfig.market_with_headroom()
+    standard_profile = build_stress_repricing_profile(_stress_macro(0.30), config)
+    panic_profile = build_stress_repricing_profile(_stress_macro(0.85), config)
+
+    assert standard_profile is not None
+    assert panic_profile is not None
+    assert not standard_profile.panic_mode
+    assert panic_profile.panic_mode
+    assert panic_profile.relative_step > standard_profile.relative_step
+    assert panic_profile.max_volume_aggression > standard_profile.max_volume_aggression
+    assert panic_profile.repricing_speed_cap == 1
+
+
+def test_panic_profile_reprices_majority_within_10_ticks() -> None:
+    n = 20
+    sellers = _sellers_df(
+        list(range(n)),
+        ["MaxVolume"] * n,
+        speeds=[6] * n,
+    )
+    listings = pl.DataFrame(
+        {
+            COL_LISTING_ID: list(range(n)),
+            COL_SELLER_ID: list(range(n)),
+            COL_UNIT_COST: [20.0] * n,
+            COL_PRICE: [100.0] * n,
+            COL_DEMAND_INDEX: [0.25] * n,
+        }
+    ).with_columns(
+        pl.col(COL_LISTING_ID).cast(pl.Int32),
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+        pl.col(COL_UNIT_COST).cast(pl.Float32),
+        pl.col(COL_PRICE).cast(pl.Float32),
+        pl.col(COL_DEMAND_INDEX).cast(pl.Float32),
+    )
+
+    config = RepricingConfig.market_with_headroom()
+    profile = build_stress_repricing_profile(_stress_macro(0.85), config)
+    assert profile is not None
+    assert profile.panic_mode
+
+    current = listings
+    for tick in range(1, 11):
+        current = apply_repricing_tick(
+            sellers,
+            current,
+            tick=tick,
+            config=config,
+            repricing_profile=profile,
+        )
+
+    changed = int((current[COL_PRICE] < listings[COL_PRICE]).sum())
+    assert changed >= int(n * 0.75)
+
+
+def test_panic_profile_reprices_rating_maximizer_tail() -> None:
+    sellers = _sellers_df([0], ["RatingMaximizer"], speeds=[1])
+    listings = pl.DataFrame(
+        {
+            COL_LISTING_ID: [0],
+            COL_SELLER_ID: [0],
+            COL_UNIT_COST: [30.0],
+            COL_PRICE: [80.0],
+            COL_DEMAND_INDEX: [1.2],
+        }
+    ).with_columns(
+        pl.col(COL_LISTING_ID).cast(pl.Int32),
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+        pl.col(COL_UNIT_COST).cast(pl.Float32),
+        pl.col(COL_PRICE).cast(pl.Float32),
+        pl.col(COL_DEMAND_INDEX).cast(pl.Float32),
+    )
+    config = RepricingConfig.market_with_headroom()
+    profile = build_stress_repricing_profile(_stress_macro(0.85), config)
+    assert profile is not None
+
+    current = apply_repricing_tick(
+        sellers,
+        listings,
+        tick=1,
+        config=config,
+        repricing_profile=profile,
+    )
+    assert float(current[COL_PRICE][0]) < float(listings[COL_PRICE][0])
+
+
+def test_standard_stress_profile_does_not_enable_panic_mode() -> None:
+    config = RepricingConfig.market_with_headroom()
+    profile = build_stress_repricing_profile(_stress_macro(0.30), config)
+    assert profile is not None
+    assert not profile.panic_mode
+    assert profile.repricing_speed_cap is None
 
 
 def test_stress_repricing_never_below_unit_cost() -> None:

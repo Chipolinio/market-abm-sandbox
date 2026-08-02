@@ -46,7 +46,7 @@ describe("useMarketLeaders", () => {
       await Promise.resolve();
     });
     expect(fetchMarketLeaders).toHaveBeenCalledTimes(1);
-    expect(fetchMarketLeaders).toHaveBeenCalledWith(3, 5);
+    expect(fetchMarketLeaders).toHaveBeenCalledWith(3, 5, "cumulative_revenue");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
@@ -87,7 +87,7 @@ describe("useMarketLeaders", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(fetchMarketLeaders).toHaveBeenCalledWith(5, SELLERS_REGISTRY_LIMIT);
+    expect(fetchMarketLeaders).toHaveBeenCalledWith(5, SELLERS_REGISTRY_LIMIT, "cumulative_revenue");
   });
 
   it("no_poll_after_tab_becomes_inactive", async () => {

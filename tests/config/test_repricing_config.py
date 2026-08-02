@@ -80,4 +80,13 @@ def test_stress_repricing_config_defaults() -> None:
     stress = StressRepricingConfig()
     assert stress.stress_repricing_threshold == pytest.approx(0.15)
     assert stress.stress_step_gain == pytest.approx(2.0)
+    assert stress.panic_stress_threshold == pytest.approx(0.40)
+    assert stress.panic_step_gain == pytest.approx(4.0)
+    assert stress.panic_repricing_speed_cap == 1
     assert stress.forbid_price_below_unit_cost is True
+
+
+def test_headroom_preset_includes_panic_stress_config() -> None:
+    cfg = RepricingConfig.market_with_headroom()
+    assert cfg.stress.panic_stress_threshold == pytest.approx(0.40)
+    assert cfg.stress.panic_repricing_speed_cap == 1

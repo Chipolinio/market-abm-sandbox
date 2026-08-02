@@ -34,7 +34,11 @@ export function useMarketLeaders(
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(tickIdRef.current, limit);
+      const response = await fetchMarketLeaders(
+        tickIdRef.current,
+        limit,
+        "cumulative_revenue",
+      );
       if (!aliveRef.current) {
         return;
       }

@@ -28,6 +28,7 @@ export function TopSellersDashboard({
     >
       <div className="flex items-center gap-2 border-l-4 border-accent pl-2">
         <h2 className="text-xs uppercase tracking-wider text-muted">Топ-3 селлера</h2>
+        <span className="text-[10px] text-muted">по накопленной выручке</span>
       </div>
 
       {loading && sellers.length === 0 ? (

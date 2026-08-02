@@ -8,6 +8,7 @@ import pytest
 from market_abm.config.repricing import ListingInitConfig
 from market_abm.config.sellers import SellerPopulationConfig
 from market_abm.domain.constants import (
+    COL_CATEGORY_ID,
     COL_DEMAND_INDEX,
     COL_LISTING_ID,
     COL_MARGIN_FLOOR,
@@ -29,10 +30,12 @@ def sellers_df() -> pl.DataFrame:
 def test_initialize_listings_shape_and_schema(sellers_df: pl.DataFrame) -> None:
     listings = initialize_listings(sellers_df, ListingInitConfig.default_market(), seed=5)
     assert listings.height == sellers_df.height
-    assert listings.columns == list(LISTINGS_COLUMNS)
+    # Spec 012 §7.1: category_id appended at bootstrap; all LISTINGS_COLUMNS must be present
+    assert listings.columns == list(LISTINGS_COLUMNS) + [COL_CATEGORY_ID]
     expected = listings_polars_schema()
     for col, dtype in expected.items():
         assert listings[col].dtype == dtype
+    assert listings[COL_CATEGORY_ID].dtype == pl.Int32
 
 
 def test_initialize_listings_listing_id_equals_seller_id(sellers_df: pl.DataFrame) -> None:

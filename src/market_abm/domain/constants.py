@@ -169,6 +169,10 @@ LISTINGS_SCHEMA_DTYPES: Final[dict[str, str]] = {
 COL_DELIVERY_DAYS: Final = "delivery_days"
 COL_RATING_VALUE: Final = "rating_value"
 
+# Spec 012 §7.1 — per-category ranking columns (added at bootstrap, not in schema contract)
+COL_CATEGORY_ID: Final = "category_id"
+COL_RANKING_SCORE: Final = "ranking_score"
+
 PRODUCTS_COLUMNS: Final[tuple[str, ...]] = (
     COL_LISTING_ID,
     COL_SELLER_ID,

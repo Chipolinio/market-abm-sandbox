@@ -19,6 +19,8 @@ export type MarketLeaderRowDTO = {
   logic_status: LogicStatus;
 };
 
+export type LeaderRankBy = "working_capital" | "tick_revenue" | "cumulative_revenue";
+
 export type MarketLeadersResponse = {
   run_id: string;
   tick_id: number;

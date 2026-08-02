@@ -198,6 +198,19 @@ def test_demand_index_uses_normalized_sales_formula() -> None:
     )
 
 
+def test_rules_repricing_respects_warmup_ticks() -> None:
+    buyers = _buyers_df(50, freq=1.0)
+    sellers = _sellers_df([0, 1], ["MaxProfit", "MaxVolume"], speeds=[1, 1])
+    products = _products_df([0, 1], [100.0, 100.0], demands=[0.0, 0.0])
+    cfg = _step_config(
+        seed=3,
+        tick_id=2,
+        repricing=RepricingConfig.default_market().model_copy(update={"warmup_ticks": 5}),
+    )
+    products_next, _, _ = step(buyers, sellers, products, cfg)
+    assert products_next[COL_PRICE].to_list() == pytest.approx(products[COL_PRICE].to_list())
+
+
 def test_rating_maximizer_price_unchanged_on_active_tick() -> None:
     buyers = _buyers_df(50, freq=1.0)
     sellers = _sellers_df([0, 1], ["RatingMaximizer", "MaxProfit"], speeds=[1, 1])

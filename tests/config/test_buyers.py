@@ -95,9 +95,10 @@ def test_default_market_distribution_presets_match_spec() -> None:
     assert config.beta_rating.family == "truncnorm"
     assert config.beta_rating.params["loc"] == pytest.approx(-1.5)
 
-    assert config.purchase_frequency.family == "uniform"
-    assert config.purchase_frequency.params["loc"] == pytest.approx(0.0)
-    assert config.purchase_frequency.params["scale"] == pytest.approx(1.0)
+    # Spec 012 §3.1 / §16.1: default changed from uniform to lognorm for heavy-buyer concentration
+    assert config.purchase_frequency.family == "lognorm"
+    assert config.purchase_frequency.params["s"] == pytest.approx(1.9)
+    assert config.purchase_frequency.params["scale"] == pytest.approx(0.05)
 
 
 def test_default_market_categorical_probabilities_sum_to_one() -> None:

@@ -7,8 +7,32 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from market_abm.config.economics import SellerEconomicsConfig
+from market_abm.config.ranking import RankingConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.domain.constants import PVD_SEGMENTS
+
+
+class ReferencePriceConfig(BaseModel):
+    """Reference-price penalty term in MNL utility (Spec 012 §3.2).
+
+    U_j += β_ref · (-max(0, log(p_j / p_ref))^2)
+
+    Enabled by default after Spec 012; set enabled=False for backward compat / ablation.
+    """
+
+    model_config = {"frozen": True}
+
+    enabled: bool = True
+    beta_ref: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Weight for the reference-price penalty term",
+    )
+    window_ticks: int = Field(
+        default=20,
+        ge=1,
+        description="Rolling window for p50_hist_cat computation (future per-category use)",
+    )
 
 
 class ChoiceModelConfig(BaseModel):
@@ -27,6 +51,8 @@ class ChoiceModelConfig(BaseModel):
     )
     max_products_per_choice_set: int = Field(default=200, gt=1, le=10_000)
     buyers_batch_size: int = Field(default=5_000, gt=100, le=100_000)
+    reference_price: ReferencePriceConfig = Field(default_factory=ReferencePriceConfig)
+    ranking: RankingConfig = Field(default_factory=RankingConfig)
 
     @model_validator(mode="after")
     def _validate_segment_keys(self) -> Self:

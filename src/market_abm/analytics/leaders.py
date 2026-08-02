@@ -142,12 +142,30 @@ def query_market_leaders(
     else:
         joined = joined.with_columns(pl.lit(None, dtype=pl.String).alias(COL_STRATEGY_TYPE))
 
-    sort_col = {
-        "working_capital": COL_WORKING_CAPITAL,
-        "tick_revenue": "tick_revenue",
-        "cumulative_revenue": "cumulative_revenue",
+    sort_keys: list[tuple[str, bool]] = {
+        "tick_revenue": [
+            ("tick_revenue", True),
+            ("cumulative_revenue", True),
+            (COL_WORKING_CAPITAL, True),
+            (COL_SELLER_ID, False),
+        ],
+        "cumulative_revenue": [
+            ("cumulative_revenue", True),
+            (COL_WORKING_CAPITAL, True),
+            ("tick_revenue", True),
+            (COL_SELLER_ID, False),
+        ],
+        "working_capital": [
+            (COL_WORKING_CAPITAL, True),
+            ("cumulative_revenue", True),
+            ("tick_revenue", True),
+            (COL_SELLER_ID, False),
+        ],
     }[rank_by]
-    joined = joined.sort(sort_col, descending=True).head(limit)
+    joined = joined.sort(
+        [pl.col(name) for name, _ in sort_keys],
+        descending=[desc for _, desc in sort_keys],
+    ).head(limit)
 
     leaders = [
         {

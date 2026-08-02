@@ -78,12 +78,14 @@ export function TopSellerCard({ seller, rank, maxCapital, selected, onSelect }: 
 
         <div className="mt-1.5 grid grid-cols-2 gap-x-2 text-[10px] text-muted">
           <span>
-            Баланс:{" "}
+            Капитал:{" "}
             <span className="font-mono text-foreground">{formatCapital(seller.working_capital)}</span>
           </span>
           <span>
-            Склад:{" "}
-            <span className="font-mono text-foreground">{seller.inventory_stock}</span>
+            Накопленная:{" "}
+            <span className="font-mono text-foreground">
+              {seller.cumulative_revenue.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}
+            </span>
           </span>
         </div>
 

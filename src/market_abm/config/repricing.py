@@ -21,6 +21,20 @@ from market_abm.domain.constants import (
 RepricingMode = Literal["rules", "catboost", "hybrid"]
 
 
+class CompetitorTrackingConfig(BaseModel):
+    """Competitor price tracking config (Spec 012 §4.3 / §16.3)."""
+
+    model_config = {"frozen": True}
+
+    enabled: bool = True
+    undercut_threshold: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description="Δ_comp = (P_j - min_comp) / P_j; undercut when above this",
+    )
+
+
 class StressRepricingConfig(BaseModel):
     """Stress-dependent repricing multipliers (Spec 011 §5.3)."""
 
@@ -30,6 +44,11 @@ class StressRepricingConfig(BaseModel):
     stress_step_gain: float = Field(default=2.0, ge=0.0, le=10.0)
     stress_volume_gain: float = Field(default=1.5, ge=0.0, le=10.0)
     stress_dead_zone_shrink: float = Field(default=0.05, ge=0.0, le=0.5)
+    panic_stress_threshold: float = Field(default=0.40, ge=0.0, le=2.0)
+    panic_step_gain: float = Field(default=4.0, ge=0.0, le=20.0)
+    panic_volume_gain: float = Field(default=2.5, ge=0.0, le=20.0)
+    panic_dead_zone_shrink: float = Field(default=0.12, ge=0.0, le=0.5)
+    panic_repricing_speed_cap: int = Field(default=1, ge=1, le=6)
     panic_margin_above_unit_cost: float = Field(default=0.05, ge=0.0)
     forbid_price_below_unit_cost: bool = True
 
@@ -99,6 +118,7 @@ class RepricingConfig(BaseModel):
     warmup_ticks: int = Field(default=15, ge=0)
     ml: CatBoostRepricingConfig | None = None
     stress: StressRepricingConfig = Field(default_factory=StressRepricingConfig)
+    competitor: CompetitorTrackingConfig = Field(default_factory=CompetitorTrackingConfig)
 
     @model_validator(mode="after")
     def _validate_ml_mode(self) -> Self:
@@ -127,11 +147,18 @@ class RepricingConfig(BaseModel):
 
     @classmethod
     def market_with_headroom(cls) -> RepricingConfig:
-        """Headroom preset: ниже absolute floor для crash repricing (Spec 011 §5.2)."""
+        """Headroom preset: ниже absolute floor + panic repricing для severe (§5.2)."""
         return cls(
             relative_step=0.02,
             max_profit_demand_high=MAX_PROFIT_DEMAND_HIGH_DEFAULT,
             max_profit_demand_low=MAX_PROFIT_DEMAND_LOW_DEFAULT,
             max_volume_aggression=MAX_VOLUME_AGGRESSION_DEFAULT,
             min_listing_price=5.0,
+            stress=StressRepricingConfig(
+                panic_stress_threshold=0.40,
+                panic_step_gain=4.0,
+                panic_volume_gain=2.5,
+                panic_dead_zone_shrink=0.12,
+                panic_repricing_speed_cap=1,
+            ),
         )

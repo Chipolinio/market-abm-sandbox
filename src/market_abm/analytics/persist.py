@@ -62,9 +62,11 @@ def _config_hash(config: SimulationRunConfig) -> str:
 
 
 def _validate_frame_columns(df: pl.DataFrame, expected: tuple[str, ...], label: str) -> None:
-    if list(df.columns) != list(expected):
+    # Allow extra columns (e.g. category_id, ranking_score added by Spec 012).
+    missing = [c for c in expected if c not in df.columns]
+    if missing:
         raise ValueError(
-            f"{label} columns mismatch: expected {list(expected)}, got {df.columns}"
+            f"{label} missing required columns: {missing}; present: {df.columns}"
         )
 
 

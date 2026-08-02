@@ -70,7 +70,13 @@ def test_11_5_t2_slow_ml_predict_falls_back_to_rules(
             buyers,
             sellers,
             products_before,
-            _rules_config(tick_id=11),
+            _rules_config(tick_id=11).model_copy(
+                update={
+                    "repricing": RepricingConfig.default_market().model_copy(
+                        update={"warmup_ticks": 0}
+                    )
+                }
+            ),
         )
         assert products_next[COL_PRICE].to_list() == products_rules[COL_PRICE].to_list()
     finally:

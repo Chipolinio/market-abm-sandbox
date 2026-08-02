@@ -243,6 +243,64 @@ def test_11_7_t2_rank_by_tick_revenue_changes_order(tmp_path: Path) -> None:
     assert [row["seller_id"] for row in by_revenue["leaders"]] == [1, 0]
 
 
+def test_tick_revenue_tiebreaks_by_cumulative_not_seller_id(tmp_path: Path) -> None:
+    """Zero tick_revenue must not rank broke sellers above wealthy ones."""
+    sellers = _sellers_df(
+        [
+            _sellers_row(0, "MaxVolume"),
+            _sellers_row(1, "MaxProfit"),
+            _sellers_row(2, "RatingMaximizer"),
+        ]
+    )
+    sellers_state = pl.DataFrame(
+        [
+            _state_row(0, 15.0),
+            _state_row(1, 2_300_000.0),
+            _state_row(2, 12.0),
+        ]
+    ).with_columns(
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+        pl.col(COL_WORKING_CAPITAL).cast(pl.Float32),
+        pl.col(COL_IS_BANKRUPT).cast(pl.Boolean),
+    )
+    tx = pl.DataFrame(
+        {
+            COL_TICK_ID: [0],
+            COL_BUYER_ID: [0],
+            COL_LISTING_ID: [1],
+            COL_SELLER_ID: [1],
+            COL_PRICE_PAID: [100.0],
+            COL_UNIT_COST: [20.0],
+            COL_GROSS_MARGIN: [80.0],
+        }
+    ).with_columns(
+        pl.col(COL_TICK_ID).cast(pl.Int32),
+        pl.col(COL_BUYER_ID).cast(pl.Int32),
+        pl.col(COL_LISTING_ID).cast(pl.Int32),
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+        pl.col(COL_PRICE_PAID).cast(pl.Float32),
+        pl.col(COL_UNIT_COST).cast(pl.Float32),
+        pl.col(COL_GROSS_MARGIN).cast(pl.Float32),
+    )
+
+    run_root = _write_leaders_run(
+        tmp_path,
+        run_id="tiebreak",
+        sellers_df=sellers,
+        sellers_state=sellers_state,
+        transactions=tx,
+    )
+    store = AnalyticsStore(run_root)
+    try:
+        leaders = query_market_leaders(store, tick_id=0, limit=3, rank_by="tick_revenue")
+    finally:
+        store.close()
+
+    assert [row["seller_id"] for row in leaders["leaders"]] == [1, 0, 2]
+    assert leaders["leaders"][1]["cumulative_revenue"] == 0.0
+    assert leaders["leaders"][1]["working_capital"] == 15.0
+
+
 def _top3_seller_ids(tmp_path: Path, seed: int) -> tuple[int, ...]:
     run_id = f"seed-{seed}"
     config = SimulationRunConfig(

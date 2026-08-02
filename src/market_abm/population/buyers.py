@@ -36,6 +36,10 @@ from market_abm.population.distributions import (
 
 _BETA_COLUMNS: tuple[str, ...] = (COL_BETA_PRICE, COL_BETA_DELIVERY, COL_BETA_RATING)
 
+# Lower bound for purchase_frequency clip — prevents near-zero values from lognorm tail
+# (§16.1 Spec 012: clip to (freq_eps, 1.0])
+FREQ_EPS: float = 0.02
+
 
 def buyers_polars_schema() -> dict[str, pl.DataType]:
     """Словарь Polars-dtype по доменному контракту BUYERS_SCHEMA_DTYPES."""
@@ -107,7 +111,7 @@ def generate_buyers(config: BuyerPopulationConfig) -> pl.DataFrame:
     is_impulsive = sample_bernoulli(config.impulsive_probability, n, rng)
     purchase_frequency = np.clip(
         sample_from_spec(config.purchase_frequency, n, rng),
-        0.0,
+        FREQ_EPS,
         1.0,
     ).astype(np.float32)
 

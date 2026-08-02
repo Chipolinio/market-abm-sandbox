@@ -74,7 +74,7 @@ describe("TopSellersDashboard", () => {
     await waitFor(() => {
       expect(screen.getAllByTestId("top-seller-card")).toHaveLength(3);
     });
-    expect(fetchMarketLeaders).toHaveBeenCalledWith(5, 3);
+    expect(fetchMarketLeaders).toHaveBeenCalledWith(5, 3, "cumulative_revenue");
   });
 
   it("toggles_highlighted_seller_on_click", async () => {

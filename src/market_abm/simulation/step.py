@@ -14,6 +14,7 @@ from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
     BUYERS_COLUMNS,
     COL_BUYER_ID,
+    COL_CATEGORY_ID,
     COL_DEMAND_INDEX,
     COL_DELIVERY_DAYS,
     COL_FREQ_EFFECTIVE,
@@ -158,10 +159,13 @@ def _update_demand_index(
         )
         .select([COL_LISTING_ID, COL_DEMAND_INDEX])
     )
+    # Preserve extra columns (e.g. category_id) not in PRODUCTS_COLUMNS contract (Spec 012 §7.1)
+    extra_cols = [c for c in products_df.columns if c not in set(PRODUCTS_COLUMNS)]
+    out_cols = list(PRODUCTS_COLUMNS) + extra_cols
     return (
         products_df.drop(COL_DEMAND_INDEX)
         .join(demand, on=COL_LISTING_ID, how="left")
-        .select(list(PRODUCTS_COLUMNS))
+        .select(out_cols)
     )
 
 
@@ -244,6 +248,8 @@ def _rules_repricing(
     *,
     simulation_context: SimulationContext | None,
 ) -> pl.DataFrame:
+    if config.tick_id < config.repricing.warmup_ticks:
+        return listings
     profile = None
     if simulation_context is not None:
         profile = build_stress_repricing_profile(
@@ -273,6 +279,9 @@ def _reprice_to_products(
     """Выбирает rules/ML-путь репрайса и пришивает карточные фичи обратно в products."""
     catalog = shock_catalog or ShockCatalogConfig()
     listing_cols = list(LISTINGS_COLUMNS)
+    # Preserve category_id for competitor repricing and ranking (Spec 012 §4.3 / §7.1)
+    if COL_CATEGORY_ID in products_with_demand.columns:
+        listing_cols = [*listing_cols, COL_CATEGORY_ID]
     if COL_PROMOTION_ANCHOR in products_with_demand.columns:
         listing_cols = [*listing_cols, COL_PROMOTION_ANCHOR]
     listings = products_with_demand.select(listing_cols)
@@ -315,7 +324,14 @@ def _reprice_to_products(
             how="left",
         )
     merged = apply_marketplace_promotion_caps(merged, simulation_context, catalog)
+    # Preserve extra columns (category_id, etc.) carried through repricing (Spec 012 §7.1)
     select_cols = list(PRODUCTS_COLUMNS)
+    extra_from_products = [
+        c for c in products_with_demand.columns
+        if c not in set(PRODUCTS_COLUMNS) and c != COL_PROMOTION_ANCHOR
+        and c in merged.columns
+    ]
+    select_cols = select_cols + extra_from_products
     if COL_PROMOTION_ANCHOR in merged.columns:
         select_cols = [*select_cols, COL_PROMOTION_ANCHOR]
     return merged.select(select_cols)

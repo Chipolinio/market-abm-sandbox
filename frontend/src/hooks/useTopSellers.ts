@@ -30,7 +30,11 @@ export function useTopSellers(tickId: number, live = true): UseTopSellersResult 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetchMarketLeaders(tickIdRef.current, TOP_SELLERS_RIBBON_LIMIT);
+      const response = await fetchMarketLeaders(
+        tickIdRef.current,
+        TOP_SELLERS_RIBBON_LIMIT,
+        "cumulative_revenue",
+      );
       if (!aliveRef.current) {
         return;
       }

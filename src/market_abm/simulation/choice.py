@@ -11,7 +11,10 @@ import polars as pl
 from market_abm.config.macro import SegmentElasticityConfig
 from market_abm.config.simulation import ChoiceModelConfig
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
+from market_abm.simulation.ranking import build_consideration_indices
 from market_abm.domain.constants import (
+    COL_CATEGORY_ID,
+    COL_RANKING_SCORE,
     BUYERS_CHOICE_INPUT_COLUMNS,
     CHOICES_COLUMNS,
     COL_BETA_DELIVERY,
@@ -114,6 +117,29 @@ def _compute_utilities_numpy(
     ).astype(np.float32)
 
 
+def compute_reference_price_penalty(
+    prices: np.ndarray,
+    ref_price: float,
+    *,
+    beta_ref: float,
+) -> np.ndarray:
+    """
+    Reference-price penalty term (Spec 012 §3.2).
+
+    U_j += β_ref · (-max(0, log(p_j / p_ref))^2)
+
+    - At or below reference: penalty = 0 (no bonus for cheap pricing).
+    - Above reference:       penalty < 0, quadratic in log excess.
+    - Invalid ref_price ≤ 0: returns zeros (safe fallback).
+    """
+    if ref_price <= 0.0:
+        return np.zeros(len(prices), dtype=np.float32)
+    ratio = np.asarray(prices, dtype=np.float64) / ref_price
+    log_ratio = np.log(np.maximum(ratio, 1e-12))
+    penalty = -np.maximum(0.0, log_ratio) ** 2
+    return (beta_ref * penalty).astype(np.float32)
+
+
 def _compute_utilities_choice_learn(
     prices: np.ndarray,
     delivery: np.ndarray,
@@ -168,6 +194,9 @@ def _choose_one_buyer(
     use_choice_learn: bool,
     outside_utility_bias: float,
     segment_elasticity: SegmentElasticityConfig | None = None,
+    ref_price: float | None = None,
+    category_ids: np.ndarray | None = None,
+    ranking_scores: np.ndarray | None = None,
 ) -> tuple[int | None, float]:
     """Выбирает один оффер для покупателя или возвращает отказ от покупки."""
     budget = float(buyer_row[COL_BUDGET_EFFECTIVE])
@@ -176,8 +205,21 @@ def _choose_one_buyer(
     if affordable_indices.size == 0:
         return None, 1.0
 
-    k = min(config.max_products_per_choice_set, affordable_indices.size)
-    product_indices = rng.choice(affordable_indices, size=k, replace=False)
+    # Consideration set: Top-K∪Sample-M per category when ranking available,
+    # else uniform sample (pre-012 fallback).
+    if category_ids is not None and ranking_scores is not None:
+        product_indices = build_consideration_indices(
+            affordable_indices,
+            category_ids,
+            ranking_scores,
+            top_k=config.ranking.top_k,
+            organic_m=config.ranking.organic_m,
+            max_n=config.max_products_per_choice_set,
+            rng=rng,
+        )
+    else:
+        k = min(config.max_products_per_choice_set, affordable_indices.size)
+        product_indices = rng.choice(affordable_indices, size=k, replace=False)
 
     subset = products_df.gather(product_indices.astype(np.uint32).tolist())
     prices = subset[COL_PRICE].to_numpy()
@@ -213,6 +255,14 @@ def _choose_one_buyer(
     if np.isfinite(income_shift):
         product_utils = product_utils + np.float32(income_shift)
 
+    # Reference-price penalty (Spec 012 §3.2)
+    ref_cfg = config.reference_price
+    if ref_cfg.enabled and ref_price is not None and ref_price > 0.0:
+        ref_penalty = compute_reference_price_penalty(
+            prices, ref_price, beta_ref=ref_cfg.beta_ref
+        )
+        product_utils = product_utils + ref_penalty
+
     utilities = np.concatenate(
         [product_utils, np.array([outside_utility_bias], dtype=np.float32)]
     )
@@ -234,6 +284,9 @@ def choose_listings_for_buyers(
     base_seed: int | None = None,
     allow_choice_learn_fallback: bool = True,
     segment_elasticity: SegmentElasticityConfig | None = None,
+    ref_price: float | None = None,
+    category_ids: np.ndarray | None = None,
+    ranking_scores: np.ndarray | None = None,
 ) -> pl.DataFrame:
     """
     Возвращает choices_df: buyer_id, listing_id (или null), choice_probability.
@@ -283,6 +336,9 @@ def choose_listings_for_buyers(
             use_choice_learn=use_choice_learn,
             outside_utility_bias=float(bias_vector[i]),
             segment_elasticity=segment_elasticity,
+            ref_price=ref_price,
+            category_ids=category_ids,
+            ranking_scores=ranking_scores,
         )
         buyer_ids.append(buyer_id)
         listing_ids.append(listing_id)
@@ -310,6 +366,9 @@ def choose_listings_for_all_buyers(
     config: ChoiceModelConfig,
     allow_choice_learn_fallback: bool = True,
     segment_elasticity: SegmentElasticityConfig | None = None,
+    ref_price: float | None = None,
+    category_ids: np.ndarray | None = None,
+    ranking_scores: np.ndarray | None = None,
 ) -> pl.DataFrame:
     """Считает выбор для всех покупателей, разбивая их на батчи по config.buyers_batch_size."""
     if buyers_df.height == 0:
@@ -331,6 +390,9 @@ def choose_listings_for_all_buyers(
                 base_seed=seed,
                 allow_choice_learn_fallback=allow_choice_learn_fallback,
                 segment_elasticity=segment_elasticity,
+                ref_price=ref_price,
+                category_ids=category_ids,
+                ranking_scores=ranking_scores,
             )
         )
     if len(chunks) == 1:

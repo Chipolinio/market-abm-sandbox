@@ -12,6 +12,7 @@ import polars as pl
 from market_abm.config.runner import ProductsBootstrapConfig, SimulationRunConfig
 from market_abm.config.simulation import SimulationStepConfig
 from market_abm.domain.constants import (
+    COL_CATEGORY_ID,
     COL_DELIVERY_DAYS,
     COL_RATING_VALUE,
     COL_SELLER_ID,
@@ -89,10 +90,15 @@ def _bootstrap_products_from_listings(
         )
         ratings = np.minimum(config.rating_max, ratings + boost)
 
-    return listings_df.with_columns(
+    result = listings_df.with_columns(
         pl.Series(COL_DELIVERY_DAYS, delivery, dtype=pl.Float32),
         pl.Series(COL_RATING_VALUE, ratings, dtype=pl.Float32),
-    ).select(list(PRODUCTS_COLUMNS))
+    )
+    # Preserve category_id when present (Spec 012 §7.1); backward-compat otherwise.
+    base_cols = list(PRODUCTS_COLUMNS)
+    if COL_CATEGORY_ID in result.columns:
+        return result.select(base_cols + [COL_CATEGORY_ID])
+    return result.select(base_cols)
 
 
 def _maybe_rechunk_products(products_df: pl.DataFrame) -> pl.DataFrame:

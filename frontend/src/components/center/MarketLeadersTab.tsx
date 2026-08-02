@@ -21,7 +21,8 @@ export function MarketLeadersTab({
       data-testid="market-leaders-panel"
       className="flex h-full min-h-0 flex-col bg-white p-4"
     >
-      <h2 className="mb-3 shrink-0 text-xs uppercase tracking-wide text-muted">Реестр селлеров</h2>
+      <h2 className="mb-1 shrink-0 text-xs uppercase tracking-wide text-muted">Реестр селлеров</h2>
+      <p className="mb-3 shrink-0 text-[10px] text-muted">Сортировка: накопленная выручка</p>
 
       {loading && leaders.length === 0 ? (
         <p className="text-xs text-muted">Загрузка реестра…</p>
