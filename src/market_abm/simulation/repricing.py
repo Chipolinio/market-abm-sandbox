@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 import polars as pl
 
+from market_abm.config.inventory import InventoryPricingConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.domain.macro import MacroState
 from market_abm.domain.constants import (
@@ -19,10 +20,15 @@ from market_abm.domain.constants import (
     COL_PRICE,
     COL_REPRICING_SPEED,
     COL_SELLER_ID,
+    COL_STOCK_UNITS,
     COL_STRATEGY_TYPE,
     COL_UNIT_COST,
     LISTINGS_COLUMNS,
     PLATFORM_DEFAULTS,
+)
+from market_abm.simulation.inventory import (
+    COL_INVENTORY_PRESSURE,
+    compute_inventory_pressure,
 )
 
 
@@ -235,11 +241,13 @@ def apply_repricing_tick(
     tick: int,
     config: RepricingConfig,
     repricing_profile: RepricingProfile | None = None,
+    inventory_pricing: InventoryPricingConfig | None = None,
+    sell_through_by_listing: dict[int, float] | None = None,
 ) -> pl.DataFrame:
     """Return new listings_df after one repricing tick.
 
-    Preserves extra columns present in listings_df (e.g. category_id) for downstream
-    ranking and competitor tracking across ticks (Spec 012 §7.1).
+    Preserves extra columns present in listings_df (e.g. category_id, stock_units)
+    for downstream ranking / inventory across ticks (Spec 012 §7.1 / Spec 012.1).
     """
     if tick < 0:
         raise ValueError(f"tick must be >= 0, got {tick}")
@@ -315,13 +323,41 @@ def apply_repricing_tick(
             .otherwise(strategy_price)
         )
 
+    # Spec 012.1 §5.2: inventory pressure after competitor, before unit_cost / margin floors
+    if (
+        inventory_pricing is not None
+        and inventory_pricing.enabled
+        and COL_STOCK_UNITS in listings_df.columns
+    ):
+        pressure_df = compute_inventory_pressure(
+            listings_df,
+            inventory_pricing,
+            sell_through_by_listing=sell_through_by_listing,
+        )
+        joined = joined.join(pressure_df, on=COL_LISTING_ID, how="left")
+        inv_delta = (
+            -pl.lit(float(inventory_pricing.inventory_step_gain), dtype=pl.Float32)
+            * pl.col(COL_INVENTORY_PRESSURE).fill_null(0.0)
+            * step
+        )
+        strategy_price = (
+            pl.when(pl.col(COL_STRATEGY_TYPE) != pl.lit("RatingMaximizer"))
+            .then(strategy_price + inv_delta)
+            .otherwise(strategy_price)
+        )
+
     clipped_price = pl.max_horizontal(strategy_price, p_min)
     if repricing_profile is not None and repricing_profile.forbid_price_below_unit_cost:
         clipped_price = pl.max_horizontal(clipped_price, pl.col(COL_UNIT_COST))
     final_price = pl.when(active).then(clipped_price).otherwise(pl.col(COL_PRICE))
 
-    # Output: LISTINGS_COLUMNS + any extra columns from original listings_df (e.g. category_id)
-    extra_cols = [c for c in listings_df.columns if c not in set(LISTINGS_COLUMNS)]
+    # Output: LISTINGS_COLUMNS + any extra columns from original listings_df
+    # (drop ephemeral inventory_pressure if joined)
+    extra_cols = [
+        c
+        for c in listings_df.columns
+        if c not in set(LISTINGS_COLUMNS) and c != COL_INVENTORY_PRESSURE
+    ]
     out_cols = list(LISTINGS_COLUMNS) + extra_cols
     return joined.with_columns(final_price.alias(COL_PRICE)).select(out_cols)
 

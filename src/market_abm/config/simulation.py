@@ -7,7 +7,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 from market_abm.config.economics import SellerEconomicsConfig
-from market_abm.config.inventory import InventoryConfig
+from market_abm.config.inventory import InventoryConfig, InventoryPricingConfig
 from market_abm.config.ranking import RankingConfig
 from market_abm.config.repricing import RepricingConfig
 from market_abm.domain.constants import PVD_SEGMENTS
@@ -110,3 +110,4 @@ class SimulationStepConfig(BaseModel):
     economics: SellerEconomicsConfig = Field(default_factory=SellerEconomicsConfig)
     rating: DynamicRatingConfig = Field(default_factory=DynamicRatingConfig)
     inventory: InventoryConfig = Field(default_factory=InventoryConfig)
+    inventory_pricing: InventoryPricingConfig = Field(default_factory=InventoryPricingConfig)

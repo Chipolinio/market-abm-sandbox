@@ -27,6 +27,7 @@ from market_abm.domain.constants import (
     COL_RANKING_SCORE,
     COL_RATING_VALUE,
     COL_SELLER_ID,
+    COL_STOCK_TARGET,
     COL_STOCK_UNITS,
     COL_TICK_ID,
     COL_UNIT_COST,
@@ -277,6 +278,7 @@ def _rules_repricing(
         tick=config.tick_id,
         config=config.repricing,
         repricing_profile=profile,
+        inventory_pricing=config.inventory_pricing,
     )
 
 
@@ -297,6 +299,10 @@ def _reprice_to_products(
     # Preserve category_id for competitor repricing and ranking (Spec 012 §4.3 / §7.1)
     if COL_CATEGORY_ID in products_with_demand.columns:
         listing_cols = [*listing_cols, COL_CATEGORY_ID]
+    # Spec 012.1: stock cols needed for inventory pressure inside apply_repricing_tick
+    for stock_col in (COL_STOCK_UNITS, COL_STOCK_TARGET):
+        if stock_col in products_with_demand.columns:
+            listing_cols = [*listing_cols, stock_col]
     if COL_PROMOTION_ANCHOR in products_with_demand.columns:
         listing_cols = [*listing_cols, COL_PROMOTION_ANCHOR]
     listings = products_with_demand.select(listing_cols)
@@ -338,8 +344,8 @@ def _reprice_to_products(
             on=COL_LISTING_ID,
             how="left",
         )
-    # Spec 013: ranking_score; Spec 012.1: stock_units — survive reprice join
-    for extra_col in (COL_RANKING_SCORE, COL_STOCK_UNITS):
+    # Spec 013: ranking_score; Spec 012.1: stock_* — survive reprice join
+    for extra_col in (COL_RANKING_SCORE, COL_STOCK_UNITS, COL_STOCK_TARGET):
         if extra_col in products_with_demand.columns and extra_col not in merged.columns:
             merged = merged.join(
                 products_with_demand.select([COL_LISTING_ID, extra_col]),
