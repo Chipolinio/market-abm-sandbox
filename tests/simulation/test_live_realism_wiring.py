@@ -503,3 +503,45 @@ def test_advance_realism_windows_appends_and_is_pure() -> None:
     assert nxt.tx_p50_window[0] == pytest.approx(200.0)  # median price_paid
     assert len(nxt.sales_counts_ring) == 1
     assert dict(nxt.sales_counts_ring[0]) == {0: 3, 1: 3}
+
+
+# ---------------------------------------------------------------------------
+# 13.3-T2  live_wiring_seed_stable
+# ---------------------------------------------------------------------------
+
+
+def test_live_wiring_seed_stable() -> None:
+    """
+    Two short live step loops with the same seed must produce identical GMV
+    and purchase listing sequences (Spec 013 §13.3-T2 / §10).
+    """
+    n_ticks = 5
+
+    def _gmv_and_listings(seed: int) -> tuple[list[float], list[list[int]]]:
+        buyers = _buyers_df(40)
+        products = _asymmetric_products()
+        sellers = _sellers_df(products.height)
+        ctx = default_simulation_context(tick_id=0)
+        gmvs: list[float] = []
+        listing_series: list[list[int]] = []
+        for tick_id in range(n_ticks):
+            cfg = _step_cfg(tick_id=tick_id, seed=seed)
+            products, tx, _sellers_state, ctx_next = step(
+                buyers,
+                sellers,
+                products,
+                cfg,
+                simulation_context=replace(ctx, tick_id=tick_id),
+            )
+            if ctx_next is not None:
+                ctx = ctx_next
+            gmv = float(tx[COL_PRICE_PAID].sum()) if tx.height > 0 else 0.0
+            gmvs.append(gmv)
+            listing_series.append(_purchase_listing_ids(tx))
+        return gmvs, listing_series
+
+    gmv_a, listings_a = _gmv_and_listings(_SEED)
+    gmv_b, listings_b = _gmv_and_listings(_SEED)
+    assert gmv_a == gmv_b
+    assert listings_a == listings_b
+    assert any(g > 0.0 for g in gmv_a), "fixture must produce non-zero GMV"

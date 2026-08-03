@@ -9,6 +9,7 @@ import pytest
 
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.macro import CrisisScenarioConfig, MacroDynamicsConfig
+from market_abm.config.ranking import RankingConfig
 from market_abm.config.repricing import ListingInitConfig, RepricingConfig
 from market_abm.config.runner import SimulationRunConfig
 from market_abm.config.sellers import SellerPopulationConfig
@@ -70,6 +71,10 @@ def _severe_macro_config() -> MacroDynamicsConfig:
 def _recession_run_config(*, seed: int, n_buyers: int = 250, n_sellers: int = 24) -> SimulationRunConfig:
     buyers_batch_size = min(max(n_buyers, 101), 300)
     repricing = RepricingConfig.market_with_headroom()
+    # Spec 013 §13.3 / §6: with default top_k=15 and ~5 listings/cat, consideration ≈
+    # full catalog → MNL collapses to a single cheapest MaxProfit listing and the
+    # low×MaxVolume demand-matrix cell stays empty. Tight Top-K ∪ Sample-M keeps
+    # consideration selective so substitution remains observable (documented recalibration).
     return SimulationRunConfig(
         seed=seed,
         runtime_mode="extended",
@@ -80,6 +85,11 @@ def _recession_run_config(*, seed: int, n_buyers: int = 250, n_sellers: int = 24
             outside_utility_bias=-100.0,
             outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
             income_utility_gamma=0.35,
+            ranking=RankingConfig(
+                top_k=2,
+                organic_m=1,
+                n_categories=5,
+            ),
         ),
         repricing=repricing,
         macro_dynamics=_severe_macro_config(),
@@ -161,7 +171,7 @@ def run_severe_recession(
             repricing=config.repricing,
             economics=config.economics,
         )
-        products_next, transactions_df, sellers_state_next, _ = step(
+        products_next, transactions_df, sellers_state_next, sim_ctx_next = step(
             buyers_runtime,
             sellers_df,
             products_df,
@@ -182,10 +192,11 @@ def run_severe_recession(
         )
         transactions_by_tick.append(transactions_df)
 
+        ctx_after = sim_ctx_next if sim_ctx_next is not None else sim_ctx
         extended_state = replace(
             extended_state,
             sellers_state_df=sellers_state_next,
-            simulation_context=with_tick_id(sim_ctx, tick_id + 1),
+            simulation_context=with_tick_id(ctx_after, tick_id + 1),
         )
         extended_state = replace(
             extended_state,
@@ -320,16 +331,12 @@ def _peak_crisis_low_maxvolume_share(result: RecessionRunResult) -> float:
     return max(shares)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason=(
-        "Spec 012 §1.1/R2: lognorm purchase_frequency exposes winner-takes-all "
-        "in choice (no ranking) — heavy buyers concentrate on one listing, "
-        "collapsing the MaxVolume/MaxProfit demand mix. "
-        "Re-enabled after Slice 12.3 (per-category ranking + consideration set)."
-    ),
-)
 def test_11_6_t3_demand_matrix_low_maxvolume_share_up(severe_recession_run: RecessionRunResult) -> None:
+    """
+    Spec 011 §4.3 / Spec 013 §13.3-T1: low×MaxVolume cell share rises in crisis.
+    Fixture uses tight ranking (top_k=2) so consideration is selective — see
+    `_recession_run_config` (documented recalibration after live ranking wire).
+    """
     baseline_share = _avg_low_maxvolume_share(
         severe_recession_run, BASELINE_START, BASELINE_END - 1
     )
