@@ -20,6 +20,12 @@ from market_abm.analytics.persist import (
     write_reference_snapshots,
 )
 from market_abm.analytics.store import AnalyticsStore
+from market_abm.analytics.macro_snapshot import (
+    MacroSnapshotMemory,
+    clear_macro_snapshot_ipc,
+    write_macro_snapshot,
+    write_macro_snapshot_ipc,
+)
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.economics import SellerEconomicsConfig
 from market_abm.config.ml_repricing import CatBoostRepricingConfig
@@ -137,7 +143,14 @@ def _worker_run_config(run_root: Path) -> SimulationRunConfig:
 class LiveSimulationSession:
     """Один тик live-симуляции: drain shocks → step → persist → events."""
 
-    def __init__(self, run_root: Path, shock_queue: queue.Queue) -> None:
+    def __init__(
+        self,
+        run_root: Path,
+        shock_queue: queue.Queue,
+        *,
+        macro_snapshot_array: object | None = None,
+        macro_snapshot_capacity: int = 16384,
+    ) -> None:
         self._run_root = Path(run_root)
         self._shock_queue = shock_queue
         self._config = _worker_run_config(self._run_root)
@@ -163,6 +176,9 @@ class LiveSimulationSession:
         self._extended_state: ExtendedSimulationState | None = None
         self._last_external_tick: int | None = None
         self._run_id = self._run_root.name
+        self._macro_snapshot_array = macro_snapshot_array
+        self._macro_snapshot_capacity = int(macro_snapshot_capacity)
+        self._macro_memory = MacroSnapshotMemory()
 
     def close(self) -> None:
         self._con.close()
@@ -175,6 +191,36 @@ class LiveSimulationSession:
         self._extended_state = None
         self._last_external_tick = None
         self._analytics_store = None
+        self._macro_memory = MacroSnapshotMemory()
+        if self._macro_snapshot_array is not None:
+            clear_macro_snapshot_ipc(
+                self._macro_snapshot_array,
+                capacity=self._macro_snapshot_capacity,
+            )
+
+    def _publish_macro_snapshot(self, tick_id: int) -> None:
+        """In-memory + IPC publish of macro/shocks (Spec 014 §2.2 / §4.5)."""
+        if self._extended_state is None:
+            return
+        ctx = self._extended_state.simulation_context
+        ref_price: float | None = None
+        if ctx.tx_p50_window:
+            values = list(ctx.tx_p50_window)
+            ref_price = float(sorted(values)[len(values) // 2])
+        snap = write_macro_snapshot(
+            self._macro_memory,
+            tick_id=tick_id,
+            macro=ctx.macro,
+            active_shocks=ctx.active_shocks,
+            ref_price=ref_price,
+            config=self._config.macro_dynamics,
+        )
+        if self._macro_snapshot_array is not None:
+            write_macro_snapshot_ipc(
+                self._macro_snapshot_array,
+                snap,
+                capacity=self._macro_snapshot_capacity,
+            )
 
     def _write_initial_manifest(self, *, n_ticks: int) -> None:
         assert self._buyers_df is not None
@@ -359,6 +405,7 @@ class LiveSimulationSession:
             con=self._con,
             run_id=self._run_id,
         )
+        self._publish_macro_snapshot(tick_id)
         self._last_external_tick = external_tick_index
 
 
@@ -367,12 +414,19 @@ def make_live_step_fn(
     artifacts_dir: str,
     shock_queue: queue.Queue,
     tick_counter,
+    macro_snapshot_array: object | None = None,
+    macro_snapshot_capacity: int = 16384,
 ) -> Callable[[], None]:
     """
     Фабрика step_fn для _WorkerLoop / multiprocessing.Process.
     Замыкает LiveSimulationSession на весь жизненный цикл subprocess.
     """
-    session = LiveSimulationSession(Path(artifacts_dir), shock_queue)
+    session = LiveSimulationSession(
+        Path(artifacts_dir),
+        shock_queue,
+        macro_snapshot_array=macro_snapshot_array,
+        macro_snapshot_capacity=macro_snapshot_capacity,
+    )
 
     def _step() -> None:
         session.run_tick(tick_counter.value)

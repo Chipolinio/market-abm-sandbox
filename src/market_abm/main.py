@@ -58,6 +58,7 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
             return stub_tick_payload(next_tick)
 
         from market_abm.analytics.ticker import query_ticker_metrics
+        from market_abm.api.schemas.macro import ActiveShockDTO, MacroStateDTO
 
         as_of_tick = _completed_tick(next_tick)
         agg: dict = store.query_market_aggregate(as_of_tick)  # type: ignore[union-attr]
@@ -77,6 +78,22 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
         except Exception:  # noqa: BLE001
             raw_events = []
         frame_events = [SystemEventDTO(**event) for event in raw_events[:20]]
+
+        macro_state = None
+        active_shocks: list[ActiveShockDTO] = []
+        ref_price: float | None = None
+        memory = store.macro_memory() if hasattr(store, "macro_memory") else None  # type: ignore[union-attr]
+        if memory is not None:
+            snap = memory.read(as_of_tick)  # type: ignore[union-attr]
+            if snap is None:
+                snap = memory.read(None)  # type: ignore[union-attr]
+            if snap is not None:
+                macro_state = MacroStateDTO.model_validate(snap.macro_state)
+                active_shocks = [
+                    ActiveShockDTO.model_validate(row) for row in snap.active_shocks
+                ]
+                ref_price = snap.ref_price
+
         return TickStreamPayload(
             tick_id=next_tick,
             timestamp_utc=datetime.datetime.now(datetime.UTC).isoformat(),
@@ -89,6 +106,9 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
             ticker_metrics=ticker,
             active_drift_alerts=alerts,
             events=frame_events,
+            macro_state=macro_state,
+            active_shocks=active_shocks,
+            ref_price=ref_price,
         )
 
     return _payload

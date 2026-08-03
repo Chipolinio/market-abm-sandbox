@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from market_abm.api.schemas.events import SystemEventDTO
+from market_abm.api.schemas.macro import ActiveShockDTO, MacroStateDTO
 from market_abm.api.schemas.ticker import TickerMetricsDTO
 
 
@@ -36,3 +37,7 @@ class TickStreamPayload(BaseModel):
     active_drift_alerts: list[dict]
     events: list[SystemEventDTO] = Field(default_factory=list)
     worker_state: Literal["IDLE", "RUNNING", "PAUSED", "STOPPED", "FAILED"] = "IDLE"
+    # Spec 014 §4.1 — macro observability (None/[] when idle / stub / no snapshot)
+    macro_state: MacroStateDTO | None = None
+    active_shocks: list[ActiveShockDTO] = Field(default_factory=list)
+    ref_price: float | None = None

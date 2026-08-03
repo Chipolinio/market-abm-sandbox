@@ -33,6 +33,7 @@ _RUNNING_STEP_YIELD_SEC: Final[float] = 0.05  # noop-stub: не крутить �
 _MANIFEST_FILENAME: Final[str] = "manifest.json"
 _MANIFEST_TMP_SUFFIX: Final[str] = ".tmp"
 _LAST_ERROR_ARRAY_SIZE: Final[int] = 2048
+_MACRO_SNAPSHOT_ARRAY_SIZE: Final[int] = 16384
 
 
 class WorkerState(IntEnum):
@@ -299,6 +300,7 @@ def _worker_entry(
     step_fn_qualname: str | None,
     running_since: mp.Value,
     elapsed_total: mp.Value,
+    macro_snapshot_array: mp.Array | None = None,
 ) -> None:
     """
     Функция-мишень для multiprocessing.Process.
@@ -311,6 +313,8 @@ def _worker_entry(
             artifacts_dir=artifacts_dir,
             shock_queue=shock_queue,
             tick_counter=tick_counter,
+            macro_snapshot_array=macro_snapshot_array,
+            macro_snapshot_capacity=_MACRO_SNAPSHOT_ARRAY_SIZE,
         )
     else:
         module_name, func_name = step_fn_qualname.rsplit(".", 1)
@@ -367,6 +371,7 @@ class SimulationWorker:
         self.tick_counter: mp.Value = ctx.Value("i", 0)
         self._state_value: mp.Value = ctx.Value("i", WorkerState.IDLE.value)
         self._last_error_array: mp.Array = ctx.Array("c", _LAST_ERROR_ARRAY_SIZE)
+        self._macro_snapshot_array: mp.Array = ctx.Array("c", _MACRO_SNAPSHOT_ARRAY_SIZE)
         self._running_since: mp.Value = ctx.Value("d", 0.0)
         self._elapsed_total: mp.Value = ctx.Value("d", 0.0)
 
@@ -382,6 +387,7 @@ class SimulationWorker:
                 _step_fn_qualname,
                 self._running_since,
                 self._elapsed_total,
+                self._macro_snapshot_array,
             ),
             daemon=True,
         )
@@ -395,6 +401,21 @@ class SimulationWorker:
     def state(self) -> WorkerState:
         """Текущее состояние воркера (читается из разделяемой памяти)."""
         return WorkerState(self._state_value.value)
+
+    def read_macro_snapshot(self) -> object | None:
+        """Latest in-memory macro snapshot from worker IPC slot (Spec 014)."""
+        from market_abm.analytics.macro_snapshot import read_macro_snapshot_ipc
+
+        return read_macro_snapshot_ipc(self._macro_snapshot_array)
+
+    def clear_macro_snapshot(self) -> None:
+        """Clear macro IPC slot (parent-side RESET aid)."""
+        from market_abm.analytics.macro_snapshot import clear_macro_snapshot_ipc
+
+        clear_macro_snapshot_ipc(
+            self._macro_snapshot_array,
+            capacity=_MACRO_SNAPSHOT_ARRAY_SIZE,
+        )
 
     @property
     def last_error(self) -> str | None:

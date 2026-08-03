@@ -44,6 +44,16 @@ class AnalyticsStore:
             raise FileNotFoundError(f"Run directory not found or missing manifest: {run_root}")
         self._con = duckdb.connect()
         self._con.execute(f"SET memory_limit='{memory_limit}'")
+        # Spec 014: in-memory macro snapshot (no per-tick disk I/O)
+        self._macro_memory: object | None = None
+
+    def attach_macro_memory(self, memory: object) -> None:
+        """Attach MacroSnapshotMemory for WS payload merge (Spec 014 §2.2)."""
+        self._macro_memory = memory
+
+    def macro_memory(self) -> object | None:
+        """In-memory macro snapshot store, if attached."""
+        return self._macro_memory
 
     def close(self) -> None:
         """Закрывает DuckDB-соединение."""

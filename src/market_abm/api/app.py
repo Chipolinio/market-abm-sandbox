@@ -62,12 +62,31 @@ def _wrap_payload_with_worker_state(
     base_fn: Callable[[int], TickStreamPayload],
     worker: Any,
 ) -> Callable[[int], TickStreamPayload]:
-    """Добавляет актуальный worker_state в каждый WS-кадр (Spec 007 §4.1)."""
+    """Добавляет worker_state и macro IPC snapshot в каждый WS-кадр (Spec 007 / 014)."""
 
     def _payload(tick_id: int) -> TickStreamPayload:
         payload = base_fn(tick_id)
         state: WorkerState = worker.state
-        return payload.model_copy(update={"worker_state": state.name})
+        updates: dict[str, object] = {"worker_state": state.name}
+
+        reader = getattr(worker, "read_macro_snapshot", None)
+        snap = reader() if callable(reader) else None
+        macro_state = getattr(snap, "macro_state", None) if snap is not None else None
+        if isinstance(macro_state, dict):
+            from market_abm.api.schemas.macro import ActiveShockDTO, MacroStateDTO
+
+            updates["macro_state"] = MacroStateDTO.model_validate(macro_state)
+            raw_shocks = getattr(snap, "active_shocks", None) or []
+            if isinstance(raw_shocks, list):
+                updates["active_shocks"] = [
+                    ActiveShockDTO.model_validate(row)
+                    for row in raw_shocks
+                    if isinstance(row, dict)
+                ]
+            ref = getattr(snap, "ref_price", None)
+            updates["ref_price"] = float(ref) if isinstance(ref, (int, float)) else None
+
+        return payload.model_copy(update=updates)
 
     return _payload
 

@@ -209,6 +209,55 @@ def advance_macro_state(
     return replace(ctx, macro=macro_next)
 
 
+def estimate_recovery_eta(
+    macro: MacroState,
+    config: MacroDynamicsConfig,
+    *,
+    max_ticks: int = 500,
+) -> int | None:
+    """
+    Forward decay without RNG noise until NORMAL (Spec 014 §4.5).
+    Returns None for NORMAL / EXPANSION or already recovery-done.
+    """
+    if macro.regime in (MacroRegime.NORMAL, MacroRegime.EXPANSION):
+        return None
+    if (
+        macro.regime == MacroRegime.RECOVERY
+        and macro.stress < config.recovery_done_threshold
+        and macro.expansion < config.recovery_done_threshold
+    ):
+        return None
+
+    cursor = macro
+    for ticks in range(1, max_ticks + 1):
+        stress = _clip_stress(_decay_stress(cursor, config), config.stress_cap)
+        expansion = _clip_expansion(_decay_expansion(cursor, config), config.expansion_cap)
+        regime = _update_regime(
+            MacroState(
+                stress=stress,
+                expansion=expansion,
+                regime=cursor.regime,
+                peak_stress=cursor.peak_stress,
+                peak_expansion=cursor.peak_expansion,
+                episode_id=cursor.episode_id,
+                ticks_in_episode=cursor.ticks_in_episode,
+            ),
+            config,
+        )
+        cursor = MacroState(
+            stress=stress,
+            expansion=expansion,
+            regime=regime,
+            peak_stress=cursor.peak_stress,
+            peak_expansion=cursor.peak_expansion,
+            episode_id=cursor.episode_id,
+            ticks_in_episode=cursor.ticks_in_episode + 1,
+        )
+        if regime == MacroRegime.NORMAL:
+            return ticks
+    return max_ticks
+
+
 def median_listing_price(products_df: pl.DataFrame) -> float:
     """Медиана listing price для market feedback (Spec 011 §5.4)."""
     if products_df.height == 0:
