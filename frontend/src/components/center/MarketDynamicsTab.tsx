@@ -15,6 +15,7 @@ export function MarketDynamicsTab({
   activeShocks = [],
   workerState = "IDLE",
   connectionState = "open",
+  refPrice = null,
 }: DynamicsTabProps) {
   const { listings, loading: listingsLoading } = useTopListingsSeries(true);
   const highlightedListing =
@@ -60,6 +61,7 @@ export function MarketDynamicsTab({
         <div className="min-h-0 flex-1">
           <PriceQuantileChart
             data={priceChartData}
+            refPrice={refPrice}
             highlightedSellerSeries={
               highlightedListing === null
                 ? null

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { TerminalTabId } from "@/components/center/types";
+import type { EventMarker, TerminalTabId } from "@/components/center/types";
 import { useCyberLog } from "@/hooks/useCyberLog";
 import { useDashboardSeries } from "@/hooks/useDashboardSeries";
 import { useFlashCrashAlarm } from "@/hooks/useFlashCrashAlarm";
@@ -15,14 +15,20 @@ import { toLastCompletedTick } from "@/utils/analyticsTick";
 import { resolveSimulationTick } from "@/utils/simulationTick";
 import type { SimulationShockRequest } from "@/types/shock";
 
+function mergeCrashMarker(prev: EventMarker[], marker: EventMarker): EventMarker[] {
+  const next = [...prev.filter((m) => !(m.label === marker.label && m.tickId === marker.tickId)), marker];
+  return next.slice(-8);
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
-  const [crashMarkers, setCrashMarkers] = useState<Array<{ tickId: number; label: string }>>([]);
+  const [crashMarkers, setCrashMarkers] = useState<EventMarker[]>([]);
   /** Spec 014 §4.1.1 — keep last known macro on WS disconnect (stale). */
   const [macroState, setMacroState] = useState<MacroStateDTO | null>(null);
   const [activeShocks, setActiveShocks] = useState<ActiveShockDTO[]>([]);
+  const [refPrice, setRefPrice] = useState<number | null>(null);
   const { status, refresh } = useSimulationStatus();
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
@@ -49,6 +55,21 @@ export default function App() {
       }
       if (lastPayload.active_shocks !== undefined) {
         setActiveShocks(lastPayload.active_shocks);
+      }
+      if (lastPayload.ref_price !== undefined) {
+        setRefPrice(lastPayload.ref_price);
+      }
+      for (const event of lastPayload.events ?? []) {
+        if (event.display_code !== "DEMAND_SHOCK") {
+          continue;
+        }
+        setCrashMarkers((prev) =>
+          mergeCrashMarker(prev, {
+            tickId: event.tick_id,
+            label: "CRASH",
+            payload: event.payload ?? null,
+          }),
+        );
       }
     }
   }, [lastPayload, handlePayload]);
@@ -89,6 +110,7 @@ export default function App() {
       activeShocks,
       workerState,
       connectionState,
+      refPrice,
     }),
     [
       priceChartData,
@@ -101,6 +123,7 @@ export default function App() {
       activeShocks,
       workerState,
       connectionState,
+      refPrice,
     ],
   );
 
@@ -120,6 +143,7 @@ export default function App() {
         setCrashMarkers([]);
         setMacroState(null);
         setActiveShocks([]);
+        setRefPrice(null);
         void reloadBackfill();
       }
 
@@ -134,11 +158,13 @@ export default function App() {
         return;
       }
       const markerTick = Math.max(resolveSimulationTick(status, lastPayload), 0);
-      setCrashMarkers((prev) => {
-        const next = [...prev, { tickId: markerTick, label: "CRASH" }];
-        const deduped = new Map(next.map((marker) => [`${marker.label}-${marker.tickId}`, marker] as const));
-        return [...deduped.values()].slice(-8);
-      });
+      setCrashMarkers((prev) =>
+        mergeCrashMarker(prev, {
+          tickId: markerTick,
+          label: "CRASH",
+          payload: null,
+        }),
+      );
     },
     [lastPayload, status],
   );

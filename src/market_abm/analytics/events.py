@@ -275,6 +275,7 @@ def build_macro_demand_shock_event(
         "scenario": scenario,
         "impulse": impulse,
         "stress": stress,
+        "stress_after": stress,  # Spec 014 §5.3 alias
         "est_half_life_ticks": est_half_life_ticks,
         "macro_mode": "stochastic_regime",
     }

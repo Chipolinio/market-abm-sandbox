@@ -90,3 +90,26 @@ def test_14_1_t2_ws_payload_includes_macro_and_shocks() -> None:
     assert len(payload.active_shocks) >= 1
     assert payload.active_shocks[0].shock_type == "demand_crash"
     assert payload.active_shocks[0].scenario == "severe"
+
+
+def test_14_3_t1_ref_price_in_payload_when_window() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        run_root = build_mini_run(Path(tmp))
+        store = AnalyticsStore(run_root)
+        memory = MacroSnapshotMemory()
+        store.attach_macro_memory(memory)
+
+        write_macro_snapshot(
+            memory,
+            tick_id=0,
+            macro=MacroState(regime=MacroRegime.NORMAL),
+            active_shocks=(),
+            ref_price=101.25,
+            config=MacroDynamicsConfig(),
+        )
+        try:
+            payload = make_payload_fn(store)(0)
+        finally:
+            store.close()
+
+    assert payload.ref_price == 101.25

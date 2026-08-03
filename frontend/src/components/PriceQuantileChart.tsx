@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { RefPriceLine } from "@/components/center/RefPriceLine";
 import { hasPlottablePriceData } from "@/state/chartSeries";
 import type { PriceChartRow } from "@/state/types";
 import { MCK_CHART } from "@/styles/chartPalette";
@@ -26,6 +27,8 @@ type Props = {
     sellerId: number;
     points: Array<{ tick_id: number; price: number | null }>;
   } | null;
+  /** Spec 014 — rolling reference price anchor (null = hide line). */
+  refPrice?: number | null;
 };
 
 function warnIfQuantileOrderBroken(row: PriceChartRow): void {
@@ -37,7 +40,11 @@ function warnIfQuantileOrderBroken(row: PriceChartRow): void {
   }
 }
 
-export function PriceQuantileChart({ data, highlightedSellerSeries = null }: Props) {
+export function PriceQuantileChart({
+  data,
+  highlightedSellerSeries = null,
+  refPrice = null,
+}: Props) {
   if (data.length === 0 || !hasPlottablePriceData(data)) {
     return (
       <p className="flex h-full items-center justify-center text-xs italic text-muted">
@@ -158,6 +165,7 @@ export function PriceQuantileChart({ data, highlightedSellerSeries = null }: Pro
             name={`Seller #${highlightedSellerSeries.sellerId} price`}
           />
         ) : null}
+        <RefPriceLine refPrice={refPrice} />
       </ComposedChart>
     </ResponsiveContainer>
   );
