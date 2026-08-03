@@ -176,6 +176,9 @@ COL_RANKING_SCORE: Final = "ranking_score"
 # Spec 012.1 §7 — inventory ledger (extra product cols; not in PRODUCTS_COLUMNS contract)
 COL_STOCK_UNITS: Final = "stock_units"
 COL_STOCK_TARGET: Final = "stock_target"
+COL_INBOUND_UNITS: Final = "inbound_units"
+COL_INBOUND_ETA_TICKS: Final = "inbound_eta_ticks"
+COL_INBOUND_UNIT_COST: Final = "inbound_unit_cost"
 
 PRODUCTS_COLUMNS: Final[tuple[str, ...]] = (
     COL_LISTING_ID,

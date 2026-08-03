@@ -1,4 +1,4 @@
-# Назначение файла: runtime-экономика селлеров — sellers_state_df (Slice 8.2).
+# Назначение файла: runtime-экономика селлеров — sellers_state_df (Slice 8.2 / Spec 012.1 §6).
 # Базовая идея: init / settle / filter — чистые векторные трансформеры Polars.
 from __future__ import annotations
 
@@ -52,24 +52,42 @@ def settle_seller_economics(
     sellers_state_df: pl.DataFrame,
     transactions_df: pl.DataFrame,
     config: SellerEconomicsConfig,
+    *,
+    prepaid_cogs: bool = False,
+    holding_by_seller: pl.DataFrame | None = None,
 ) -> pl.DataFrame:
     """
     1) fixed_cost_per_tick — по всем не-bankrupt
     2) revenue = SUM(price_paid) по seller_id
-    3) cogs = SUM(unit_cost) по seller_id (qty=1 на транзакцию)
-    4) working_capital += revenue - cogs - fixed_cost
-    5) is_bankrupt необратимо; True если capital <= threshold
+    3) cogs = SUM(unit_cost) — **skipped when prepaid_cogs** (Spec 012.1 mode C)
+    4) holding (optional) per seller
+    5) working_capital += revenue - cogs - fixed - holding
+    6) is_bankrupt необратимо; True если capital <= threshold
     """
     agg = _aggregate_tick_economics(transactions_df)
     joined = sellers_state_df.join(agg, on=COL_SELLER_ID, how="left").with_columns(
         pl.col("revenue").fill_null(0.0).cast(pl.Float32),
         pl.col("cogs").fill_null(0.0).cast(pl.Float32),
     )
+    if prepaid_cogs:
+        joined = joined.with_columns(pl.lit(0.0, dtype=pl.Float32).alias("cogs"))
+
+    if holding_by_seller is not None and holding_by_seller.height > 0:
+        joined = joined.join(holding_by_seller, on=COL_SELLER_ID, how="left").with_columns(
+            pl.col("_holding").fill_null(0.0).cast(pl.Float32)
+        )
+    else:
+        joined = joined.with_columns(pl.lit(0.0, dtype=pl.Float32).alias("_holding"))
 
     fixed_cost = (
         pl.when(pl.col(COL_IS_BANKRUPT))
         .then(pl.lit(0.0, dtype=pl.Float32))
         .otherwise(pl.lit(config.fixed_cost_per_tick, dtype=pl.Float32))
+    )
+    holding = (
+        pl.when(pl.col(COL_IS_BANKRUPT))
+        .then(pl.lit(0.0, dtype=pl.Float32))
+        .otherwise(pl.col("_holding"))
     )
 
     new_capital = (
@@ -77,6 +95,7 @@ def settle_seller_economics(
         + pl.col("revenue")
         - pl.col("cogs")
         - fixed_cost
+        - holding
     ).cast(pl.Float32)
 
     threshold = pl.lit(config.bankruptcy_threshold, dtype=pl.Float32)

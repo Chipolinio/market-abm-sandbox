@@ -19,6 +19,9 @@ from market_abm.domain.constants import (
     COL_DELIVERY_DAYS,
     COL_FREQ_EFFECTIVE,
     COL_GROSS_MARGIN,
+    COL_INBOUND_ETA_TICKS,
+    COL_INBOUND_UNIT_COST,
+    COL_INBOUND_UNITS,
     COL_IS_CHURNED,
     COL_LISTING_ID,
     COL_PRICE,
@@ -45,8 +48,10 @@ from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure
 from market_abm.simulation.choice import choose_listings_for_all_buyers
 from market_abm.simulation.context import SimulationContext
 from market_abm.simulation.inventory import (
+    advance_replenishment,
     apply_stock_sales,
     clip_choices_to_stock,
+    compute_holding_by_seller,
     filter_in_stock,
 )
 from market_abm.simulation.ranking import compute_ranking_scores
@@ -299,8 +304,14 @@ def _reprice_to_products(
     # Preserve category_id for competitor repricing and ranking (Spec 012 §4.3 / §7.1)
     if COL_CATEGORY_ID in products_with_demand.columns:
         listing_cols = [*listing_cols, COL_CATEGORY_ID]
-    # Spec 012.1: stock cols needed for inventory pressure inside apply_repricing_tick
-    for stock_col in (COL_STOCK_UNITS, COL_STOCK_TARGET):
+    # Spec 012.1: stock / inbound cols needed for inventory pressure + survive reprice
+    for stock_col in (
+        COL_STOCK_UNITS,
+        COL_STOCK_TARGET,
+        COL_INBOUND_UNITS,
+        COL_INBOUND_ETA_TICKS,
+        COL_INBOUND_UNIT_COST,
+    ):
         if stock_col in products_with_demand.columns:
             listing_cols = [*listing_cols, stock_col]
     if COL_PROMOTION_ANCHOR in products_with_demand.columns:
@@ -344,8 +355,15 @@ def _reprice_to_products(
             on=COL_LISTING_ID,
             how="left",
         )
-    # Spec 013: ranking_score; Spec 012.1: stock_* — survive reprice join
-    for extra_col in (COL_RANKING_SCORE, COL_STOCK_UNITS, COL_STOCK_TARGET):
+    # Spec 013: ranking_score; Spec 012.1: stock_* / inbound_* — survive reprice join
+    for extra_col in (
+        COL_RANKING_SCORE,
+        COL_STOCK_UNITS,
+        COL_STOCK_TARGET,
+        COL_INBOUND_UNITS,
+        COL_INBOUND_ETA_TICKS,
+        COL_INBOUND_UNIT_COST,
+    ):
         if extra_col in products_with_demand.columns and extra_col not in merged.columns:
             merged = merged.join(
                 products_with_demand.select([COL_LISTING_ID, extra_col]),
@@ -370,14 +388,38 @@ def _settle_if_needed(
     sellers_state_df: pl.DataFrame | None,
     transactions_df: pl.DataFrame,
     config: SimulationStepConfig,
+    *,
+    products_df: pl.DataFrame | None = None,
 ) -> pl.DataFrame | None:
     if sellers_state_df is None:
         return None
+    prepaid = bool(config.replenishment.enabled)
+    holding = None
+    if prepaid and products_df is not None and COL_STOCK_UNITS in products_df.columns:
+        holding = compute_holding_by_seller(
+            products_df,
+            holding_cost_per_unit_tick=config.replenishment.holding_cost_per_unit_tick,
+        )
     return settle_seller_economics(
         sellers_state_df,
         transactions_df,
         config.economics,
+        prepaid_cogs=prepaid,
+        holding_by_seller=holding,
     )
+
+
+def _replenish_if_needed(
+    products_df: pl.DataFrame,
+    sellers_state_df: pl.DataFrame | None,
+    config: SimulationStepConfig,
+) -> tuple[pl.DataFrame, pl.DataFrame | None]:
+    """Spec 012.1 §6: ETA / arrive / reorder after sales."""
+    if not config.replenishment.enabled or sellers_state_df is None:
+        return products_df, sellers_state_df
+    if COL_STOCK_UNITS not in products_df.columns:
+        return products_df, sellers_state_df
+    return advance_replenishment(products_df, sellers_state_df, config.replenishment)
 
 
 def step(
@@ -424,6 +466,7 @@ def step(
     if products_pool.height == 0:
         empty_tx = _empty_transactions_df()
         ledger = products_available if products_available.height > 0 else products_pool
+        ledger, sellers_state_df = _replenish_if_needed(ledger, sellers_state_df, config)
         products_with_demand = _update_demand_index(
             ledger.clone(),
             empty_tx,
@@ -439,10 +482,13 @@ def step(
             shock_catalog=catalog,
             ml_runtime=ml_runtime,
         )
+        products_next = drop_promotion_columns(products_next)
         return (
-            drop_promotion_columns(products_next),
+            products_next,
             empty_tx,
-            _settle_if_needed(sellers_state_df, empty_tx, config),
+            _settle_if_needed(
+                sellers_state_df, empty_tx, config, products_df=products_next
+            ),
             simulation_context,
         )
 
@@ -450,8 +496,10 @@ def step(
     active_buyers = _select_active_buyers(buyers_work, rng)
     if active_buyers.height == 0:
         empty_tx = _empty_transactions_df()
+        ledger = products_available.clone() if config.inventory.enabled else products_pool.clone()
+        ledger, sellers_state_df = _replenish_if_needed(ledger, sellers_state_df, config)
         products_with_demand = _update_demand_index(
-            products_available.clone() if config.inventory.enabled else products_pool.clone(),
+            ledger,
             empty_tx,
             active_buyers_count=0,
         )
@@ -474,10 +522,13 @@ def step(
                 ref_cfg=config.choice.reference_price,
                 sales_window_ticks=DEFAULT_SALES_WINDOW_TICKS,
             )
+        products_next = drop_promotion_columns(products_next)
         return (
-            drop_promotion_columns(products_next),
+            products_next,
             empty_tx,
-            _settle_if_needed(sellers_state_df, empty_tx, config),
+            _settle_if_needed(
+                sellers_state_df, empty_tx, config, products_df=products_next
+            ),
             ctx_next,
         )
 
@@ -548,6 +599,9 @@ def step(
     else:
         ledger = ranked
 
+    # Spec 012.1 §6: ETA / arrive / reorder (prepaid capital) after sales
+    ledger, sellers_state_df = _replenish_if_needed(ledger, sellers_state_df, config)
+
     # Spec 012 §6: EMA rating update from seed-aware reviews after settle
     products_rated = update_rating_ema(
         ledger,
@@ -575,6 +629,8 @@ def step(
     return (
         products_next,
         transactions,
-        _settle_if_needed(sellers_state_df, transactions, config),
+        _settle_if_needed(
+            sellers_state_df, transactions, config, products_df=products_next
+        ),
         ctx_next,
     )

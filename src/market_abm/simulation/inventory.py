@@ -1,14 +1,21 @@
-# Spec 012.1 §4–§5 — stock ledger, OOS filter, oversell clip, inventory pressure.
+# Spec 012.1 §4–§6 — stock ledger, OOS, pressure, replenishment (prepaid + holding).
 from __future__ import annotations
 
 import polars as pl
 
-from market_abm.config.inventory import InventoryPricingConfig
+from market_abm.config.inventory import InventoryPricingConfig, ReplenishmentConfig
 from market_abm.domain.constants import (
     COL_BUYER_ID,
+    COL_INBOUND_ETA_TICKS,
+    COL_INBOUND_UNIT_COST,
+    COL_INBOUND_UNITS,
+    COL_IS_BANKRUPT,
     COL_LISTING_ID,
+    COL_SELLER_ID,
     COL_STOCK_TARGET,
     COL_STOCK_UNITS,
+    COL_UNIT_COST,
+    COL_WORKING_CAPITAL,
 )
 
 COL_INVENTORY_PRESSURE: str = "inventory_pressure"
@@ -135,3 +142,196 @@ def compute_inventory_pressure(
     if "_sell_through" in out.columns:
         out = out.drop("_sell_through")
     return out.select([COL_LISTING_ID, COL_INVENTORY_PRESSURE])
+
+
+def ensure_inbound_columns(products_df: pl.DataFrame) -> pl.DataFrame:
+    """Add inbound_* columns with zeros if missing."""
+    df = products_df
+    if COL_INBOUND_UNITS not in df.columns:
+        df = df.with_columns(pl.lit(0, dtype=pl.Int32).alias(COL_INBOUND_UNITS))
+    if COL_INBOUND_ETA_TICKS not in df.columns:
+        df = df.with_columns(pl.lit(0, dtype=pl.Int32).alias(COL_INBOUND_ETA_TICKS))
+    if COL_INBOUND_UNIT_COST not in df.columns:
+        df = df.with_columns(pl.lit(0.0, dtype=pl.Float32).alias(COL_INBOUND_UNIT_COST))
+    return df
+
+
+def apply_bootstrap_stock_prepaid(
+    sellers_state_df: pl.DataFrame,
+    products_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """
+    Mode C: prepaid COGS for bootstrap stock at init (Spec 012.1 §4.2 / §6.3).
+    working_capital -= Σ(stock_units · unit_cost) per seller.
+    """
+    if COL_STOCK_UNITS not in products_df.columns:
+        raise ValueError(f"products_df missing required column: {COL_STOCK_UNITS}")
+    prepaid = (
+        products_df.group_by(COL_SELLER_ID)
+        .agg(
+            (
+                pl.col(COL_STOCK_UNITS).cast(pl.Float32)
+                * pl.col(COL_UNIT_COST).cast(pl.Float32)
+            )
+            .sum()
+            .alias("_prepaid")
+        )
+    )
+    return (
+        sellers_state_df.join(prepaid, on=COL_SELLER_ID, how="left")
+        .with_columns(pl.col("_prepaid").fill_null(0.0).cast(pl.Float32))
+        .with_columns(
+            (pl.col(COL_WORKING_CAPITAL) - pl.col("_prepaid"))
+            .cast(pl.Float32)
+            .alias(COL_WORKING_CAPITAL)
+        )
+        .drop("_prepaid")
+    )
+
+
+def compute_holding_by_seller(
+    products_df: pl.DataFrame,
+    *,
+    holding_cost_per_unit_tick: float,
+) -> pl.DataFrame:
+    """Per-seller holding = holding_cost_per_unit_tick * sum(stock_units)."""
+    if COL_STOCK_UNITS not in products_df.columns or products_df.height == 0:
+        return pl.DataFrame(
+            {
+                COL_SELLER_ID: pl.Series([], dtype=pl.Int32),
+                "_holding": pl.Series([], dtype=pl.Float32),
+            }
+        )
+    rate = float(holding_cost_per_unit_tick)
+    return (
+        products_df.group_by(COL_SELLER_ID)
+        .agg(
+            (pl.col(COL_STOCK_UNITS).cast(pl.Float32).sum() * pl.lit(rate, dtype=pl.Float32))
+            .alias("_holding")
+        )
+    )
+
+
+def advance_replenishment(
+    products_df: pl.DataFrame,
+    sellers_state_df: pl.DataFrame,
+    cfg: ReplenishmentConfig,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """
+    Spec 012.1 §6: arrive inbound → maybe reorder with prepaid capital.
+
+    Order (per tick):
+      1) eta -= 1 for open inbound; on eta<=0 add to stock and clear inbound
+      2) if inbound==0 and stock<=reorder_point and seller not bankrupt and capital>=cost:
+            place order (inbound, eta=lead_time); capital -= qty*unit_cost
+    """
+    if not cfg.enabled:
+        return products_df, sellers_state_df
+
+    df = ensure_inbound_columns(products_df)
+
+    # --- arrive ---
+    eta_next = pl.col(COL_INBOUND_ETA_TICKS) - pl.lit(1, dtype=pl.Int32)
+    arriving = (pl.col(COL_INBOUND_UNITS) > 0) & (eta_next <= 0)
+    in_flight = (pl.col(COL_INBOUND_UNITS) > 0) & (eta_next > 0)
+
+    stock_after = (
+        pl.when(arriving)
+        .then(pl.col(COL_STOCK_UNITS) + pl.col(COL_INBOUND_UNITS))
+        .otherwise(pl.col(COL_STOCK_UNITS))
+        .cast(pl.Int32)
+    )
+    inbound_after_arrive = (
+        pl.when(arriving)
+        .then(pl.lit(0, dtype=pl.Int32))
+        .when(in_flight)
+        .then(pl.col(COL_INBOUND_UNITS))
+        .otherwise(pl.lit(0, dtype=pl.Int32))
+    )
+    eta_after_arrive = (
+        pl.when(arriving)
+        .then(pl.lit(0, dtype=pl.Int32))
+        .when(in_flight)
+        .then(eta_next.cast(pl.Int32))
+        .otherwise(pl.lit(0, dtype=pl.Int32))
+    )
+    inbound_cost_after = (
+        pl.when(arriving | (pl.col(COL_INBOUND_UNITS) == 0))
+        .then(pl.lit(0.0, dtype=pl.Float32))
+        .otherwise(pl.col(COL_INBOUND_UNIT_COST))
+    )
+
+    df = df.with_columns(
+        stock_after.alias(COL_STOCK_UNITS),
+        inbound_after_arrive.alias(COL_INBOUND_UNITS),
+        eta_after_arrive.alias(COL_INBOUND_ETA_TICKS),
+        inbound_cost_after.alias(COL_INBOUND_UNIT_COST),
+    )
+
+    # --- reorder ---
+    capital_map = {
+        int(r[COL_SELLER_ID]): float(r[COL_WORKING_CAPITAL])
+        for r in sellers_state_df.iter_rows(named=True)
+    }
+    bankrupt = {
+        int(r[COL_SELLER_ID])
+        for r in sellers_state_df.filter(pl.col(COL_IS_BANKRUPT)).iter_rows(named=True)
+    }
+
+    new_inbound: list[int] = []
+    new_eta: list[int] = []
+    new_cost: list[float] = []
+    order_cost_by_seller: dict[int, float] = {}
+
+    for row in df.iter_rows(named=True):
+        sid = int(row[COL_SELLER_ID])
+        stock = int(row[COL_STOCK_UNITS])
+        inbound = int(row[COL_INBOUND_UNITS])
+        unit_cost = float(row[COL_UNIT_COST])
+        if (
+            inbound == 0
+            and stock <= int(cfg.reorder_point)
+            and sid not in bankrupt
+        ):
+            qty = int(cfg.reorder_quantity)
+            cost = float(qty) * unit_cost
+            cap = capital_map.get(sid, 0.0) - order_cost_by_seller.get(sid, 0.0)
+            if cap >= cost:
+                new_inbound.append(qty)
+                new_eta.append(int(cfg.lead_time_ticks))
+                new_cost.append(unit_cost)
+                order_cost_by_seller[sid] = order_cost_by_seller.get(sid, 0.0) + cost
+                continue
+        new_inbound.append(inbound)
+        new_eta.append(int(row[COL_INBOUND_ETA_TICKS]))
+        new_cost.append(float(row[COL_INBOUND_UNIT_COST]))
+
+    df = df.with_columns(
+        pl.Series(COL_INBOUND_UNITS, new_inbound, dtype=pl.Int32),
+        pl.Series(COL_INBOUND_ETA_TICKS, new_eta, dtype=pl.Int32),
+        pl.Series(COL_INBOUND_UNIT_COST, new_cost, dtype=pl.Float32),
+    )
+
+    if not order_cost_by_seller:
+        return df, sellers_state_df
+
+    costs = pl.DataFrame(
+        {
+            COL_SELLER_ID: list(order_cost_by_seller.keys()),
+            "_order_cost": list(order_cost_by_seller.values()),
+        }
+    ).with_columns(
+        pl.col(COL_SELLER_ID).cast(pl.Int32),
+        pl.col("_order_cost").cast(pl.Float32),
+    )
+    state_next = (
+        sellers_state_df.join(costs, on=COL_SELLER_ID, how="left")
+        .with_columns(pl.col("_order_cost").fill_null(0.0).cast(pl.Float32))
+        .with_columns(
+            (pl.col(COL_WORKING_CAPITAL) - pl.col("_order_cost"))
+            .cast(pl.Float32)
+            .alias(COL_WORKING_CAPITAL)
+        )
+        .drop("_order_cost")
+    )
+    return df, state_next
