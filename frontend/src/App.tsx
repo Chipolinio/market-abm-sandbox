@@ -197,6 +197,9 @@ export default function App() {
         asOfTick={asOfTick}
         pollAnalytics={pollAnalytics}
         pollMatrixLive={workerState === "RUNNING" && activeTab === "demand_matrix"}
+        pollStrategyPulse={workerState === "RUNNING" && activeTab === "dynamics"}
+        pollSegmentsLive={workerState === "RUNNING" && activeTab === "segments"}
+        pollCategoriesLive={workerState === "RUNNING" && activeTab === "categories"}
         dynamics={dynamics}
         highlightedSellerId={highlightedSellerId}
         onHighlightSeller={setHighlightedSellerId}

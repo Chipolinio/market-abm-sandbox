@@ -28,6 +28,9 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   onTabChange?: (tab: TerminalTabId) => void;
   pollAnalytics?: boolean;
   pollMatrixLive?: boolean;
+  pollStrategyPulse?: boolean;
+  pollSegmentsLive?: boolean;
+  pollCategoriesLive?: boolean;
   highlightedSellerId?: number | null;
   onHighlightSeller?: (sellerId: number | null) => void;
   macroState?: MacroStateDTO | null;
@@ -50,6 +53,9 @@ export function TradingTerminalLayout({
   onTabChange,
   pollAnalytics = false,
   pollMatrixLive = false,
+  pollStrategyPulse = false,
+  pollSegmentsLive = false,
+  pollCategoriesLive = false,
   highlightedSellerId = null,
   onHighlightSeller,
   macroState = null,
@@ -100,6 +106,9 @@ export function TradingTerminalLayout({
             activeTab={activeTab}
             onTabChange={onTabChange}
             pollMatrixLive={pollMatrixLive}
+            pollStrategyPulse={pollStrategyPulse}
+            pollSegmentsLive={pollSegmentsLive}
+            pollCategoriesLive={pollCategoriesLive}
             highlightedSellerId={highlightedSellerId}
             onHighlightSeller={handleHighlightSeller}
           />

@@ -39,6 +39,7 @@ export function MarketLeadersTab({
               maxCapital={maxCapital}
               selected={highlightedSellerId === seller.seller_id}
               onSelect={onHighlightSeller}
+              asOfTick={asOfTick}
             />
           ))}
         </div>

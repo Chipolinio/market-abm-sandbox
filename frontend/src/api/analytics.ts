@@ -2,6 +2,12 @@ import { apiFetch } from "./client";
 import type { DemandMatrixResponse } from "@/types/demandMatrix";
 import type { SystemEventsResponse } from "@/types/events";
 import type { LeaderRankBy, MarketLeadersResponse } from "@/types/leaders";
+import type {
+  CategoryRankingResponse,
+  ListingRankingBreakdownDTO,
+  SegmentHealthResponse,
+  StrategyPulseResponse,
+} from "@/types/observability";
 import type { GmvPoint, ListingSeries, PriceIndexPoint } from "./types";
 import { DEFAULT_TOP_LISTINGS_LIMIT } from "@/state/listingSeries";
 
@@ -66,4 +72,50 @@ export function fetchSystemEvents(
     params.set("since_tick", String(sinceTick));
   }
   return apiFetch<SystemEventsResponse>(`/api/v1/analytics/system-events?${params.toString()}`);
+}
+
+export function fetchSegmentHealth(tickId?: number): Promise<SegmentHealthResponse> {
+  const params = new URLSearchParams();
+  if (tickId !== undefined) {
+    params.set("tick_id", String(tickId));
+  }
+  const qs = params.toString();
+  return apiFetch<SegmentHealthResponse>(
+    `/api/v1/analytics/segments${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function fetchStrategyPulse(tickId?: number): Promise<StrategyPulseResponse> {
+  const params = new URLSearchParams();
+  if (tickId !== undefined) {
+    params.set("tick_id", String(tickId));
+  }
+  const qs = params.toString();
+  return apiFetch<StrategyPulseResponse>(
+    `/api/v1/analytics/strategy-pulse${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function fetchListingRanking(
+  sellerId: number,
+  tickId: number = 0,
+): Promise<ListingRankingBreakdownDTO> {
+  const params = new URLSearchParams({
+    seller_id: String(sellerId),
+    tick_id: String(tickId),
+  });
+  return apiFetch<ListingRankingBreakdownDTO>(
+    `/api/v1/analytics/listing-ranking?${params.toString()}`,
+  );
+}
+
+export function fetchCategoryRanking(tickId?: number): Promise<CategoryRankingResponse> {
+  const params = new URLSearchParams();
+  if (tickId !== undefined) {
+    params.set("tick_id", String(tickId));
+  }
+  const qs = params.toString();
+  return apiFetch<CategoryRankingResponse>(
+    `/api/v1/analytics/category-ranking${qs ? `?${qs}` : ""}`,
+  );
 }

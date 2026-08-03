@@ -17,6 +17,24 @@ vi.mock("@/api/analytics", async (importOriginal) => {
   };
 });
 
+vi.mock("@/hooks/useTopListingsSeries", () => ({
+  useTopListingsSeries: () => ({
+    listings: [],
+    loading: false,
+    error: null,
+    reload: vi.fn(async () => undefined),
+  }),
+}));
+
+vi.mock("@/hooks/useStrategyPulse", () => ({
+  useStrategyPulse: () => ({
+    pulse: null,
+    loading: false,
+    error: null,
+    refresh: vi.fn(async () => undefined),
+  }),
+}));
+
 const X_LABELS = ["MaxProfit", "MaxVolume", "RatingMaximizer"];
 const Y_LABELS = ["rich", "standard", "low"];
 

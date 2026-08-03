@@ -22,6 +22,13 @@ export type DynamicsTabProps = {
   workerState?: WorkerState;
   connectionState?: ConnectionState;
   refPrice?: number | null;
+  asOfTick?: number;
+  pollStrategyPulse?: boolean;
 };
 
-export type TerminalTabId = "dynamics" | "leaders" | "demand_matrix";
+export type TerminalTabId =
+  | "dynamics"
+  | "leaders"
+  | "demand_matrix"
+  | "segments"
+  | "categories";

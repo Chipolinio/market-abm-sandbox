@@ -26,6 +26,10 @@ from market_abm.analytics.macro_snapshot import (
     write_macro_snapshot,
     write_macro_snapshot_ipc,
 )
+from market_abm.analytics.segments import SegmentSnapshotMemory, aggregate_segment_health
+from market_abm.analytics.strategy_pulse import StrategyPulseMemory, aggregate_strategy_pulse
+from market_abm.domain.constants import COL_DEMAND_INDEX, COL_SELLER_ID, COL_STRATEGY_TYPE
+
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.economics import SellerEconomicsConfig
 from market_abm.config.ml_repricing import CatBoostRepricingConfig
@@ -179,6 +183,8 @@ class LiveSimulationSession:
         self._macro_snapshot_array = macro_snapshot_array
         self._macro_snapshot_capacity = int(macro_snapshot_capacity)
         self._macro_memory = MacroSnapshotMemory()
+        self._segment_memory = SegmentSnapshotMemory()
+        self._strategy_pulse_memory = StrategyPulseMemory()
 
     def close(self) -> None:
         self._con.close()
@@ -192,6 +198,8 @@ class LiveSimulationSession:
         self._last_external_tick = None
         self._analytics_store = None
         self._macro_memory = MacroSnapshotMemory()
+        self._segment_memory = SegmentSnapshotMemory()
+        self._strategy_pulse_memory = StrategyPulseMemory()
         if self._macro_snapshot_array is not None:
             clear_macro_snapshot_ipc(
                 self._macro_snapshot_array,
@@ -199,7 +207,7 @@ class LiveSimulationSession:
             )
 
     def _publish_macro_snapshot(self, tick_id: int) -> None:
-        """In-memory + IPC publish of macro/shocks (Spec 014 §2.2 / §4.5)."""
+        """In-memory + IPC publish of macro/shocks/segments/pulse (Spec 014)."""
         if self._extended_state is None:
             return
         ctx = self._extended_state.simulation_context
@@ -207,6 +215,41 @@ class LiveSimulationSession:
         if ctx.tx_p50_window:
             values = list(ctx.tx_p50_window)
             ref_price = float(sorted(values)[len(values) // 2])
+
+        segments: list[dict[str, object]] | None = None
+        if self._buyers_df is not None:
+            try:
+                segments = aggregate_segment_health(self._buyers_df)
+                self._segment_memory.write(tick_id, segments)
+            except ValueError:
+                segments = None
+
+        panic_threshold = float(
+            self._config.repricing.stress.panic_stress_threshold
+        )
+        panic_active = float(ctx.macro.stress) >= panic_threshold
+        strategy_pulse: dict[str, object] | None = None
+        if self._products_df is not None and self._sellers_df is not None:
+            products = self._products_df
+            if COL_STRATEGY_TYPE not in products.columns:
+                products = products.join(
+                    self._sellers_df.select(
+                        [COL_SELLER_ID, COL_STRATEGY_TYPE]
+                    ),
+                    on=COL_SELLER_ID,
+                    how="left",
+                )
+            if COL_DEMAND_INDEX not in products.columns:
+                products = products.with_columns(
+                    pl.lit(1.0).alias(COL_DEMAND_INDEX)
+                )
+            strategy_pulse = aggregate_strategy_pulse(
+                products,
+                panic_active=panic_active,
+                tick_id=tick_id,
+            )
+            self._strategy_pulse_memory.write(tick_id, strategy_pulse)
+
         snap = write_macro_snapshot(
             self._macro_memory,
             tick_id=tick_id,
@@ -214,6 +257,8 @@ class LiveSimulationSession:
             active_shocks=ctx.active_shocks,
             ref_price=ref_price,
             config=self._config.macro_dynamics,
+            segments=segments,
+            strategy_pulse=strategy_pulse,
         )
         if self._macro_snapshot_array is not None:
             write_macro_snapshot_ipc(

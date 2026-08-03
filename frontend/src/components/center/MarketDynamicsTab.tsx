@@ -1,7 +1,9 @@
 import { GmvChart } from "@/components/GmvChart";
 import { NarrativeCard } from "@/components/center/NarrativeCard";
+import { StrategyPulseBar } from "@/components/center/StrategyPulseBar";
 import { PriceQuantileChart } from "@/components/PriceQuantileChart";
 import type { DynamicsTabProps } from "@/components/center/types";
+import { useStrategyPulse } from "@/hooks/useStrategyPulse";
 import { useTopListingsSeries } from "@/hooks/useTopListingsSeries";
 
 export function MarketDynamicsTab({
@@ -16,8 +18,15 @@ export function MarketDynamicsTab({
   workerState = "IDLE",
   connectionState = "open",
   refPrice = null,
+  asOfTick = 0,
+  pollStrategyPulse = false,
 }: DynamicsTabProps) {
   const { listings, loading: listingsLoading } = useTopListingsSeries(true);
+  const { pulse, loading: pulseLoading } = useStrategyPulse(
+    true,
+    asOfTick,
+    pollStrategyPulse,
+  );
   const highlightedListing =
     highlightedSellerId === null
       ? null
@@ -34,6 +43,7 @@ export function MarketDynamicsTab({
         workerState={workerState}
         connectionState={connectionState}
       />
+      <StrategyPulseBar pulse={pulse} loading={pulseLoading} />
 
       {highlightedSellerId !== null ? (
         <p

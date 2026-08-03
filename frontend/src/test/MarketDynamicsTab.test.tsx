@@ -38,6 +38,15 @@ vi.mock("@/hooks/useTopListingsSeries", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useStrategyPulse", () => ({
+  useStrategyPulse: () => ({
+    pulse: null,
+    loading: false,
+    error: null,
+    refresh: vi.fn(async () => undefined),
+  }),
+}));
+
 afterEach(() => {
   cleanup();
 });

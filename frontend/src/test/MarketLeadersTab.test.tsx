@@ -51,11 +51,21 @@ beforeEach(() => {
     loading: false,
     error: null,
   });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      statusText: "Not Found",
+      json: async () => ({ detail: "No products for ranking breakdown" }),
+    })),
+  );
 });
 
 afterEach(() => {
   cleanup();
   useMarketLeaders.mockReset();
+  vi.unstubAllGlobals();
 });
 
 describe("MarketLeadersTab", () => {
@@ -77,7 +87,7 @@ describe("MarketLeadersTab", () => {
     const onHighlightSeller = vi.fn();
     render(<MarketLeadersTab asOfTick={3} highlightedSellerId={1} onHighlightSeller={onHighlightSeller} />);
 
-    fireEvent.click(screen.getAllByTestId("seller-registry-card")[0]!);
+    fireEvent.click(screen.getAllByTestId("seller-registry-card")[0]!.querySelector("button")!);
     expect(onHighlightSeller).toHaveBeenCalledWith(3);
   });
 });

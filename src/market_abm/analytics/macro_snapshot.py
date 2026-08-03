@@ -33,6 +33,8 @@ class MacroTickSnapshot:
     macro_state: dict[str, object]
     active_shocks: list[dict[str, object]]
     ref_price: float | None = None
+    segments: list[dict[str, object]] | None = None
+    strategy_pulse: dict[str, object] | None = None
 
 
 @dataclass
@@ -112,6 +114,8 @@ def write_macro_snapshot(
     active_shocks: tuple[ActiveShock, ...] | list[ActiveShock],
     ref_price: float | None,
     config: MacroDynamicsConfig,
+    segments: list[dict[str, object]] | None = None,
+    strategy_pulse: dict[str, object] | None = None,
 ) -> MacroTickSnapshot:
     """Build DTO dicts and store in memory (no disk)."""
     eta = estimate_recovery_eta(macro, config)
@@ -125,6 +129,8 @@ def write_macro_snapshot(
         ),
         active_shocks=build_active_shock_dtos(active_shocks),
         ref_price=ref_price,
+        segments=segments,
+        strategy_pulse=strategy_pulse,
     )
     memory.write(snapshot)
     return snapshot
@@ -137,6 +143,8 @@ def snapshot_to_json_bytes(snapshot: MacroTickSnapshot) -> bytes:
         "macro_state": snapshot.macro_state,
         "active_shocks": snapshot.active_shocks,
         "ref_price": snapshot.ref_price,
+        "segments": snapshot.segments,
+        "strategy_pulse": snapshot.strategy_pulse,
     }
     return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
@@ -158,6 +166,14 @@ def snapshot_from_json_bytes(raw: bytes) -> MacroTickSnapshot | None:
         active_shocks=list(data.get("active_shocks") or []),
         ref_price=(
             float(data["ref_price"]) if data.get("ref_price") is not None else None
+        ),
+        segments=(
+            list(data["segments"]) if isinstance(data.get("segments"), list) else None
+        ),
+        strategy_pulse=(
+            dict(data["strategy_pulse"])
+            if isinstance(data.get("strategy_pulse"), dict)
+            else None
         ),
     )
 

@@ -1,7 +1,9 @@
 # Назначение файла: DTO REST-эндпоинтов аналитики / backfill (Slice 7.1).
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class PriceIndexPointDTO(BaseModel):
@@ -58,3 +60,66 @@ class TopListingsResponse(BaseModel):
 
     run_id: str
     listings: list[ListingSeriesDTO]
+
+
+# --- Spec 014 §6–§7 ---
+
+
+class SegmentRowDTO(BaseModel):
+    segment: Literal["rich", "standard", "low"]
+    n_buyers: int
+    n_active: int
+    mean_budget_effective: float
+    mean_budget_baseline: float
+    mean_freq_effective: float
+    mean_scar_factor: float
+    churn_share: float
+
+
+class SegmentHealthResponse(BaseModel):
+    run_id: str
+    tick_id: int
+    rows: list[SegmentRowDTO] = Field(default_factory=list)
+
+
+class StrategyPulseRowDTO(BaseModel):
+    strategy_type: str
+    avg_demand_index: float
+    n_listings: int = 0
+
+
+class StrategyPulseResponse(BaseModel):
+    run_id: str
+    tick_id: int
+    panic_active: bool = False
+    strategies: list[StrategyPulseRowDTO] = Field(default_factory=list)
+
+
+class ListingRankingBreakdownDTO(BaseModel):
+    seller_id: int
+    listing_id: int
+    w1: float
+    w2: float
+    w3: float
+    rating: float
+    price_term: float
+    sales_term: float
+    term_rating: float
+    term_price: float
+    term_sales: float
+    score: float
+
+
+class CategoryRankingRowDTO(BaseModel):
+    category_id: int
+    n_listings: int
+    median_score: float
+    median_price: float
+    sales_window_sum: float
+    top_listing_ids: list[int] = Field(default_factory=list)
+
+
+class CategoryRankingResponse(BaseModel):
+    run_id: str
+    tick_id: int
+    rows: list[CategoryRankingRowDTO] = Field(default_factory=list)

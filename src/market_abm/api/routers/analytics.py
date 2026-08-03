@@ -9,15 +9,25 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.api.schemas.analytics import (
+    CategoryRankingResponse,
+    CategoryRankingRowDTO,
     GmvByTickResponse,
     GmvPointDTO,
     ListingMetricPointDTO,
+    ListingRankingBreakdownDTO,
     ListingSeriesDTO,
     PriceIndexPointDTO,
     PriceIndexResponse,
+    SegmentHealthResponse,
+    SegmentRowDTO,
+    StrategyPulseResponse,
+    StrategyPulseRowDTO,
     TopListingsResponse,
 )
+from market_abm.analytics.category_ranking import aggregate_category_ranking
 from market_abm.analytics.leaders import query_demand_matrix, query_market_leaders
+from market_abm.analytics.ranking_breakdown import compute_listing_ranking_breakdown
+from market_abm.analytics.segments import aggregate_segment_health  # noqa: F401 — patch target 14.4-T4
 from market_abm.api.schemas.events import SystemEventDTO, SystemEventsResponse
 from market_abm.api.schemas.stream import MarketAggregateDTO, PriceQuantilesDTO
 from market_abm.api.schemas.ticker import (
@@ -243,4 +253,164 @@ async def get_demand_matrix(
         axis_x=str(raw["axis_x"]),
         axis_y=str(raw["axis_y"]),
         cells=cells,
+    )
+
+
+def _segment_memory(request: Request) -> Any:
+    return getattr(request.app.state, "segment_memory", None)
+
+
+def _strategy_pulse_memory(request: Request) -> Any:
+    return getattr(request.app.state, "strategy_pulse_memory", None)
+
+
+def _worker_observability_snapshot(request: Request) -> Any:
+    worker = getattr(request.app.state, "worker", None)
+    reader = getattr(worker, "read_macro_snapshot", None) if worker is not None else None
+    if callable(reader):
+        snap = reader()
+        if snap is not None and isinstance(getattr(snap, "macro_state", None), dict):
+            return snap
+    return None
+
+
+@router.get("/segments", response_model=SegmentHealthResponse)
+async def get_segments(
+    request: Request,
+    tick_id: int | None = Query(None, ge=0),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> SegmentHealthResponse:
+    """O(1) read of precomputed segment health (Spec 014 §7.1)."""
+    memory = _segment_memory(request)
+    rows_raw: list[dict[str, object]] | None = None
+    resolved_tick = tick_id if tick_id is not None else 0
+    if memory is not None:
+        rows_raw = memory.read(tick_id)
+        if rows_raw is not None and tick_id is None:
+            resolved_tick = int(getattr(memory, "_latest_tick", 0) or 0)
+        elif tick_id is not None:
+            resolved_tick = tick_id
+    if rows_raw is None:
+        snap = _worker_observability_snapshot(request)
+        if snap is not None and isinstance(getattr(snap, "segments", None), list):
+            rows_raw = list(snap.segments)
+            resolved_tick = int(getattr(snap, "tick_id", resolved_tick))
+    if rows_raw is None:
+        return SegmentHealthResponse(
+            run_id=_run_id_from_store(store),
+            tick_id=resolved_tick,
+            rows=[],
+        )
+    rows = [SegmentRowDTO.model_validate(row) for row in rows_raw]
+    return SegmentHealthResponse(
+        run_id=_run_id_from_store(store),
+        tick_id=resolved_tick,
+        rows=rows,
+    )
+
+
+@router.get("/strategy-pulse", response_model=StrategyPulseResponse)
+async def get_strategy_pulse(
+    request: Request,
+    tick_id: int | None = Query(None, ge=0),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> StrategyPulseResponse:
+    """Precomputed avg demand_index by strategy (Spec 014 §6.1)."""
+    memory = _strategy_pulse_memory(request)
+    payload: dict[str, object] | None = None
+    resolved_tick = tick_id if tick_id is not None else 0
+    if memory is not None:
+        payload = memory.read(tick_id)
+        if payload is not None:
+            resolved_tick = int(payload.get("tick_id", resolved_tick))
+    if payload is None:
+        snap = _worker_observability_snapshot(request)
+        if snap is not None and isinstance(getattr(snap, "strategy_pulse", None), dict):
+            payload = dict(snap.strategy_pulse)
+            resolved_tick = int(payload.get("tick_id", getattr(snap, "tick_id", resolved_tick)))
+    if payload is None:
+        return StrategyPulseResponse(
+            run_id=_run_id_from_store(store),
+            tick_id=resolved_tick,
+            panic_active=False,
+            strategies=[],
+        )
+    strategies = [
+        StrategyPulseRowDTO.model_validate(row) for row in (payload.get("strategies") or [])
+    ]
+    return StrategyPulseResponse(
+        run_id=_run_id_from_store(store),
+        tick_id=resolved_tick,
+        panic_active=bool(payload.get("panic_active", False)),
+        strategies=strategies,
+    )
+
+
+@router.get("/listing-ranking", response_model=ListingRankingBreakdownDTO)
+async def get_listing_ranking(
+    request: Request,
+    seller_id: int = Query(..., ge=0),
+    tick_id: int = Query(0, ge=0),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> ListingRankingBreakdownDTO:
+    """Ranking score breakdown for seller primary listing (Spec 014 §6.2)."""
+    products = getattr(request.app.state, "ranking_products", None)
+    if products is None and store is not None:
+        try:
+            products = store.products_snapshot_at_tick(tick_id)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            products = None
+    if products is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="No products for ranking breakdown")
+    breakdown = compute_listing_ranking_breakdown(products, seller_id=seller_id)
+    if breakdown is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Seller listing not found")
+    return ListingRankingBreakdownDTO.model_validate(breakdown)
+
+
+def _products_for_category_ranking(
+    request: Request,
+    store: AnalyticsStore | None,
+    tick_id: int,
+) -> pl.DataFrame | None:
+    """Prefer injected products; else full parquet snapshot (category/rating columns)."""
+    products = getattr(request.app.state, "ranking_products", None)
+    if products is not None:
+        return products
+    if store is None:
+        return None
+    path = store._run_root / "products_snapshots" / f"tick_{int(tick_id):06d}.parquet"
+    if path.is_file():
+        return pl.read_parquet(path)
+    # Fallback: latest tick file if exact missing
+    files = sorted((store._run_root / "products_snapshots").glob("tick_*.parquet"))
+    if files:
+        return pl.read_parquet(files[-1])
+    return None
+
+
+@router.get("/category-ranking", response_model=CategoryRankingResponse)
+async def get_category_ranking(
+    request: Request,
+    tick_id: int = Query(0, ge=0),
+    store: AnalyticsStore | None = Depends(_get_analytics_store),
+) -> CategoryRankingResponse:
+    """Per-category median score / price / sales (Spec 014 §7.2)."""
+    products = _products_for_category_ranking(request, store, tick_id)
+    if products is None or products.height == 0:
+        return CategoryRankingResponse(
+            run_id=_run_id_from_store(store),
+            tick_id=tick_id,
+            rows=[],
+        )
+    rows_raw = aggregate_category_ranking(products)
+    rows = [CategoryRankingRowDTO.model_validate(row) for row in rows_raw]
+    return CategoryRankingResponse(
+        run_id=_run_id_from_store(store),
+        tick_id=tick_id,
+        rows=rows,
     )
