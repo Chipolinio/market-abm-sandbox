@@ -20,6 +20,7 @@ from market_abm.domain.constants import COL_BASE_COMMISSION, PLATFORM_DEFAULTS
 from market_abm.population.buyers import generate_buyers
 from market_abm.population.sellers import generate_sellers
 from market_abm.simulation.listings import initialize_listings
+from market_abm.simulation.ml_assignment import assign_ml_sellers
 from market_abm.simulation.runner import run_simulation
 
 # In-process isolation probe for tests / soft reset (Spec 015 §4.3.1).
@@ -70,21 +71,36 @@ def _execute_one_run(task: dict[str, Any]) -> dict[str, Any]:
     run_root.mkdir(parents=True, exist_ok=True)
 
     warnings: list[str] = []
-    # ml_seller_share wiring is Spec 015.3 — record share in meta only for 15.1.
-    if ml_share > 0.0:
-        warnings.append("ml_share_recorded_pending_assignment_slice")
-
-    buyers = generate_buyers(
-        BuyerPopulationConfig.default_market(n_buyers=n_buyers, seed=seed)
-    )
     sellers = generate_sellers(
         SellerPopulationConfig.default_market(n_sellers=n_sellers, seed=seed)
+    )
+    sellers = assign_ml_sellers(sellers, share=ml_share, seed=seed)
+    buyers = generate_buyers(
+        BuyerPopulationConfig.default_market(n_buyers=n_buyers, seed=seed)
     )
     listings = initialize_listings(
         sellers,
         ListingInitConfig.default_market(),
         seed=seed,
     )
+    # Ablation: share>0 → hybrid mode; share==0 → rules (column already all False).
+    if ml_share > 0.0:
+        from market_abm.config.ml_repricing import CatBoostRepricingConfig
+
+        repricing = RepricingConfig.default_market().model_copy(
+            update={
+                "mode": "hybrid",
+                "ml_seller_share": ml_share,
+                "ml": CatBoostRepricingConfig(),
+                "warmup_ticks": 0,
+            }
+        )
+        warnings.append("ml_share_active_registry_may_fallback")
+    else:
+        repricing = RepricingConfig.default_market().model_copy(
+            update={"ml_seller_share": 0.0}
+        )
+
     config = SimulationRunConfig(
         seed=seed,
         choice=ChoiceModelConfig(
@@ -92,7 +108,7 @@ def _execute_one_run(task: dict[str, Any]) -> dict[str, Any]:
             max_products_per_choice_set=min(50, max(n_sellers * 2, 8)),
             buyers_batch_size=max(n_buyers, 200),
         ),
-        repricing=RepricingConfig.default_market(),
+        repricing=repricing,
         runtime_mode=runtime_mode,
         persistence=PersistenceConfig(enabled=False, base_dir=str(run_root)),
     )

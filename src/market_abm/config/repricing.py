@@ -116,6 +116,12 @@ class RepricingConfig(BaseModel):
     min_listing_price: float = Field(default=MIN_LISTING_PRICE_DEFAULT, ge=0.0)
     mode: RepricingMode = "rules"
     warmup_ticks: int = Field(default=15, ge=0)
+    ml_seller_share: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Fraction of sellers on CatBoost path (Spec 015 ablation)",
+    )
     ml: CatBoostRepricingConfig | None = None
     stress: StressRepricingConfig = Field(default_factory=StressRepricingConfig)
     competitor: CompetitorTrackingConfig = Field(default_factory=CompetitorTrackingConfig)

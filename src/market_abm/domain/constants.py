@@ -108,6 +108,9 @@ STRATEGY_LOGIC_STATUS: Final[dict[str, str]] = {
     "RatingMaximizer": LOGIC_STATUS_RATING_DEFENSE,
 }
 
+# Optional ablation flag (Spec 015) — not part of required SELLERS_COLUMNS schema.
+COL_USES_ML: Final = "uses_ml"
+
 SELLERS_COLUMNS: Final[tuple[str, ...]] = (
     COL_SELLER_ID,
     COL_STRATEGY_TYPE,

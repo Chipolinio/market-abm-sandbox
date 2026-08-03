@@ -34,6 +34,7 @@ from market_abm.domain.constants import (
     COL_STOCK_UNITS,
     COL_TICK_ID,
     COL_UNIT_COST,
+    COL_USES_ML,
     LISTINGS_COLUMNS,
     PRODUCTS_COLUMNS,
     SELLERS_COLUMNS,
@@ -54,6 +55,7 @@ from market_abm.simulation.inventory import (
     compute_holding_by_seller,
     filter_in_stock,
 )
+from market_abm.simulation.ml_assignment import assign_ml_sellers
 from market_abm.simulation.ranking import compute_ranking_scores
 from market_abm.simulation.rating import update_rating_ema
 from market_abm.simulation.ref_price import (
@@ -287,6 +289,35 @@ def _rules_repricing(
     )
 
 
+def _append_warning(warnings_out: list[str] | None, message: str) -> None:
+    if warnings_out is not None and message not in warnings_out:
+        warnings_out.append(message)
+
+
+def _resolve_sellers_with_ml_flag(
+    sellers_df: pl.DataFrame,
+    config: SimulationStepConfig,
+) -> pl.DataFrame:
+    """
+    Ensure uses_ml column exists.
+    Spec 015: respect explicit column / ml_seller_share.
+    Spec 005 compat: mode catboost|hybrid + share==0 + no column → treat as share=1.0.
+    """
+    if COL_USES_ML in sellers_df.columns:
+        return sellers_df
+    mode = config.repricing.mode
+    share = float(config.repricing.ml_seller_share)
+    if mode == "rules":
+        share = 0.0
+    elif mode in ("catboost", "hybrid") and share == 0.0:
+        share = 1.0
+    return assign_ml_sellers(
+        sellers_df,
+        share=share,
+        seed=0 if config.seed is None else int(config.seed),
+    )
+
+
 def _reprice_to_products(
     sellers_df: pl.DataFrame,
     products_with_demand: pl.DataFrame,
@@ -297,6 +328,7 @@ def _reprice_to_products(
     simulation_context: SimulationContext | None = None,
     shock_catalog: ShockCatalogConfig | None = None,
     ml_runtime: MlRuntimeConfig | None = None,
+    warnings_out: list[str] | None = None,
 ) -> pl.DataFrame:
     """Выбирает rules/ML-путь репрайса и пришивает карточные фичи обратно в products."""
     catalog = shock_catalog or ShockCatalogConfig()
@@ -317,30 +349,61 @@ def _reprice_to_products(
     if COL_PROMOTION_ANCHOR in products_with_demand.columns:
         listing_cols = [*listing_cols, COL_PROMOTION_ANCHOR]
     listings = products_with_demand.select(listing_cols)
-    if _use_ml_path(config, ml_registry):
+
+    sellers_work = _resolve_sellers_with_ml_flag(sellers_df, config)
+    ml_ids = sellers_work.filter(pl.col(COL_USES_ML)).get_column(COL_SELLER_ID)
+    any_ml = int(ml_ids.len()) > 0
+    mode = config.repricing.mode
+    if mode in ("catboost", "hybrid") and any_ml:
+        if config.tick_id < config.repricing.warmup_ticks:
+            _append_warning(warnings_out, "ml_fallback_rules: reason=warmup")
+        elif ml_registry is None:
+            _append_warning(warnings_out, "ml_fallback_rules: reason=missing_registry")
+
+    ml_ready = _use_ml_path(config, ml_registry) and any_ml
+    if ml_ready:
         if analytics_store is None:
             raise ValueError(
                 "analytics_store is required for ML repricing (mode="
                 f"{config.repricing.mode!r}, tick={config.tick_id})"
             )
-        repriced = _ml_reprice(
-            sellers_df,
-            listings,
-            config,
-            ml_registry=ml_registry,
-            analytics_store=analytics_store,
-            ml_runtime=ml_runtime,
-        )
-        if repriced is None:
-            repriced = _rules_repricing(
-                sellers_df,
-                listings,
+        ml_id_list = ml_ids.to_list()
+        ml_listings = listings.filter(pl.col(COL_SELLER_ID).is_in(ml_id_list))
+        rules_listings = listings.filter(~pl.col(COL_SELLER_ID).is_in(ml_id_list))
+        ml_sellers = sellers_work.filter(pl.col(COL_USES_ML))
+        rules_sellers = sellers_work.filter(~pl.col(COL_USES_ML))
+        parts: list[pl.DataFrame] = []
+        if ml_listings.height > 0:
+            repriced_ml = _ml_reprice(
+                ml_sellers,
+                ml_listings,
                 config,
-                simulation_context=simulation_context,
+                ml_registry=ml_registry,
+                analytics_store=analytics_store,
+                ml_runtime=ml_runtime,
             )
+            if repriced_ml is None:
+                _append_warning(warnings_out, "ml_fallback_rules: reason=predict_failed")
+                repriced_ml = _rules_repricing(
+                    ml_sellers,
+                    ml_listings,
+                    config,
+                    simulation_context=simulation_context,
+                )
+            parts.append(repriced_ml)
+        if rules_listings.height > 0:
+            parts.append(
+                _rules_repricing(
+                    rules_sellers,
+                    rules_listings,
+                    config,
+                    simulation_context=simulation_context,
+                )
+            )
+        repriced = parts[0] if len(parts) == 1 else pl.concat(parts, how="vertical")
     else:
         repriced = _rules_repricing(
-            sellers_df,
+            sellers_work,
             listings,
             config,
             simulation_context=simulation_context,
@@ -435,6 +498,7 @@ def step(
     ml_registry: CatBoostModelRegistry | None = None,
     analytics_store: AnalyticsStore | None = None,
     ml_runtime: MlRuntimeConfig | None = None,
+    warnings_out: list[str] | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None, SimulationContext | None]:
     """
     Выполняет один тик: шоки → filter bankrupt → ranking → ref → choice → tx → windows.
@@ -481,6 +545,7 @@ def step(
             simulation_context=simulation_context,
             shock_catalog=catalog,
             ml_runtime=ml_runtime,
+            warnings_out=warnings_out,
         )
         products_next = drop_promotion_columns(products_next)
         return (
@@ -512,6 +577,7 @@ def step(
             simulation_context=simulation_context,
             shock_catalog=catalog,
             ml_runtime=ml_runtime,
+            warnings_out=warnings_out,
         )
         ctx_next = simulation_context
         if ctx_next is not None:
@@ -624,6 +690,7 @@ def step(
         simulation_context=simulation_context,
         shock_catalog=catalog,
         ml_runtime=ml_runtime,
+        warnings_out=warnings_out,
     )
     products_next = drop_promotion_columns(products_next)
     return (
