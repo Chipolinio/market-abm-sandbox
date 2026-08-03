@@ -137,7 +137,7 @@ def _step_metrics(
         buyers, products.clone(), simulation_context, catalog
     )
     active = _select_active_buyers(buyers_work, rng).height
-    products_next, tx, _ = step(
+    products_next, tx, _, _ = step(
         buyers,
         sellers,
         products,

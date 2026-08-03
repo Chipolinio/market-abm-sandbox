@@ -165,7 +165,7 @@ def run_simulation(
                 current_median_p50=median_listing_price(products_df),
             )
 
-        products_next, transactions_df, sellers_state_next = step(
+        products_next, transactions_df, sellers_state_next, sim_ctx_next = step(
             buyers_runtime,
             sellers_df,
             products_df,
@@ -179,12 +179,15 @@ def run_simulation(
         products_df = products_next
 
         if extended_state is not None and sellers_state_next is not None:
+            ctx_after = (
+                sim_ctx_next
+                if sim_ctx_next is not None
+                else extended_state.simulation_context
+            )
             extended_state = replace(
                 extended_state,
                 sellers_state_df=sellers_state_next,
-                simulation_context=with_tick_id(
-                    extended_state.simulation_context, tick_id + 1
-                ),
+                simulation_context=with_tick_id(ctx_after, tick_id + 1),
             )
             from market_abm.simulation.context import tick_down_active_shocks
 
@@ -292,7 +295,7 @@ def _stream_extended_persist(
             rating=config.rating,
         )
         sim_ctx = with_tick_id(extended_state.simulation_context, tick_id)
-        products_next, transactions_df, sellers_state_next = step(
+        products_next, transactions_df, sellers_state_next, sim_ctx_next = step(
             buyers_df,
             sellers_df,
             products_df,
@@ -310,7 +313,7 @@ def _stream_extended_persist(
         extended_state = replace(
             extended_state,
             sellers_state_df=sellers_state_next,
-            simulation_context=sim_ctx,
+            simulation_context=sim_ctx_next if sim_ctx_next is not None else sim_ctx,
         )
         extended_state = persist_extended_tick(
             run_root,

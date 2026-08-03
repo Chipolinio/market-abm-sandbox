@@ -33,6 +33,10 @@ class SimulationContext:
     macro: MacroState = field(default_factory=MacroState.empty)
     pre_crisis_price_index: float | None = None
     pending_demand_impulse_logs: tuple[DemandImpulseLog, ...] = ()
+    # Spec 013 §5 / §7: rolling realism windows (frozen-friendly tuples)
+    tx_p50_window: tuple[float, ...] = ()
+    # Per-tick sales: ((listing_id, count), ...), ring of last W ticks
+    sales_counts_ring: tuple[tuple[tuple[int, int], ...], ...] = ()
 
 
 def default_simulation_context(*, tick_id: int = 0) -> SimulationContext:

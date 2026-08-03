@@ -278,7 +278,7 @@ def _price_by_listing(products_df: pl.DataFrame) -> dict[int, float]:
 def test_step_ml_mode_changes_price(tmp_path: Path) -> None:
     store, buyers, sellers, products = _setup(tmp_path, "ml-t1")
     try:
-        prod_ml, _, _ = step(
+        prod_ml, _, _, _ = step(
             buyers,
             sellers,
             products,
@@ -288,7 +288,7 @@ def test_step_ml_mode_changes_price(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    prod_rules, _, _ = step(buyers, sellers, products, _rules_config(tick_id=10))
+    prod_rules, _, _, _ = step(buyers, sellers, products, _rules_config(tick_id=10))
 
     ml_prices = _price_by_listing(prod_ml)
     rules_prices = _price_by_listing(prod_rules)
@@ -305,7 +305,7 @@ def test_step_ml_mode_changes_price(tmp_path: Path) -> None:
 def test_step_warmup_uses_rules(tmp_path: Path) -> None:
     store, buyers, sellers, products = _setup(tmp_path, "ml-t2")
     try:
-        prod_ml, _, _ = step(
+        prod_ml, _, _, _ = step(
             buyers,
             sellers,
             products,
@@ -315,7 +315,7 @@ def test_step_warmup_uses_rules(tmp_path: Path) -> None:
         )
     finally:
         store.close()
-    prod_rules, _, _ = step(buyers, sellers, products, _rules_config(tick_id=2))
+    prod_rules, _, _, _ = step(buyers, sellers, products, _rules_config(tick_id=2))
 
     assert _price_by_listing(prod_ml) == pytest.approx(_price_by_listing(prod_rules))
 
@@ -327,8 +327,8 @@ def test_step_rules_mode_unchanged_regression(tmp_path: Path) -> None:
     store, buyers, sellers, products = _setup(tmp_path, "ml-t3")
     config = _rules_config(tick_id=10)
     try:
-        prod_plain, _, _ = step(buyers, sellers, products, config)
-        prod_with_ml_args, _, _ = step(
+        prod_plain, _, _, _ = step(buyers, sellers, products, config)
+        prod_with_ml_args, _, _, _ = step(
             buyers,
             sellers,
             products,
@@ -367,7 +367,7 @@ def test_step_ml_without_store_raises(tmp_path: Path) -> None:
 def test_p_min_still_enforced(tmp_path: Path) -> None:
     store, buyers, sellers, products = _setup(tmp_path, "ml-t5")
     try:
-        prod_ml, _, _ = step(
+        prod_ml, _, _, _ = step(
             buyers,
             sellers,
             products,

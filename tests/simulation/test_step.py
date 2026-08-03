@@ -131,7 +131,7 @@ def test_step_returns_products_and_transactions_with_expected_columns() -> None:
     buyers = _buyers_df(5)
     sellers = _sellers_df([0], ["MaxProfit"])
     products = _products_df([0], [100.0])
-    products_next, transactions, _ = step(buyers, sellers, products, _step_config())
+    products_next, transactions, _, _ = step(buyers, sellers, products, _step_config())
     assert products_next.height == products.height
     # Spec 013: ranking_score is an ephemeral extra column on live products_next
     assert set(PRODUCTS_COLUMNS).issubset(products_next.columns)
@@ -142,7 +142,7 @@ def test_transactions_reference_valid_buyer_and_listing_ids() -> None:
     buyers = _buyers_df(3)
     sellers = _sellers_df([0], ["MaxProfit"])
     products = _products_df([0], [50.0])
-    _, transactions, _ = step(buyers, sellers, products, _step_config(seed=7))
+    _, transactions, _, _ = step(buyers, sellers, products, _step_config(seed=7))
     if transactions.height == 0:
         pytest.skip("no purchases in this random draw")
     assert set(transactions[COL_BUYER_ID].to_list()).issubset(set(buyers[COL_BUYER_ID].to_list()))
@@ -153,7 +153,7 @@ def test_step_prices_stay_above_floor() -> None:
     buyers = _buyers_df(10)
     sellers = _sellers_df([0, 1], ["MaxProfit", "MaxVolume"])
     products = _products_df([0, 1], [100.0, 100.0])
-    products_next, _, _ = step(buyers, sellers, products, _step_config(seed=11))
+    products_next, _, _, _ = step(buyers, sellers, products, _step_config(seed=11))
     joined = products_next.join(
         sellers.select([COL_SELLER_ID, COL_MARGIN_FLOOR]),
         on=COL_SELLER_ID,
@@ -170,7 +170,7 @@ def test_demand_index_uses_normalized_sales_formula() -> None:
     sellers = _sellers_df([0, 1], ["MaxProfit", "MaxProfit"])
     products = _products_df([0, 1], [30.0, 200.0])
     cfg = _step_config(seed=5)
-    products_next, transactions, _ = step(buyers, sellers, products, cfg)
+    products_next, transactions, _, _ = step(buyers, sellers, products, cfg)
     n_active = buyers.height
     expected = n_active / products.height
     sales = (
@@ -208,7 +208,7 @@ def test_rules_repricing_respects_warmup_ticks() -> None:
         tick_id=2,
         repricing=RepricingConfig.default_market().model_copy(update={"warmup_ticks": 5}),
     )
-    products_next, _, _ = step(buyers, sellers, products, cfg)
+    products_next, _, _, _ = step(buyers, sellers, products, cfg)
     assert products_next[COL_PRICE].to_list() == pytest.approx(products[COL_PRICE].to_list())
 
 
@@ -217,7 +217,7 @@ def test_rating_maximizer_price_unchanged_on_active_tick() -> None:
     sellers = _sellers_df([0, 1], ["RatingMaximizer", "MaxProfit"], speeds=[1, 1])
     products = _products_df([0, 1], [100.0, 100.0], demands=[1.5, 1.5])
     cfg = _step_config(seed=3, tick_id=1)
-    products_next, _, _ = step(buyers, sellers, products, cfg)
+    products_next, _, _, _ = step(buyers, sellers, products, cfg)
     rating_price = products_next.filter(pl.col(COL_SELLER_ID) == 0)[COL_PRICE].item()
     assert rating_price == pytest.approx(100.0)
 
@@ -227,7 +227,7 @@ def test_empty_products_returns_empty_transactions() -> None:
     sellers = _sellers_df([0], ["MaxProfit"])
     schema = {name: getattr(pl, dtype) for name, dtype in PRODUCTS_SCHEMA_DTYPES.items()}
     products = pl.DataFrame({col: [] for col in PRODUCTS_COLUMNS}, schema=schema)
-    products_next, transactions, _ = step(buyers, sellers, products, _step_config())
+    products_next, transactions, _, _ = step(buyers, sellers, products, _step_config())
     assert products_next.height == 0
     assert transactions.height == 0
 

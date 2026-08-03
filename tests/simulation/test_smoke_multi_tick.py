@@ -73,7 +73,7 @@ def test_smoke_three_ticks_end_to_end() -> None:
             choice=choice_cfg,
             repricing=repricing_cfg,
         )
-        products, transactions, _ = step(buyers, sellers, products, config)
+        products, transactions, _, _ = step(buyers, sellers, products, config)
 
         assert products.height == n_sellers
         # Spec 013: ranking_score is an ephemeral extra column on live products

@@ -326,7 +326,7 @@ class LiveSimulationSession:
             repricing=self._config.repricing,
             economics=self._config.economics,
         )
-        products_next, transactions_df, sellers_state_next = step(
+        products_next, transactions_df, sellers_state_next, sim_ctx_next = step(
             self._buyers_df,
             self._sellers_df,
             self._products_df,
@@ -346,7 +346,7 @@ class LiveSimulationSession:
         self._extended_state = replace(
             self._extended_state,
             sellers_state_df=sellers_state_next,
-            simulation_context=sim_ctx,
+            simulation_context=sim_ctx_next if sim_ctx_next is not None else sim_ctx,
         )
         self._extended_state = persist_extended_tick(
             self._run_root,

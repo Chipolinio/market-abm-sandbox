@@ -41,8 +41,15 @@ from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
+from market_abm.simulation.context import SimulationContext
 from market_abm.simulation.ranking import compute_ranking_scores
 from market_abm.simulation.rating import update_rating_ema
+from market_abm.simulation.ref_price import (
+    DEFAULT_SALES_WINDOW_TICKS,
+    advance_realism_windows,
+    aggregate_sales_volume_by_listing,
+    resolve_reference_price,
+)
 from market_abm.simulation.repricing import (
     apply_ml_repricing_tick,
     apply_repricing_tick,
@@ -61,7 +68,6 @@ from market_abm.simulation.shocks import (
 
 if TYPE_CHECKING:  # только типы: избегаем цикла ml.__init__ → bootstrap → runner → step
     from market_abm.ml.catboost_repricing import CatBoostModelRegistry
-    from market_abm.simulation.context import SimulationContext
 
 # Соль потока exploration для детерминизма rng в ML-репрайсе (Spec 005 §4.5).
 _EXPLORE_SALT = 0xE5910E
@@ -377,10 +383,12 @@ def step(
     ml_registry: CatBoostModelRegistry | None = None,
     analytics_store: AnalyticsStore | None = None,
     ml_runtime: MlRuntimeConfig | None = None,
-) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None]:
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame | None, SimulationContext | None]:
     """
-    Выполняет один тик: шоки → filter bankrupt → choice → transactions → settle.
+    Выполняет один тик: шоки → filter bankrupt → ranking → ref → choice → tx → windows.
+    Возвращает (products, transactions, sellers_state_next, simulation_context_next).
     sellers_state_next — None если sellers_state_df не передан (backward compat).
+    simulation_context_next — advanced windows если ctx передан, иначе None.
     """
     buyers_df = ensure_buyer_economic_columns(ensure_budget_baseline(buyers_df))
     _validate_buyers_df(buyers_df)
@@ -399,8 +407,11 @@ def step(
 
     if products_pool.height == 0:
         empty_tx = _empty_transactions_df()
-        return products_pool.clone(), empty_tx, _settle_if_needed(
-            sellers_state_df, empty_tx, config
+        return (
+            products_pool.clone(),
+            empty_tx,
+            _settle_if_needed(sellers_state_df, empty_tx, config),
+            simulation_context,
         )
 
     rng = _step_rng(config)
@@ -422,16 +433,32 @@ def step(
             shock_catalog=catalog,
             ml_runtime=ml_runtime,
         )
-        return drop_promotion_columns(products_next), empty_tx, _settle_if_needed(
-            sellers_state_df, empty_tx, config
+        ctx_next = simulation_context
+        if ctx_next is not None:
+            ctx_next = advance_realism_windows(
+                ctx_next,
+                empty_tx,
+                products_pool,
+                ref_cfg=config.choice.reference_price,
+                sales_window_ticks=DEFAULT_SALES_WINDOW_TICKS,
+            )
+        return (
+            drop_promotion_columns(products_next),
+            empty_tx,
+            _settle_if_needed(sellers_state_df, empty_tx, config),
+            ctx_next,
         )
 
     # Spec 013 §4: one ranking precompute/tick → consideration Top-K ∪ Sample-M
-    # Sales window cold-start: None → zeros inside compute_ranking_scores (w3).
+    sales_from_ctx = (
+        aggregate_sales_volume_by_listing(simulation_context)
+        if simulation_context is not None
+        else None
+    )
     ranked = compute_ranking_scores(
         products_pool,
         config.choice.ranking,
-        sales_volume_by_listing=None,
+        sales_volume_by_listing=sales_from_ctx,
     )
     ranking_scores = ranked[COL_RANKING_SCORE].to_numpy()
     if COL_CATEGORY_ID in ranked.columns:
@@ -439,6 +466,13 @@ def step(
     else:
         # Spec 013 §4.3 / §17#5: rating-only scores; still activate consideration path
         category_ids = np.zeros(ranked.height, dtype=np.int32)
+
+    # Spec 013 §5: resolve rolling / cold-start reference price
+    ref_price = resolve_reference_price(
+        simulation_context,
+        ranked,
+        config.choice.reference_price,
+    )
 
     choices = choose_listings_for_all_buyers(
         active_buyers,
@@ -448,12 +482,24 @@ def step(
         segment_elasticity=(
             macro_config.segment_elasticity if macro_config is not None else None
         ),
+        ref_price=ref_price,
         category_ids=category_ids,
         ranking_scores=ranking_scores,
     )
     transactions = _build_transactions_df(
         choices, ranked, tick_id=config.tick_id
     )
+
+    ctx_next = simulation_context
+    if ctx_next is not None:
+        ctx_next = advance_realism_windows(
+            ctx_next,
+            transactions,
+            ranked,
+            ref_cfg=config.choice.reference_price,
+            sales_window_ticks=DEFAULT_SALES_WINDOW_TICKS,
+        )
+
     # Spec 012 §6: EMA rating update from seed-aware reviews after settle
     products_rated = update_rating_ema(
         ranked,
@@ -482,4 +528,5 @@ def step(
         products_next,
         transactions,
         _settle_if_needed(sellers_state_df, transactions, config),
+        ctx_next,
     )

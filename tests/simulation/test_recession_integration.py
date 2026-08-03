@@ -161,7 +161,7 @@ def run_severe_recession(
             repricing=config.repricing,
             economics=config.economics,
         )
-        products_next, transactions_df, sellers_state_next = step(
+        products_next, transactions_df, sellers_state_next, _ = step(
             buyers_runtime,
             sellers_df,
             products_df,

@@ -57,7 +57,7 @@ def test_11_5_t2_slow_ml_predict_falls_back_to_rules(
         ),
     )
     try:
-        products_next, _tx, _state = step(
+        products_next, _tx, _state, _ = step(
             buyers,
             sellers,
             products,
@@ -66,7 +66,7 @@ def test_11_5_t2_slow_ml_predict_falls_back_to_rules(
             analytics_store=store,
             ml_runtime=MlRuntimeConfig(inference_timeout_ms=1.0),
         )
-        products_rules, _, _ = step(
+        products_rules, _, _, _ = step(
             buyers,
             sellers,
             products_before,

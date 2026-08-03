@@ -260,7 +260,7 @@ def test_bankrupt_seller_excluded_from_choice() -> None:
     products = _products_df([0, 1], [50.0, 200.0])
     state = _sellers_state([0, 1], [100.0, 100.0], bankrupt=[True, False])
 
-    _, transactions, _ = step(
+    _, transactions, _, _ = step(
         buyers,
         sellers,
         products,
@@ -278,7 +278,7 @@ def test_step_backward_compat_without_sellers_state() -> None:
     sellers = _sellers_df([0], [100.0])
     products = _products_df([0], [80.0])
 
-    products_next, transactions, state_next = step(
+    products_next, transactions, state_next, _ = step(
         buyers, sellers, products, _step_config(seed=1)
     )
 
