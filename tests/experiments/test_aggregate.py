@@ -80,6 +80,8 @@ def test_15_4_t3_aggregate_by_ml_share(tmp_path: Path) -> None:
     )
     assert price_0.height == 1
     assert float(price_0["mean"][0]) == pytest.approx(11.0)  # mean of run means 10 and 12
+    assert "median" in summary.columns
+    assert float(price_0["median"][0]) == pytest.approx(11.0)
 
 
 def test_15_4_aggregate_experiment_dir_writes_artifacts(tmp_path: Path) -> None:

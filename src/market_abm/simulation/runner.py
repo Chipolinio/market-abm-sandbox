@@ -118,10 +118,17 @@ def run_simulation(
     listings_df: pl.DataFrame,
     n_ticks: int,
     config: SimulationRunConfig,
+    *,
+    ml_registry: object | None = None,
+    analytics_store: object | None = None,
+    ml_runtime: object | None = None,
+    warnings_out: list[str] | None = None,
 ) -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
     """Ленивый цикл рынка: на каждый тик yield (tick_id, products_next, transactions)."""
     if n_ticks < 1:
         raise ValueError("n_ticks must be >= 1")
+    if ml_registry is not None and analytics_store is None:
+        raise ValueError("analytics_store is required when ml_registry is provided")
 
     _validate_listings_df(listings_df)
     rng = _bootstrap_rng(config.seed)
@@ -174,6 +181,10 @@ def run_simulation(
             simulation_context=sim_ctx,
             shock_catalog=config.shock_catalog,
             macro_config=config.macro_dynamics,
+            ml_registry=ml_registry,  # type: ignore[arg-type]
+            analytics_store=analytics_store,  # type: ignore[arg-type]
+            ml_runtime=ml_runtime,  # type: ignore[arg-type]
+            warnings_out=warnings_out,
         )
         products_next = _maybe_rechunk_products(products_next)
         products_df = products_next
@@ -208,14 +219,30 @@ def run_simulation_and_persist(
     listings_df: pl.DataFrame,
     n_ticks: int,
     config: SimulationRunConfig,
+    *,
+    ml_registry: object | None = None,
+    ml_runtime: object | None = None,
+    warnings_out: list[str] | None = None,
 ) -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
     """
     Как run_simulation, но при persistence.enabled пишет parquet до каждого yield.
     init_run_directory выполняется при вызове функции (до первого next).
     Без итерации step не выполняется; tick_*.parquet не создаются.
+    When ml_registry is set, AnalyticsStore is opened on the run root so ML features
+    see prior-tick parquet (Spec 015 research ablation).
     """
     if not config.persistence.enabled:
-        return run_simulation(buyers_df, sellers_df, listings_df, n_ticks, config)
+        return run_simulation(
+            buyers_df,
+            sellers_df,
+            listings_df,
+            n_ticks,
+            config,
+            ml_registry=ml_registry,
+            analytics_store=None,
+            ml_runtime=ml_runtime,
+            warnings_out=warnings_out,
+        )
 
     if n_ticks < 1:
         raise ValueError("n_ticks must be >= 1")
@@ -230,6 +257,11 @@ def run_simulation_and_persist(
         n_ticks=n_ticks,
     )
     con = open_duckdb_connection(config.persistence)
+    analytics_store = None
+    if ml_registry is not None:
+        from market_abm.analytics.store import AnalyticsStore
+
+        analytics_store = AnalyticsStore(ctx.run_root)
 
     def _stream() -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
         try:
@@ -243,10 +275,22 @@ def run_simulation_and_persist(
                     run_root=ctx.run_root,
                     run_id=run_id,
                     con=con,
+                    ml_registry=ml_registry,
+                    analytics_store=analytics_store,
+                    ml_runtime=ml_runtime,
+                    warnings_out=warnings_out,
                 )
             else:
                 for tick_id, products_next, transactions_df in run_simulation(
-                    buyers_df, sellers_df, listings_df, n_ticks, config
+                    buyers_df,
+                    sellers_df,
+                    listings_df,
+                    n_ticks,
+                    config,
+                    ml_registry=ml_registry,
+                    analytics_store=analytics_store,
+                    ml_runtime=ml_runtime,
+                    warnings_out=warnings_out,
                 ):
                     persist_tick_artifacts(
                         ctx.run_root,
@@ -258,6 +302,8 @@ def run_simulation_and_persist(
                     )
                     yield tick_id, products_next, transactions_df
         finally:
+            if analytics_store is not None:
+                analytics_store.close()
             con.close()
 
     return _stream()
@@ -273,6 +319,10 @@ def _stream_extended_persist(
     run_root,
     run_id: str,
     con,
+    ml_registry: object | None = None,
+    analytics_store: object | None = None,
+    ml_runtime: object | None = None,
+    warnings_out: list[str] | None = None,
 ) -> Generator[tuple[int, pl.DataFrame, pl.DataFrame], None, None]:
     _validate_listings_df(listings_df)
     rng = _bootstrap_rng(config.seed)
@@ -303,6 +353,10 @@ def _stream_extended_persist(
             sellers_state_df=extended_state.sellers_state_df,
             simulation_context=sim_ctx,
             shock_catalog=config.shock_catalog,
+            ml_registry=ml_registry,  # type: ignore[arg-type]
+            analytics_store=analytics_store,  # type: ignore[arg-type]
+            ml_runtime=ml_runtime,  # type: ignore[arg-type]
+            warnings_out=warnings_out,
         )
         products_next = _maybe_rechunk_products(products_next)
         products_df = products_next

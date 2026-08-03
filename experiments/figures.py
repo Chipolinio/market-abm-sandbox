@@ -32,9 +32,10 @@ def _save_both(fig: plt.Figure, out_dir: Path, fig_id: str) -> dict[str, Path]:
 
 
 def render_f1_price_path(tick_path: pl.DataFrame, out_dir: Path) -> dict[str, Path]:
-    """F1: median price vs tick for selected ml_share series + CI band."""
+    """F1: price vs tick by ml_share — prefers median+IQR band when present."""
     fig, ax = plt.subplots(figsize=(6.5, 3.8))
     shares = sorted(tick_path["ml_share"].unique().to_list())
+    use_robust = "median" in tick_path.columns and "q25" in tick_path.columns
     for share in shares:
         style = F1_SERIES_STYLES.get(
             float(share),
@@ -47,9 +48,14 @@ def render_f1_price_path(tick_path: pl.DataFrame, out_dir: Path) -> dict[str, Pa
         )
         sub = tick_path.filter(pl.col("ml_share") == share).sort("tick_id")
         x = sub["tick_id"].to_numpy()
-        y = sub["mean"].to_numpy()
-        lo = sub["lo"].to_numpy() if "lo" in sub.columns else y
-        hi = sub["hi"].to_numpy() if "hi" in sub.columns else y
+        if use_robust:
+            y = sub["median"].to_numpy()
+            lo = sub["q25"].to_numpy()
+            hi = sub["q75"].to_numpy()
+        else:
+            y = sub["mean"].to_numpy()
+            lo = sub["lo"].to_numpy() if "lo" in sub.columns else y
+            hi = sub["hi"].to_numpy() if "hi" in sub.columns else y
         ax.fill_between(x, lo, hi, color=style["color"], alpha=0.15)
         ax.plot(
             x,
@@ -62,20 +68,40 @@ def render_f1_price_path(tick_path: pl.DataFrame, out_dir: Path) -> dict[str, Pa
             linewidth=1.5,
         )
     ax.set_xlabel("Tick")
-    ax.set_ylabel("Median price")
-    ax.set_title("F1: Price path around shock")
+    ax.set_ylabel("Median price" + (" (run median ± IQR)" if use_robust else ""))
+    ax.set_title("F1: Price path by ML share")
     ax.legend(frameon=False, fontsize=8)
     ax.grid(True, linestyle=":", alpha=0.4)
     return _save_both(fig, out_dir, "F1")
 
 
+def _summary_yerr(sub: pl.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Prefer robust median/IQR; fall back to mean/Student-t; clip non-finite."""
+    if "median" in sub.columns and "q25" in sub.columns and "q75" in sub.columns:
+        y = np.asarray(sub["median"].to_numpy(), dtype=np.float64)
+        lo = np.asarray(sub["q25"].to_numpy(), dtype=np.float64)
+        hi = np.asarray(sub["q75"].to_numpy(), dtype=np.float64)
+    else:
+        y = np.asarray(sub["mean"].to_numpy(), dtype=np.float64)
+        lo = np.asarray(sub["lo"].to_numpy(), dtype=np.float64)
+        hi = np.asarray(sub["hi"].to_numpy(), dtype=np.float64)
+    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+    lo = np.nan_to_num(lo, nan=y, posinf=y, neginf=y)
+    hi = np.nan_to_num(hi, nan=y, posinf=y, neginf=y)
+    # Guard exploding CI that breaks axes
+    span = np.maximum(np.abs(y), 1.0)
+    lo = np.maximum(lo, y - 50.0 * span)
+    hi = np.minimum(hi, y + 50.0 * span)
+    return y, lo, hi
+
+
 def render_f2_volatility(summary: pl.DataFrame, out_dir: Path) -> dict[str, Path]:
-    """F2: price_std vs ml_share with CI error bars."""
+    """F2: price_std vs ml_share with robust error bars when available."""
     sub = summary.filter(pl.col("metric") == "price_std").sort("ml_share")
     fig, ax = plt.subplots(figsize=(5.5, 3.6))
     x = sub["ml_share"].to_numpy()
-    y = sub["mean"].to_numpy()
-    yerr = np.vstack([y - sub["lo"].to_numpy(), sub["hi"].to_numpy() - y])
+    y, lo, hi = _summary_yerr(sub)
+    yerr = np.vstack([np.maximum(y - lo, 0.0), np.maximum(hi - y, 0.0)])
     ax.errorbar(
         x,
         y,
@@ -94,16 +120,16 @@ def render_f2_volatility(summary: pl.DataFrame, out_dir: Path) -> dict[str, Path
 
 
 def render_f3_hhi(summary: pl.DataFrame, out_dir: Path) -> dict[str, Path]:
-    """F3: HHI by ml_share (bars + CI)."""
+    """F3: HHI by ml_share (bars + robust CI)."""
     sub = summary.filter(pl.col("metric") == "hhi").sort("ml_share")
     fig, ax = plt.subplots(figsize=(5.5, 3.6))
     x = np.arange(sub.height)
-    y = sub["mean"].to_numpy()
+    y, lo, hi = _summary_yerr(sub)
     labels = [f"{100 * s:.0f}%" for s in sub["ml_share"].to_list()]
     bars = ax.bar(x, y, color="0.7", edgecolor="0.1")
     for i, bar in enumerate(bars):
         bar.set_hatch(_BAR_HATCHES[i % len(_BAR_HATCHES)])
-    yerr = np.vstack([y - sub["lo"].to_numpy(), sub["hi"].to_numpy() - y])
+    yerr = np.vstack([np.maximum(y - lo, 0.0), np.maximum(hi - y, 0.0)])
     ax.errorbar(x, y, yerr=yerr, fmt="none", ecolor="0.1", capsize=3)
     ax.set_xticks(x, labels)
     ax.set_xlabel("ML seller share")
@@ -134,7 +160,12 @@ def render_f4_welfare(summary: pl.DataFrame, out_dir: Path) -> dict[str, Path]:
             row = summary.filter(
                 (pl.col("metric") == metric) & (pl.col("ml_share") == share)
             )
-            vals.append(float(row["mean"][0]) if row.height else 0.0)
+            if row.height == 0:
+                vals.append(0.0)
+            elif "median" in row.columns:
+                vals.append(float(row["median"][0]))
+            else:
+                vals.append(float(row["mean"][0]))
         arr = np.asarray(vals, dtype=np.float64)
         bars = ax.bar(x, arr, bottom=bottom, label=label, edgecolor="0.1", color="0.85")
         for bar in bars:

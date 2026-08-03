@@ -31,6 +31,13 @@ class ExperimentListResponse(BaseModel):
 class ExperimentSummaryResponse(BaseModel):
     experiment_id: str
     rows: list[dict]
+    warnings: list[str] = Field(default_factory=list)
+    figures: list[str] = Field(default_factory=list)
+
+
+class ExperimentFiguresResponse(BaseModel):
+    experiment_id: str
+    figures: list[str] = Field(default_factory=list)
 
 
 class ExperimentRunRequest(BaseModel):
@@ -143,6 +150,26 @@ def list_experiments(request: Request) -> ExperimentListResponse:
     return ExperimentListResponse(experiments=ids)
 
 
+def _read_warnings(exp_dir: Path) -> list[str]:
+    path = exp_dir / "aggregate" / "warnings.json"
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    if isinstance(payload, list):
+        return [str(x) for x in payload]
+    return []
+
+
+def _list_figure_files(exp_dir: Path) -> list[str]:
+    fig_dir = exp_dir / "figures"
+    if not fig_dir.is_dir():
+        return []
+    return sorted(p.name for p in fig_dir.glob("F[1-5].png"))
+
+
 @router.get("/{experiment_id}/summary", response_model=ExperimentSummaryResponse)
 def get_experiment_summary(
     experiment_id: str,
@@ -150,13 +177,35 @@ def get_experiment_summary(
 ) -> ExperimentSummaryResponse:
     experiment_id = _validate_experiment_id(experiment_id)
     root = _experiments_root(request)
-    summary_path = root / experiment_id / "aggregate" / "summary.json"
+    exp_dir = root / experiment_id
+    summary_path = exp_dir / "aggregate" / "summary.json"
     if not summary_path.is_file():
         raise HTTPException(status_code=404, detail="experiment summary not found")
     payload = json.loads(summary_path.read_text(encoding="utf-8"))
     if not isinstance(payload, list):
         raise HTTPException(status_code=500, detail="summary.json must be a list of rows")
-    return ExperimentSummaryResponse(experiment_id=experiment_id, rows=payload)
+    return ExperimentSummaryResponse(
+        experiment_id=experiment_id,
+        rows=payload,
+        warnings=_read_warnings(exp_dir),
+        figures=_list_figure_files(exp_dir),
+    )
+
+
+@router.get("/{experiment_id}/figures", response_model=ExperimentFiguresResponse)
+def list_experiment_figures(
+    experiment_id: str,
+    request: Request,
+) -> ExperimentFiguresResponse:
+    experiment_id = _validate_experiment_id(experiment_id)
+    root = _experiments_root(request)
+    exp_dir = root / experiment_id
+    if not exp_dir.is_dir():
+        raise HTTPException(status_code=404, detail="experiment not found")
+    return ExperimentFiguresResponse(
+        experiment_id=experiment_id,
+        figures=_list_figure_files(exp_dir),
+    )
 
 
 @router.get("/{experiment_id}/figures/{figure_name}")

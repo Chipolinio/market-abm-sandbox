@@ -58,3 +58,18 @@ def test_15_3_t4_assignment_seed_stable() -> None:
     assert a[COL_USES_ML].to_list() == b[COL_USES_ML].to_list()
     c = assign_ml_sellers(_sellers(40), share=0.5, seed=100)
     assert a[COL_USES_ML].to_list() != c[COL_USES_ML].to_list()
+
+
+def test_seller_id_order_is_nested_dose_response() -> None:
+    """seller_id order: share increases expand ML set; seller 0 always early."""
+    low = assign_ml_sellers(_sellers(8), share=0.25, seed=1, order="seller_id")
+    mid = assign_ml_sellers(_sellers(8), share=0.5, seed=1, order="seller_id")
+    high = assign_ml_sellers(_sellers(8), share=0.75, seed=1, order="seller_id")
+    assert int(low[COL_USES_ML].sum()) == 2
+    assert int(mid[COL_USES_ML].sum()) == 4
+    assert int(high[COL_USES_ML].sum()) == 6
+    low_ids = set(low.filter(pl.col(COL_USES_ML))[COL_SELLER_ID].to_list())
+    mid_ids = set(mid.filter(pl.col(COL_USES_ML))[COL_SELLER_ID].to_list())
+    high_ids = set(high.filter(pl.col(COL_USES_ML))[COL_SELLER_ID].to_list())
+    assert low_ids == {0, 1}
+    assert low_ids < mid_ids < high_ids

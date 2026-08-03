@@ -21,6 +21,13 @@ export async function fetchExperimentSummary(
   );
 }
 
+export async function fetchExperimentFigures(experimentId: string): Promise<string[]> {
+  const body = await apiFetch<{ experiment_id: string; figures: string[] }>(
+    `/api/v1/experiments/${encodeURIComponent(experimentId)}/figures`,
+  );
+  return body.figures;
+}
+
 export function experimentFigureUrl(experimentId: string, figureName: string): string {
   return `${apiBaseUrl()}/api/v1/experiments/${encodeURIComponent(experimentId)}/figures/${encodeURIComponent(figureName)}`;
 }

@@ -11,6 +11,7 @@ from scipy import stats
 
 METRIC_COLUMNS: tuple[str, ...] = (
     "median_price",
+    "mean_listing_price",
     "price_std",
     "hhi",
     "consumer_surplus_proxy",
@@ -52,6 +53,19 @@ def student_t_ci95(values: np.ndarray | Sequence[float]) -> tuple[float, float, 
     return mean, float(lo), float(hi)
 
 
+def robust_quartiles(values: np.ndarray | Sequence[float]) -> tuple[float, float, float]:
+    """Returns (median, q25, q75) over finite values."""
+    arr = np.asarray(values, dtype=np.float64).ravel()
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return 0.0, 0.0, 0.0
+    return (
+        float(np.median(arr)),
+        float(np.quantile(arr, 0.25)),
+        float(np.quantile(arr, 0.75)),
+    )
+
+
 def _per_run_metric_means(
     tick_metrics: pl.DataFrame,
     *,
@@ -79,8 +93,8 @@ def aggregate_runs(
 
     runs: sequence of (ml_share, run_index, tick_metrics_df)
     For each run → mean of each metric after burn-in.
-    Across runs with the same ml_share → Student-t mean/lo/hi.
-    Long format columns: metric, ml_share, window, mean, lo, hi, std, n_runs.
+    Across runs with the same ml_share → Student-t mean/lo/hi + robust median/q25/q75.
+    Long format columns: metric, ml_share, window, mean, lo, hi, median, q25, q75, std, n_runs.
     """
     per_share: dict[float, dict[str, list[float]]] = {}
     for ml_share, _run_index, frame in runs:
@@ -94,6 +108,7 @@ def aggregate_runs(
         for metric, values in sorted(metrics.items()):
             arr = np.asarray(values, dtype=np.float64)
             mean, lo, hi = student_t_ci95(arr)
+            med, q25, q75 = robust_quartiles(arr)
             std = float(np.std(arr, ddof=1)) if arr.size > 1 else 0.0
             rows.append(
                 {
@@ -103,6 +118,9 @@ def aggregate_runs(
                     "mean": mean,
                     "lo": lo,
                     "hi": hi,
+                    "median": med,
+                    "q25": q25,
+                    "q75": q75,
                     "std": std,
                     "n_runs": int(arr.size),
                 }

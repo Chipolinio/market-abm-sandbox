@@ -143,9 +143,16 @@ def build_tick_metrics_row(
         if transactions_df.height
         else 0.0
     )
+    # Shelf mean: detects ML share even when purchases monopolize one listing.
+    mean_listing_price = (
+        float(products_df[COL_PRICE].cast(pl.Float64).mean())
+        if products_df.height and COL_PRICE in products_df.columns
+        else 0.0
+    )
     return {
         "tick_id": int(tick_id),
         "median_price": moments["median_price"],
+        "mean_listing_price": mean_listing_price,
         "price_std": moments["price_std"],
         "hhi": compute_tick_hhi(transactions_df),
         "consumer_surplus_proxy": welfare["consumer_surplus_proxy"],

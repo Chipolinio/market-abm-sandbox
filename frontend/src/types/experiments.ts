@@ -6,6 +6,9 @@ export type ExperimentSummaryRow = {
   mean: number;
   lo: number;
   hi: number;
+  median?: number;
+  q25?: number;
+  q75?: number;
   std?: number;
   n_runs?: number;
 };
@@ -13,6 +16,8 @@ export type ExperimentSummaryRow = {
 export type ExperimentSummaryResponse = {
   experiment_id: string;
   rows: ExperimentSummaryRow[];
+  warnings?: string[];
+  figures?: string[];
 };
 
 export type ExperimentPreset = "smoke" | "paper" | "custom";
@@ -64,7 +69,8 @@ export const SMOKE_PRESET: Omit<ExperimentRunRequest, "experiment_id"> = {
   jobs: 2,
   runtime_mode: "legacy",
   n_buyers: 80,
-  n_sellers: 8,
+  // Fine share grids need enough sellers; 8 made mid-shares bit-identical under monopoly.
+  n_sellers: 40,
   base_seed: 10000,
 };
 

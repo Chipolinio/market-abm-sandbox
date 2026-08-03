@@ -210,48 +210,54 @@ def execute_experiment_job(
                 warnings=warnings,
             )
 
-        run_experiment(
+        index = run_experiment(
             manifest,
             jobs=jobs,
             on_progress=_on_progress,
         )
+        # Deduplicate run-level warnings (e.g. ml_registry=research_stub).
+        seen: set[str] = set()
+        for run_meta in index.get("runs", []):
+            for w in run_meta.get("warnings") or []:
+                msg = str(w)
+                if msg not in seen:
+                    seen.add(msg)
+                    warnings.append(msg)
         burn_in = int(request_body.get("burn_in_ticks", 0))
         summary = aggregate_experiment_dir(out, burn_in_ticks=burn_in)
         try:
             from experiments.figures import render_all_figures
+            from experiments.tick_path import write_figure_inputs
             import polars as pl
 
-            # Minimal tick_path / zipf stubs from summary means for paper figures smoke.
-            tick_rows: list[dict[str, Any]] = []
-            for share in manifest.ml_share_grid:
-                mean_row = summary.filter(
-                    (pl.col("metric") == "median_price") & (pl.col("ml_share") == share)
-                )
-                mean = float(mean_row["mean"][0]) if mean_row.height else 10.0
-                for tick in range(min(manifest.n_ticks, 30)):
-                    tick_rows.append(
-                        {
-                            "tick_id": tick,
-                            "ml_share": float(share),
-                            "metric": "median_price",
-                            "mean": mean,
-                            "lo": mean * 0.95,
-                            "hi": mean * 1.05,
-                        }
-                    )
-            zipf_rows = [
-                {"ml_share": 0.0, "rank": r, "sales": 1000.0 / (r**1.1)}
-                for r in range(1, 11)
-            ]
+            fig_meta = write_figure_inputs(out, burn_in_ticks=burn_in)
+            for w in fig_meta.get("warnings", []):
+                msg = str(w)
+                if msg not in seen:
+                    seen.add(msg)
+                    warnings.append(msg)
+            tick_path = pl.read_parquet(out / "aggregate" / "tick_path.parquet")
+            zipf = pl.read_parquet(out / "aggregate" / "zipf.parquet")
             render_all_figures(
                 out / "figures",
                 summary=summary,
-                tick_path=pl.DataFrame(tick_rows),
-                zipf=pl.DataFrame(zipf_rows),
+                tick_path=tick_path,
+                zipf=zipf,
+            )
+            fig_names = sorted(
+                p.name for p in (out / "figures").glob("F*.png")
+            )
+            (out / "aggregate" / "figures_index.json").write_text(
+                json.dumps({"figures": fig_names}, indent=2) + "\n",
+                encoding="utf-8",
             )
         except Exception as exc:  # noqa: BLE001 — figures best-effort
             warnings.append(f"figures_failed: {exc}")
 
+        (out / "aggregate" / "warnings.json").write_text(
+            json.dumps(warnings, indent=2) + "\n",
+            encoding="utf-8",
+        )
         update_job_status(
             experiments_dir,
             job_id,

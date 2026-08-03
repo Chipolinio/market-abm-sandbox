@@ -76,6 +76,24 @@ def test_15_6_experiments_figure_endpoint(tmp_path: Path) -> None:
     _seed_experiment(tmp_path, "paper_grid_v1")
     app = create_app(worker=_worker(), experiments_dir=str(tmp_path))
     client = TestClient(app)
+    listed = client.get("/api/v1/experiments/paper_grid_v1/figures")
+    assert listed.status_code == 200
+    assert "F1.png" in listed.json()["figures"]
     resp = client.get("/api/v1/experiments/paper_grid_v1/figures/F1.png")
     assert resp.status_code == 200
     assert resp.content.startswith(b"\x89PNG")
+
+
+def test_summary_includes_figures_and_warnings(tmp_path: Path) -> None:
+    exp = _seed_experiment(tmp_path, "paper_grid_v1")
+    (exp / "aggregate" / "warnings.json").write_text(
+        '["ml_registry=research_stub"]\n',
+        encoding="utf-8",
+    )
+    app = create_app(worker=_worker(), experiments_dir=str(tmp_path))
+    client = TestClient(app)
+    summary = client.get("/api/v1/experiments/paper_grid_v1/summary")
+    assert summary.status_code == 200
+    body = summary.json()
+    assert "F1.png" in body["figures"]
+    assert body["warnings"] == ["ml_registry=research_stub"]
