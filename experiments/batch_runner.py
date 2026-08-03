@@ -10,12 +10,13 @@ import polars as pl
 
 from experiments.manifest import ExperimentManifest
 from experiments.seeds import seed_for_run
+from market_abm.analytics.welfare import build_tick_metrics_row
 from market_abm.config.buyers import BuyerPopulationConfig
 from market_abm.config.repricing import ListingInitConfig, RepricingConfig
 from market_abm.config.runner import PersistenceConfig, SimulationRunConfig
 from market_abm.config.sellers import SellerPopulationConfig
 from market_abm.config.simulation import ChoiceModelConfig
-from market_abm.domain.constants import COL_PRICE, COL_PRICE_PAID
+from market_abm.domain.constants import COL_BASE_COMMISSION, PLATFORM_DEFAULTS
 from market_abm.population.buyers import generate_buyers
 from market_abm.population.sellers import generate_sellers
 from market_abm.simulation.listings import initialize_listings
@@ -97,31 +98,18 @@ def _execute_one_run(task: dict[str, Any]) -> dict[str, Any]:
     )
 
     metric_rows: list[dict[str, Any]] = []
+    fee_rate = float(PLATFORM_DEFAULTS[COL_BASE_COMMISSION])
     for tick_id, products_df, transactions_df in run_simulation(
         buyers, sellers, listings, n_ticks=n_ticks, config=config
     ):
-        prices = products_df[COL_PRICE]
-        median_price = float(prices.median()) if products_df.height else 0.0
-        std_val = float(prices.std()) if products_df.height > 1 else 0.0
-        if std_val != std_val:  # NaN
-            std_val = 0.0
-        gmv = (
-            float(transactions_df[COL_PRICE_PAID].sum())
-            if transactions_df.height
-            else 0.0
-        )
         metric_rows.append(
-            {
-                "tick_id": int(tick_id),
-                "median_price": median_price,
-                "price_std": std_val,
-                "hhi": 0.0,
-                "consumer_surplus_proxy": 0.0,
-                "producer_surplus": 0.0,
-                "platform_profit": 0.0,
-                "gmv": gmv,
-                "n_tx": int(transactions_df.height),
-            }
+            build_tick_metrics_row(
+                tick_id=tick_id,
+                transactions_df=transactions_df,
+                buyers_df=buyers,
+                products_df=products_df,
+                platform_fee_rate=fee_rate,
+            )
         )
 
     _write_tick_metrics(run_root / "tick_metrics.parquet", metric_rows)
