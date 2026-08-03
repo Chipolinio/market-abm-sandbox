@@ -107,7 +107,7 @@ describe("ShocksControlPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Запустить — Шок спроса" }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Shock queued \(depth=3\)/)).toBeTruthy();
+      expect(screen.getByText(/Шок в очереди \(глубина=3\)/)).toBeTruthy();
     });
   });
 

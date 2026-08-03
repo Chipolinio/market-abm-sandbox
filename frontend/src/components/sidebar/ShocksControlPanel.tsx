@@ -50,11 +50,15 @@ export function ShocksControlPanel({
     setMessage(null);
     try {
       const response = await triggerShock(body);
-      setMessage(`Shock queued (depth=${response.queue_depth})`);
+      setMessage(`Шок в очереди (глубина=${response.queue_depth})`);
       onShockQueued?.(body);
     } catch (err) {
       const text =
-        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Shock failed";
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Не удалось поставить шок";
       setError(text);
     } finally {
       setBusy(false);

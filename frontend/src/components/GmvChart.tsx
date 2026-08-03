@@ -51,25 +51,6 @@ export function GmvChart({ data, eventMarkers = [] }: Props) {
     <div className="relative h-full w-full">
       <EventCausalTooltip causal={causal} onClose={() => setCausal(null)} />
 
-      {eventMarkers.length > 0 ? (
-        <div className="absolute bottom-1 left-2 z-10 flex flex-wrap gap-1">
-          {eventMarkers.map((marker) => (
-            <button
-              key={`btn-${marker.label}-${marker.tickId}`}
-              type="button"
-              data-testid={`crash-marker-btn-${marker.tickId}`}
-              className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] text-red-800 hover:bg-red-100"
-              onClick={() => {
-                const next = extractDemandShockCausal(marker.payload ?? null);
-                setCausal(next);
-              }}
-            >
-              {marker.label}@{marker.tickId}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid horizontal vertical={false} stroke="#F1F5F9" />
@@ -121,17 +102,28 @@ export function GmvChart({ data, eventMarkers = [] }: Props) {
             isAnimationActive={false}
             name="gmv"
           />
-          {eventMarkers.map((marker) => (
-            <ReferenceLine
-              key={`${marker.label}-${marker.tickId}`}
-              x={marker.tickId}
-              stroke="#B91C1C"
-              strokeDasharray="4 4"
-              isFront
-            >
-              <Label value={marker.label} position="top" fill="#B91C1C" fontSize={10} />
-            </ReferenceLine>
-          ))}
+          {eventMarkers.map((marker) => {
+            const isPromo = marker.label === "АКЦИЯ";
+            const stroke = isPromo ? "#059669" : "#B91C1C";
+            return (
+              <ReferenceLine
+                key={`${marker.label}-${marker.tickId}`}
+                x={marker.tickId}
+                stroke={stroke}
+                strokeDasharray="4 4"
+                isFront
+                cursor={marker.payload ? "pointer" : "default"}
+                onClick={() => {
+                  const next = extractDemandShockCausal(marker.payload ?? null);
+                  if (next !== null) {
+                    setCausal(next);
+                  }
+                }}
+              >
+                <Label value={marker.label} position="top" fill={stroke} fontSize={10} />
+              </ReferenceLine>
+            );
+          })}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

@@ -108,6 +108,9 @@ def _build_command_side_events(
         for shock in simulation_context.active_shocks:
             if shock.shock_type not in (ShockType.DEMAND_CRASH, ShockType.DEMAND_BOOM):
                 continue
+            # Emit once at onset — not every tick while shock remains active.
+            if int(shock.applied_at_tick) != int(tick_id):
+                continue
             if shock.shock_type in seen_demand:
                 continue
             seen_demand.add(shock.shock_type)

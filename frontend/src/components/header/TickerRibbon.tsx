@@ -122,13 +122,13 @@ export function TickerRibbon({
           <MetricItem>t= {metrics.current_tick}</MetricItem>
           <MetricItem>GMV: {formatCompactGmv(metrics.total_market_gmv)}</MetricItem>
           <MetricItem>
-            Index: {metrics.market_price_index.toFixed(2)}
+            Индекс: {metrics.market_price_index.toFixed(2)}
             {priceTrendGlyph(priceIndexDelta)}
           </MetricItem>
           <MetricItem
             className={flashCrashActive ? "animate-pulse text-red-600" : "text-muted-strong"}
           >
-            {flashCrashActive ? "FLASH CRASH" : "STABLE"}
+            {flashCrashActive ? "ОБВАЛ" : "Стабильно"}
           </MetricItem>
         </>
       )}

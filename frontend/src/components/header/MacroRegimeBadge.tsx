@@ -1,4 +1,5 @@
 import type { MacroRegime } from "@/types/macro";
+import { macroRegimeLabel } from "@/utils/uiLabels";
 
 export type MacroRegimeBadgeProps = {
   regime: MacroRegime | null;
@@ -28,11 +29,11 @@ export function MacroRegimeBadge({ regime, stale = false }: MacroRegimeBadgeProp
   return (
     <span
       data-testid="macro-regime-badge"
-      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${regimeClass(regime)}${
+      className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-wide ${regimeClass(regime)}${
         stale ? " opacity-70 outline outline-1 outline-dashed outline-slate-400" : ""
       }`}
     >
-      {regime.toUpperCase()}
+      {macroRegimeLabel(regime)}
     </span>
   );
 }

@@ -25,12 +25,12 @@ function staleLabel(connectionState: ConnectionState | undefined): string | null
     return null;
   }
   if (connectionState === "connecting") {
-    return "[Stale]";
+    return "[Устарело]";
   }
   if (connectionState === "error") {
-    return "[Disconnected]";
+    return "[Нет связи]";
   }
-  return "[Disconnected]";
+  return "[Нет связи]";
 }
 
 /** Zone A stress/expansion bars + episode + ETA (Spec 014 §4.3). */
@@ -43,8 +43,8 @@ export function MacroStatePanel({
   if (macro === null) {
     return (
       <section data-testid="macro-state-panel" className="mb-4 rounded border border-border p-3">
-        <h2 className="mb-2 text-xs uppercase tracking-wider text-muted">Macro</h2>
-        <p className="text-xs text-muted">Нет данных macro_state</p>
+        <h2 className="mb-2 text-xs uppercase tracking-wider text-muted">Макро</h2>
+        <p className="text-xs text-muted">Нет данных макросостояния</p>
       </section>
     );
   }
@@ -52,12 +52,14 @@ export function MacroStatePanel({
   const stressWidth = barPct(macro.stress, macro.stress_cap);
   const expansionWidth = barPct(macro.expansion, macro.expansion_cap);
   const eta =
-    macro.est_recovery_eta_ticks === null ? "—" : `~${macro.est_recovery_eta_ticks} ticks`;
+    macro.est_recovery_eta_ticks === null
+      ? "—"
+      : `~${macro.est_recovery_eta_ticks} тиков`;
 
   return (
     <section data-testid="macro-state-panel" className="mb-4 rounded border border-border p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-xs uppercase tracking-wider text-muted">Macro</h2>
+        <h2 className="text-xs uppercase tracking-wider text-muted">Макро</h2>
         {stale !== null ? (
           <span data-testid="macro-stale-indicator" className="text-[10px] text-amber-700">
             {stale}
@@ -67,7 +69,7 @@ export function MacroStatePanel({
 
       <div className="mb-2 space-y-1.5">
         <div className="flex items-center justify-between text-[11px] text-muted-strong">
-          <span>Stress</span>
+          <span>Стресс</span>
           <span>
             {macro.stress.toFixed(2)} / {macro.stress_cap}
           </span>
@@ -81,7 +83,7 @@ export function MacroStatePanel({
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-muted-strong">
-          <span>Expansion</span>
+          <span>Экспансия</span>
           <span>
             {macro.expansion.toFixed(2)} / {macro.expansion_cap}
           </span>
@@ -96,8 +98,8 @@ export function MacroStatePanel({
       </div>
 
       <div className="flex justify-between text-[11px] text-foreground">
-        <span>episode #{macro.episode_id}</span>
-        <span>ETA Recovery {eta}</span>
+        <span>эпизод #{macro.episode_id}</span>
+        <span>ETA восстановления {eta}</span>
       </div>
     </section>
   );

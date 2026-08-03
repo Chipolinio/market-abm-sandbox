@@ -75,7 +75,7 @@ describe("App", () => {
     expect(screen.getByTestId("zone-top-bar")).toBeTruthy();
     expect(screen.getByText(/t=\s*7/)).toBeTruthy();
     expect(screen.getByText(/GMV:/)).toBeTruthy();
-    expect(screen.getByText("STABLE")).toBeTruthy();
+    expect(screen.getByText("Стабильно")).toBeTruthy();
     expect(screen.getByText("Система готова к настройке")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Старт" })).toBeTruthy();
   });

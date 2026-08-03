@@ -26,6 +26,7 @@ vi.mock("recharts", () => ({
     x?: number;
     label?: string | { value?: string };
     children?: ReactNode;
+    onClick?: () => void;
   }) => {
     if (props.y !== undefined) {
       const label =
@@ -37,7 +38,11 @@ vi.mock("recharts", () => ({
       );
     }
     return (
-      <div data-testid="event-ref-line" data-x={String(props.x)}>
+      <div
+        data-testid={`event-ref-line-${props.x}`}
+        data-x={String(props.x)}
+        onClick={props.onClick}
+      >
         {props.children}
       </div>
     );
@@ -125,7 +130,7 @@ describe("14.3 EventCausalTooltip", () => {
         eventMarkers={[
           {
             tickId: 10,
-            label: "CRASH",
+            label: "ШОК",
             payload: {
               impulse: 0.41,
               stress_after: 0.55,
@@ -135,7 +140,7 @@ describe("14.3 EventCausalTooltip", () => {
         ]}
       />,
     );
-    fireEvent.click(screen.getByTestId("crash-marker-btn-10"));
+    fireEvent.click(screen.getByTestId("event-ref-line-10"));
     const tip = screen.getByTestId("event-causal-tooltip");
     expect(tip.textContent).toContain("0.41");
     expect(tip.textContent).toContain("0.55");

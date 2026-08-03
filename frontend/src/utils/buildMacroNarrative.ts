@@ -28,9 +28,9 @@ function topShockDetail(shocks: ActiveShockDTO[]): string {
   const token = top.shock_type.toUpperCase();
   const scenario = top.scenario ?? "n/a";
   if (top.remaining_ticks === null) {
-    return `${token} ${scenario} · regime`;
+    return `${token} ${scenario} · режим`;
   }
-  return `${token} ${scenario} · ${top.remaining_ticks} ticks left`;
+  return `${token} ${scenario} · ${top.remaining_ticks} тиков`;
 }
 
 /**
@@ -42,7 +42,9 @@ export function buildMacroNarrative(
   options: BuildMacroNarrativeOptions = {},
 ): MacroNarrative {
   if (macro === null) {
-    const title = options.paused ? "[Пауза] Нет macro_state" : "Нет macro_state";
+    const title = options.paused
+      ? "[Пауза] Нет данных макросостояния"
+      : "Нет данных макросостояния";
     return { title, detail: "Ожидание данных симуляции" };
   }
 

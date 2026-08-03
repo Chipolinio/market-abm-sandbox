@@ -34,7 +34,7 @@ describe("14.2 MacroRegimeBadge", () => {
   it("badge_renders_stress_pill", () => {
     render(<MacroRegimeBadge regime="stress" />);
     const pill = screen.getByTestId("macro-regime-badge");
-    expect(pill.textContent).toContain("STRESS");
+    expect(pill.textContent).toContain("Стресс");
     expect(pill.className).toMatch(/red|stress/i);
   });
 
@@ -55,7 +55,7 @@ describe("14.2 MacroStatePanel", () => {
     expect(stressBar.getAttribute("style") ?? "").toMatch(/width:\s*90%/);
     const expansionBar = screen.getByTestId("macro-expansion-bar");
     expect(expansionBar.getAttribute("style") ?? "").toMatch(/width:\s*50%/);
-    expect(screen.getByText(/episode\s*#1/i)).toBeTruthy();
+    expect(screen.getByText(/эпизод\s*#1/i)).toBeTruthy();
     expect(screen.getByText(/~28/)).toBeTruthy();
   });
 
@@ -67,7 +67,7 @@ describe("14.2 MacroStatePanel", () => {
       />,
     );
     expect(screen.getByTestId("macro-stale-indicator").textContent).toMatch(
-      /Stale|Disconnected/i,
+      /Устарело|Нет связи/i,
     );
     expect(screen.getByTestId("macro-stress-bar")).toBeTruthy();
   });
@@ -85,12 +85,12 @@ describe("14.2 ActiveShocksPanel", () => {
       },
     ];
     render(<ActiveShocksPanel shocks={shocks} />);
-    expect(screen.getByText(/DEMAND_CRASH severe · 12 ticks left/)).toBeTruthy();
+    expect(screen.getByText(/DEMAND_CRASH сильный · 12 тиков/)).toBeTruthy();
   });
 
   it("shows_empty_copy_when_no_shocks", () => {
     render(<ActiveShocksPanel shocks={[]} />);
-    expect(screen.getByText(/No active shocks/i)).toBeTruthy();
+    expect(screen.getByText(/Нет активных шоков/i)).toBeTruthy();
   });
 });
 

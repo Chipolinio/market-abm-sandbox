@@ -30,8 +30,8 @@ describe("TickerRibbon", () => {
 
     expect(screen.getByText(/t=\s*42/)).toBeTruthy();
     expect(screen.getByText(/1\.3M/)).toBeTruthy();
-    expect(screen.getByText(/Index:\s*1\.03\s*▲/)).toBeTruthy();
-    expect(screen.getByText("STABLE")).toBeTruthy();
+    expect(screen.getByText(/Индекс:\s*1\.03\s*▲/)).toBeTruthy();
+    expect(screen.getByText("Стабильно")).toBeTruthy();
     expect(screen.getByText("Симуляция активна (1 Гц)")).toBeTruthy();
     expect(screen.getAllByTestId("ticker-card")).toHaveLength(4);
   });
@@ -46,7 +46,7 @@ describe("TickerRibbon", () => {
       />,
     );
 
-    expect(screen.getByText("FLASH CRASH")).toBeTruthy();
+    expect(screen.getByText("ОБВАЛ")).toBeTruthy();
   });
 
   it("shows_price_index_down_trend", () => {
@@ -59,7 +59,7 @@ describe("TickerRibbon", () => {
       />,
     );
 
-    expect(screen.getByText(/Index:\s*1\.03\s*▼/)).toBeTruthy();
+    expect(screen.getByText(/Индекс:\s*1\.03\s*▼/)).toBeTruthy();
   });
 
   it("shows_status_badge_and_skeleton_when_metrics_null", () => {
@@ -67,7 +67,7 @@ describe("TickerRibbon", () => {
 
     expect(screen.queryByText(/t=\s*42/)).toBeNull();
     expect(screen.queryByText(/GMV:/)).toBeNull();
-    expect(screen.queryByText(/Index:/)).toBeNull();
+    expect(screen.queryByText(/Индекс:/)).toBeNull();
     expect(screen.getByText("Система готова к настройке")).toBeTruthy();
     expect(screen.getAllByTestId("ticker-skeleton")).toHaveLength(4);
   });

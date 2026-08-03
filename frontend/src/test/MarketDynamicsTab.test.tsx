@@ -105,7 +105,7 @@ describe("MarketDynamicsTab", () => {
         ]}
         gmvChartData={[{ tick_id: 1, gmv: 100, transaction_count: 2 }]}
         highlightedSellerId={7}
-        crashMarkers={[{ tickId: 2, label: "CRASH" }]}
+        crashMarkers={[{ tickId: 2, label: "ШОК" }]}
       />,
     );
 

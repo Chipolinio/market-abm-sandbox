@@ -42,7 +42,7 @@ export function ControlPanel({
 
       <section className="relative mb-6" data-testid="control-panel-environment">
         <h2 className="mb-3 text-xs uppercase tracking-wider text-muted">
-          Environment
+          Окружение
         </h2>
         <EnvironmentConfigurator disabled={!configurable} />
         {runtimeLocked ? (
@@ -56,7 +56,7 @@ export function ControlPanel({
 
       <section className="mb-6" data-testid="control-panel-shocks">
         <h2 className="mb-3 text-xs uppercase tracking-wider text-muted">
-          Macro Shocks
+          Макро-шоки
         </h2>
         <ShocksControlPanel
           disabled={shocksDisabled}

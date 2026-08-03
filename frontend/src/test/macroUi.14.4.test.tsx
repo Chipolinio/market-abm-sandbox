@@ -31,13 +31,13 @@ describe("14.4 StrategyPulseBar", () => {
     expect(screen.getByTestId("strategy-pulse-MaxProfit")).toBeTruthy();
     expect(screen.getByTestId("strategy-pulse-MaxVolume")).toBeTruthy();
     expect(screen.getByTestId("strategy-pulse-RatingMaximizer")).toBeTruthy();
-    expect(screen.getByTestId("strategy-panic-badge").textContent).toContain("PANIC");
-    expect(screen.getByText(/DI 1.12/)).toBeTruthy();
+    expect(screen.getByTestId("strategy-panic-badge").textContent).toContain("ПАНИКА");
+    expect(screen.getByText(/ИС 1.12/)).toBeTruthy();
   });
 
   it("empty_pulse_shows_placeholder", () => {
     render(<StrategyPulseBar pulse={null} />);
-    expect(screen.getByText(/Нет strategy pulse/)).toBeTruthy();
+    expect(screen.getByText(/Нет данных пульса стратегий/)).toBeTruthy();
   });
 });
 

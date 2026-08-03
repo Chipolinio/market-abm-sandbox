@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchSegmentHealth } from "@/api/analytics";
 import type { SegmentRowDTO } from "@/types/observability";
+import { segmentLabel } from "@/utils/uiLabels";
 
 type Props = {
   asOfTick: number;
@@ -39,7 +40,7 @@ export function SegmentHealthTab({ asOfTick, pollLive = false }: Props) {
       if (!aliveRef.current) {
         return;
       }
-      setError(err instanceof Error ? err.message : "segments fetch failed");
+      setError(err instanceof Error ? err.message : "не удалось загрузить сегменты");
     } finally {
       if (aliveRef.current) {
         setLoading(false);
@@ -64,7 +65,7 @@ export function SegmentHealthTab({ asOfTick, pollLive = false }: Props) {
   return (
     <div data-testid="segment-health-panel" className="flex h-full min-h-0 flex-col p-2">
       <h2 className="mb-2 shrink-0 text-xs uppercase tracking-wide text-muted">
-        Segment health
+        Здоровье сегментов
       </h2>
       {loading && rows.length === 0 ? (
         <p className="text-xs text-muted">Загрузка сегментов…</p>
@@ -75,18 +76,22 @@ export function SegmentHealthTab({ asOfTick, pollLive = false }: Props) {
           <table className="w-full border-collapse text-left text-[11px]">
             <thead>
               <tr className="border-b border-border text-muted">
-                <th className="py-1 pr-2">Segment</th>
-                <th className="py-1 pr-2">Budget</th>
-                <th className="py-1 pr-2">Freq</th>
-                <th className="py-1 pr-2">Scar</th>
-                <th className="py-1">Churn</th>
+                <th className="py-1 pr-2">Сегмент</th>
+                <th className="py-1 pr-2">Бюджет</th>
+                <th className="py-1 pr-2">Частота</th>
+                <th className="py-1 pr-2">Шрам</th>
+                <th className="py-1">Отток</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.segment} data-testid={`segment-row-${row.segment}`} className="border-b border-border/60">
+                <tr
+                  key={row.segment}
+                  data-testid={`segment-row-${row.segment}`}
+                  className="border-b border-border/60"
+                >
                   <td className="py-1.5 pr-2 font-medium text-foreground">
-                    {row.segment}{" "}
+                    {segmentLabel(row.segment)}{" "}
                     <span className="text-muted">
                       ({row.n_active}/{row.n_buyers})
                     </span>

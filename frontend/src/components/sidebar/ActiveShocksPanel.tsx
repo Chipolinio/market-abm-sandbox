@@ -21,16 +21,16 @@ export function ActiveShocksPanel({
   return (
     <section data-testid="active-shocks-panel" className="mb-4 rounded border border-border p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-xs uppercase tracking-wider text-muted">Active Shocks</h2>
+        <h2 className="text-xs uppercase tracking-wider text-muted">Активные шоки</h2>
         {stale ? (
           <span data-testid="shocks-stale-indicator" className="text-[10px] text-amber-700">
-            [Stale]
+            [Устарело]
           </span>
         ) : null}
       </div>
 
       {visible.length === 0 ? (
-        <p className="text-xs text-muted">No active shocks</p>
+        <p className="text-xs text-muted">Нет активных шоков</p>
       ) : (
         <ul className="space-y-1">
           {visible.map((shock, index) => (
@@ -44,7 +44,7 @@ export function ActiveShocksPanel({
         </ul>
       )}
       {overflow > 0 ? (
-        <p className="mt-1 text-[10px] text-muted">+{overflow} more</p>
+        <p className="mt-1 text-[10px] text-muted">+ещё {overflow}</p>
       ) : null}
     </section>
   );

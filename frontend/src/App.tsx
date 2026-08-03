@@ -12,13 +12,9 @@ import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
 import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
+import { markerLabelForShock, mergeEventMarker } from "@/utils/eventMarkers";
 import { resolveSimulationTick } from "@/utils/simulationTick";
 import type { SimulationShockRequest } from "@/types/shock";
-
-function mergeCrashMarker(prev: EventMarker[], marker: EventMarker): EventMarker[] {
-  const next = [...prev.filter((m) => !(m.label === marker.label && m.tickId === marker.tickId)), marker];
-  return next.slice(-8);
-}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
@@ -64,9 +60,9 @@ export default function App() {
           continue;
         }
         setCrashMarkers((prev) =>
-          mergeCrashMarker(prev, {
+          mergeEventMarker(prev, {
             tickId: event.tick_id,
-            label: "CRASH",
+            label: "ШОК",
             payload: event.payload ?? null,
           }),
         );
@@ -154,14 +150,19 @@ export default function App() {
 
   const onShockQueued = useCallback(
     (body: SimulationShockRequest) => {
-      if (body.shock_type !== "demand_crash") {
+      const label = markerLabelForShock(body.shock_type);
+      if (label === null) {
         return;
       }
-      const markerTick = Math.max(resolveSimulationTick(status, lastPayload), 0);
+      // Prefer last completed tick — matches WS event.tick_id more often than next-tick counter.
+      const markerTick = Math.max(
+        toLastCompletedTick(resolveSimulationTick(status, lastPayload)),
+        0,
+      );
       setCrashMarkers((prev) =>
-        mergeCrashMarker(prev, {
+        mergeEventMarker(prev, {
           tickId: markerTick,
-          label: "CRASH",
+          label,
           payload: null,
         }),
       );

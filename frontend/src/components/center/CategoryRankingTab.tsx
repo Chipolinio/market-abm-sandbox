@@ -39,7 +39,7 @@ export function CategoryRankingTab({ asOfTick, pollLive = false }: Props) {
       if (!aliveRef.current) {
         return;
       }
-      setError(err instanceof Error ? err.message : "category ranking fetch failed");
+      setError(err instanceof Error ? err.message : "не удалось загрузить категории");
     } finally {
       if (aliveRef.current) {
         setLoading(false);
@@ -64,7 +64,7 @@ export function CategoryRankingTab({ asOfTick, pollLive = false }: Props) {
   return (
     <div data-testid="category-ranking-panel" className="flex h-full min-h-0 flex-col p-2">
       <h2 className="mb-2 shrink-0 text-xs uppercase tracking-wide text-muted">
-        Category ranking
+        Рейтинг категорий
       </h2>
       {loading && rows.length === 0 ? (
         <p className="text-xs text-muted">Загрузка категорий…</p>
@@ -75,12 +75,12 @@ export function CategoryRankingTab({ asOfTick, pollLive = false }: Props) {
           <table className="w-full border-collapse text-left text-[11px]">
             <thead>
               <tr className="border-b border-border text-muted">
-                <th className="py-1 pr-2">Cat</th>
+                <th className="py-1 pr-2">Категория</th>
                 <th className="py-1 pr-2">N</th>
-                <th className="py-1 pr-2">Med score</th>
-                <th className="py-1 pr-2">Med price</th>
-                <th className="py-1 pr-2">Sales Σ</th>
-                <th className="py-1">Top listings</th>
+                <th className="py-1 pr-2">Мед. score</th>
+                <th className="py-1 pr-2">Мед. цена</th>
+                <th className="py-1 pr-2">Продажи Σ</th>
+                <th className="py-1">Топ листинги</th>
               </tr>
             </thead>
             <tbody>

@@ -96,10 +96,14 @@ export function EnvironmentConfigurator({ disabled }: Props) {
     try {
       await configureSession(body);
       writeSessionConfig(body);
-      setMessage("Configuration saved");
+      setMessage("Конфигурация сохранена");
     } catch (err) {
       const text =
-        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Configure failed";
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Не удалось применить конфигурацию";
       setError(text);
     } finally {
       setBusy(false);
@@ -109,7 +113,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1 text-xs text-muted">
-        Buyer sample size: {nBuyers.toLocaleString()}
+        Число покупателей: {nBuyers.toLocaleString("ru-RU")}
         <input
           type="range"
           role="slider"
@@ -125,7 +129,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-muted">
-        Sellers: {nSellers.toLocaleString()}
+        Число селлеров: {nSellers.toLocaleString("ru-RU")}
         <input
           type="range"
           role="slider"
@@ -141,7 +145,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-muted">
-        CatBoost mix: {catboostPct}%
+        Доля CatBoost: {catboostPct}%
         <input
           type="range"
           role="slider"
@@ -157,7 +161,7 @@ export function EnvironmentConfigurator({ disabled }: Props) {
       </label>
 
       <label className="flex flex-col gap-1 text-xs text-muted">
-        Rule-based mix: {ruleBasedPct}%
+        Доля rule-based: {ruleBasedPct}%
         <input
           type="range"
           role="slider"
@@ -172,10 +176,10 @@ export function EnvironmentConfigurator({ disabled }: Props) {
         />
       </label>
 
-      <p className="text-xs text-muted">Basic mix: {basicPct}% (auto)</p>
+      <p className="text-xs text-muted">Доля basic: {basicPct}% (авто)</p>
 
       {!mixValid ? (
-        <p className="text-xs text-red-600">Seller mix must sum to 100% (±1%)</p>
+        <p className="text-xs text-red-600">Сумма долей селлеров должна быть 100% (±1%)</p>
       ) : null}
 
       <button

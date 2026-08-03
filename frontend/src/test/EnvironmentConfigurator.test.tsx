@@ -75,7 +75,7 @@ describe("EnvironmentConfigurator", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText("Configuration saved")).toBeTruthy();
+      expect(screen.getByText("Конфигурация сохранена")).toBeTruthy();
     });
   });
 });
