@@ -1,0 +1,15 @@
+# Spec 015 — default paper grid (full run). Smoke tests use tiny overrides in pytest.
+experiment_id: paper_grid_v1
+base_seed: 10000
+n_runs: 30
+n_ticks: 500
+burn_in_ticks: 100
+ml_share_grid: [0.0, 0.25, 0.5, 0.75, 1.0]
+runtime_mode: extended
+output_dir: output/experiments/paper_grid_v1
+n_buyers: 200
+n_sellers: 50
+shock_protocol:
+  mode: fixed_duration
+  demand_crash_at_tick: 200
+  scenario: severe
