@@ -10,6 +10,7 @@ import { useTickStream } from "@/hooks/useTickStream";
 import type { SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import type { WorkerState } from "@/api/types";
+import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
 import { resolveSimulationTick } from "@/utils/simulationTick";
 import type { SimulationShockRequest } from "@/types/shock";
@@ -19,6 +20,9 @@ export default function App() {
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
   const [crashMarkers, setCrashMarkers] = useState<Array<{ tickId: number; label: string }>>([]);
+  /** Spec 014 §4.1.1 — keep last known macro on WS disconnect (stale). */
+  const [macroState, setMacroState] = useState<MacroStateDTO | null>(null);
+  const [activeShocks, setActiveShocks] = useState<ActiveShockDTO[]>([]);
   const { status, refresh } = useSimulationStatus();
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
@@ -40,6 +44,12 @@ export default function App() {
   useEffect(() => {
     if (lastPayload !== null) {
       handlePayload(lastPayload);
+      if (lastPayload.macro_state !== undefined) {
+        setMacroState(lastPayload.macro_state);
+      }
+      if (lastPayload.active_shocks !== undefined) {
+        setActiveShocks(lastPayload.active_shocks);
+      }
     }
   }, [lastPayload, handlePayload]);
 
@@ -75,8 +85,23 @@ export default function App() {
       backfillError,
       highlightedSellerId,
       crashMarkers,
+      macroState,
+      activeShocks,
+      workerState,
+      connectionState,
     }),
-    [priceChartData, gmvChartData, backfillLoading, backfillError, highlightedSellerId, crashMarkers],
+    [
+      priceChartData,
+      gmvChartData,
+      backfillLoading,
+      backfillError,
+      highlightedSellerId,
+      crashMarkers,
+      macroState,
+      activeShocks,
+      workerState,
+      connectionState,
+    ],
   );
 
   const onActionComplete = useCallback(
@@ -93,6 +118,8 @@ export default function App() {
         clearSeries();
         resetCyberLog();
         setCrashMarkers([]);
+        setMacroState(null);
+        setActiveShocks([]);
         void reloadBackfill();
       }
 
@@ -133,6 +160,9 @@ export default function App() {
         workerState={workerState}
         priceIndexDelta={priceIndexDelta}
         flashCrashActive={flashCrashActive}
+        macroRegime={macroState?.regime ?? null}
+        macroState={macroState}
+        activeShocks={activeShocks}
         onShockQueued={onShockQueued}
         onActionComplete={onActionComplete}
         cyberLogLines={cyberLogLines}

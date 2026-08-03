@@ -1,6 +1,7 @@
 /** Mirrors backend TickerMetricsDTO (Spec 008 §6.5). */
 
 import type { WorkerState } from "@/api/types";
+import type { MacroRegime } from "@/types/macro";
 
 export type TickerMetricsDTO = {
   active_sellers_count: number;
@@ -20,4 +21,6 @@ export type TickerRibbonProps = {
   priceIndexDelta?: number;
   /** UI-only alarm from FLASH_CRASH events (Spec 009 §2.5 Card 4). */
   flashCrashActive?: boolean;
+  /** Spec 014 — macro regime pill */
+  macroRegime?: MacroRegime | null;
 };

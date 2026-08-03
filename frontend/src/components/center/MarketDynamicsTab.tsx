@@ -1,4 +1,5 @@
 import { GmvChart } from "@/components/GmvChart";
+import { NarrativeCard } from "@/components/center/NarrativeCard";
 import { PriceQuantileChart } from "@/components/PriceQuantileChart";
 import type { DynamicsTabProps } from "@/components/center/types";
 import { useTopListingsSeries } from "@/hooks/useTopListingsSeries";
@@ -10,6 +11,10 @@ export function MarketDynamicsTab({
   backfillError = null,
   highlightedSellerId = null,
   crashMarkers = [],
+  macroState = null,
+  activeShocks = [],
+  workerState = "IDLE",
+  connectionState = "open",
 }: DynamicsTabProps) {
   const { listings, loading: listingsLoading } = useTopListingsSeries(true);
   const highlightedListing =
@@ -22,6 +27,13 @@ export function MarketDynamicsTab({
       data-testid="market-dynamics-panel"
       className="flex h-full min-h-0 flex-col gap-2"
     >
+      <NarrativeCard
+        macro={macroState}
+        shocks={activeShocks}
+        workerState={workerState}
+        connectionState={connectionState}
+      />
+
       {highlightedSellerId !== null ? (
         <p
           data-testid="highlighted-seller-banner"

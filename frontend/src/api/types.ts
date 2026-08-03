@@ -1,6 +1,7 @@
 /** Mirrors backend Pydantic DTOs (Slice 7.1 / 8.3). */
 
 import type { SystemEventDTO } from "@/types/events";
+import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
 import type { TickerMetricsDTO } from "@/types/ticker";
 
 export type WorkerState = "IDLE" | "RUNNING" | "PAUSED" | "STOPPED" | "FAILED";
@@ -26,6 +27,10 @@ export type TickStreamPayload = {
   active_drift_alerts: Array<Record<string, unknown>>;
   events?: SystemEventDTO[];
   worker_state: WorkerState;
+  /** Spec 014 — macro observability from worker IPC */
+  macro_state?: MacroStateDTO | null;
+  active_shocks?: ActiveShockDTO[];
+  ref_price?: number | null;
 };
 
 export type SimulationStatus = {

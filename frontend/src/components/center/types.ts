@@ -1,4 +1,7 @@
 import type { GmvTickPoint, PriceChartRow } from "@/state/types";
+import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
+import type { ConnectionState } from "@/types/ticker";
+import type { WorkerState } from "@/api/types";
 
 export type EventMarker = {
   tickId: number;
@@ -12,6 +15,10 @@ export type DynamicsTabProps = {
   backfillError?: string | null;
   highlightedSellerId?: number | null;
   crashMarkers?: EventMarker[];
+  macroState?: MacroStateDTO | null;
+  activeShocks?: ActiveShockDTO[];
+  workerState?: WorkerState;
+  connectionState?: ConnectionState;
 };
 
 export type TerminalTabId = "dynamics" | "leaders" | "demand_matrix";

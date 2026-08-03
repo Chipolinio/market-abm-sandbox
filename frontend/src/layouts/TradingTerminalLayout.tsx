@@ -7,6 +7,7 @@ import { TopSellersDashboard } from "@/components/cyberlog/TopSellersDashboard";
 import { TickerRibbon } from "@/components/header/TickerRibbon";
 import type { WorkerState } from "@/api/types";
 import type { CyberLogLine } from "@/state/cyberLog";
+import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
 import type { TickerRibbonProps } from "@/types/ticker";
 import type { SimulationShockRequest } from "@/types/shock";
 
@@ -29,6 +30,8 @@ export type TradingTerminalLayoutProps = TickerRibbonProps & {
   pollMatrixLive?: boolean;
   highlightedSellerId?: number | null;
   onHighlightSeller?: (sellerId: number | null) => void;
+  macroState?: MacroStateDTO | null;
+  activeShocks?: ActiveShockDTO[];
 };
 
 export function TradingTerminalLayout({
@@ -37,6 +40,7 @@ export function TradingTerminalLayout({
   workerState,
   priceIndexDelta,
   flashCrashActive,
+  macroRegime = null,
   onActionComplete,
   onShockQueued,
   dynamics = EMPTY_DYNAMICS,
@@ -48,6 +52,8 @@ export function TradingTerminalLayout({
   pollMatrixLive = false,
   highlightedSellerId = null,
   onHighlightSeller,
+  macroState = null,
+  activeShocks = [],
 }: TradingTerminalLayoutProps) {
   const handleActionComplete =
     onActionComplete ?? (async (_beforeState: WorkerState, _action: SimulationAction) => undefined);
@@ -65,6 +71,7 @@ export function TradingTerminalLayout({
           workerState={workerState}
           priceIndexDelta={priceIndexDelta}
           flashCrashActive={flashCrashActive}
+          macroRegime={macroRegime}
         />
       </header>
 
@@ -77,6 +84,9 @@ export function TradingTerminalLayout({
             workerState={workerState}
             onActionComplete={handleActionComplete}
             onShockQueued={onShockQueued}
+            macroState={macroState}
+            activeShocks={activeShocks}
+            connectionState={connectionState}
           />
         </aside>
 

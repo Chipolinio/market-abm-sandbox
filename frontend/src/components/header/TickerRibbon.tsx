@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { MacroRegimeBadge } from "@/components/header/MacroRegimeBadge";
 import type { TickerRibbonProps } from "@/types/ticker";
 import { formatCompactGmv } from "@/utils/formatCompactGmv";
 
@@ -87,8 +88,10 @@ export function TickerRibbon({
   workerState,
   priceIndexDelta = 0,
   flashCrashActive = false,
+  macroRegime = null,
 }: TickerRibbonProps) {
   const statusBadge = statusBadgeConfig(workerState);
+  const regimeStale = connectionState !== "open";
 
   return (
     <div className="flex w-full flex-row items-center gap-6">
@@ -104,6 +107,8 @@ export function TickerRibbon({
       >
         {statusBadge.label}
       </span>
+
+      <MacroRegimeBadge regime={macroRegime} stale={regimeStale} />
 
       {metrics === null ? (
         <>
