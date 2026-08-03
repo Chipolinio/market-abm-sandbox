@@ -27,6 +27,7 @@ from market_abm.domain.constants import (
     COL_RANKING_SCORE,
     COL_RATING_VALUE,
     COL_SELLER_ID,
+    COL_STOCK_UNITS,
     COL_TICK_ID,
     COL_UNIT_COST,
     LISTINGS_COLUMNS,
@@ -42,6 +43,11 @@ from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
 from market_abm.simulation.context import SimulationContext
+from market_abm.simulation.inventory import (
+    apply_stock_sales,
+    clip_choices_to_stock,
+    filter_in_stock,
+)
 from market_abm.simulation.ranking import compute_ranking_scores
 from market_abm.simulation.rating import update_rating_ema
 from market_abm.simulation.ref_price import (
@@ -332,16 +338,14 @@ def _reprice_to_products(
             on=COL_LISTING_ID,
             how="left",
         )
-    # Spec 013 §4.1: ranking_score is ephemeral per tick but must survive reprice join
-    if (
-        COL_RANKING_SCORE in products_with_demand.columns
-        and COL_RANKING_SCORE not in merged.columns
-    ):
-        merged = merged.join(
-            products_with_demand.select([COL_LISTING_ID, COL_RANKING_SCORE]),
-            on=COL_LISTING_ID,
-            how="left",
-        )
+    # Spec 013: ranking_score; Spec 012.1: stock_units — survive reprice join
+    for extra_col in (COL_RANKING_SCORE, COL_STOCK_UNITS):
+        if extra_col in products_with_demand.columns and extra_col not in merged.columns:
+            merged = merged.join(
+                products_with_demand.select([COL_LISTING_ID, extra_col]),
+                on=COL_LISTING_ID,
+                how="left",
+            )
     merged = apply_marketplace_promotion_caps(merged, simulation_context, catalog)
     # Preserve extra columns (category_id, ranking_score, etc.) (Spec 012 §7.1 / Spec 013)
     select_cols = list(PRODUCTS_COLUMNS)
@@ -403,12 +407,34 @@ def step(
         catalog,
         macro_config=macro_config,
     )
-    products_pool = filter_bankrupt_listings(products_work, sellers_state_df)
+    products_available = filter_bankrupt_listings(products_work, sellers_state_df)
+
+    # Spec 012.1 §4.4: OOS filter BEFORE ranking / consideration
+    if config.inventory.enabled:
+        products_pool = filter_in_stock(products_available)
+    else:
+        products_pool = products_available
 
     if products_pool.height == 0:
         empty_tx = _empty_transactions_df()
+        ledger = products_available if products_available.height > 0 else products_pool
+        products_with_demand = _update_demand_index(
+            ledger.clone(),
+            empty_tx,
+            active_buyers_count=0,
+        )
+        products_next = _reprice_to_products(
+            sellers_df,
+            products_with_demand,
+            config,
+            ml_registry=ml_registry,
+            analytics_store=analytics_store,
+            simulation_context=simulation_context,
+            shock_catalog=catalog,
+            ml_runtime=ml_runtime,
+        )
         return (
-            products_pool.clone(),
+            drop_promotion_columns(products_next),
             empty_tx,
             _settle_if_needed(sellers_state_df, empty_tx, config),
             simulation_context,
@@ -419,7 +445,7 @@ def step(
     if active_buyers.height == 0:
         empty_tx = _empty_transactions_df()
         products_with_demand = _update_demand_index(
-            products_pool.clone(),
+            products_available.clone() if config.inventory.enabled else products_pool.clone(),
             empty_tx,
             active_buyers_count=0,
         )
@@ -486,6 +512,10 @@ def step(
         category_ids=category_ids,
         ranking_scores=ranking_scores,
     )
+    # Spec 012.1 §17 #2 A: clip purchases to available stock (buyer_id order)
+    if config.inventory.enabled:
+        choices = clip_choices_to_stock(choices, products_pool)
+
     transactions = _build_transactions_df(
         choices, ranked, tick_id=config.tick_id
     )
@@ -500,9 +530,21 @@ def step(
             sales_window_ticks=DEFAULT_SALES_WINDOW_TICKS,
         )
 
+    # Spec 012.1 §4.3: decrement stock on full available ledger (incl. unchanged OOS rows)
+    if config.inventory.enabled:
+        ledger = apply_stock_sales(products_available, transactions)
+        if COL_RANKING_SCORE in ranked.columns:
+            ledger = ledger.join(
+                ranked.select([COL_LISTING_ID, COL_RANKING_SCORE]),
+                on=COL_LISTING_ID,
+                how="left",
+            )
+    else:
+        ledger = ranked
+
     # Spec 012 §6: EMA rating update from seed-aware reviews after settle
     products_rated = update_rating_ema(
-        ranked,
+        ledger,
         transactions,
         seed=config.seed,
         tick_id=config.tick_id,
