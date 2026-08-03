@@ -6,13 +6,16 @@ import {
   fetchExperimentList,
   fetchExperimentSummary,
   fetchJob,
+  fetchMlRegistryStatus,
   postExperimentRun,
+  postTrainMl,
 } from "@/api/experiments";
 import type {
   ExperimentPreset,
   ExperimentRunRequest,
   ExperimentSummaryRow,
   JobStatus,
+  MlRegistryStatus,
 } from "@/types/experiments";
 import { PAPER_PRESET, SMOKE_PRESET } from "@/types/experiments";
 
@@ -150,11 +153,14 @@ export function ResearchLab({
   const [figureCacheBust, setFigureCacheBust] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [training, setTraining] = useState(false);
   const [useRobustTable, setUseRobustTable] = useState(true);
+  const [mlRegistry, setMlRegistry] = useState<MlRegistryStatus | null>(null);
 
   const running = job?.status === "RUNNING";
-  const formLocked = running || launching;
+  const formLocked = running || launching || training;
   const customEditable = preset === "custom" && !formLocked;
+  const isTrainJob = job?.experiment_id === "ml-train";
 
   const occupiedIds = useMemo(() => {
     const ids = new Set(pastExperiments);
@@ -171,6 +177,14 @@ export function ResearchLab({
       return ids;
     } catch {
       return [] as string[];
+    }
+  }, []);
+
+  const refreshMlRegistry = useCallback(async () => {
+    try {
+      setMlRegistry(await fetchMlRegistryStatus());
+    } catch {
+      setMlRegistry(null);
     }
   }, []);
 
@@ -191,7 +205,8 @@ export function ResearchLab({
 
   useEffect(() => {
     void refreshPastList();
-  }, [refreshPastList]);
+    void refreshMlRegistry();
+  }, [refreshMlRegistry, refreshPastList]);
 
   // Auto-suggest next free smoke-N / paper-N / custom-N unless user edited the field.
   useEffect(() => {
@@ -210,7 +225,12 @@ export function ResearchLab({
         }
         setJob(res.job);
         if (res.job.status === "DONE") {
-          void loadSummary(res.job.experiment_id).then(() => refreshPastList());
+          if (res.job.experiment_id === "ml-train") {
+            setResultWarnings(res.job.warnings ?? []);
+            void refreshMlRegistry();
+          } else {
+            void loadSummary(res.job.experiment_id).then(() => refreshPastList());
+          }
         }
       })
       .catch(() => {
@@ -219,7 +239,7 @@ export function ResearchLab({
     return () => {
       cancelled = true;
     };
-  }, [loadSummary, refreshPastList]);
+  }, [loadSummary, refreshMlRegistry, refreshPastList]);
 
   useEffect(() => {
     if (!job || job.status !== "RUNNING") {
@@ -230,7 +250,13 @@ export function ResearchLab({
         .then((next) => {
           setJob(next);
           if (next.status === "DONE") {
-            void loadSummary(next.experiment_id).then(() => refreshPastList());
+            if (next.experiment_id === "ml-train") {
+              setResultWarnings(next.warnings ?? []);
+              void refreshMlRegistry();
+              void refreshPastList();
+            } else {
+              void loadSummary(next.experiment_id).then(() => refreshPastList());
+            }
             setIdManual(false);
           }
           if (next.status === "FAILED") {
@@ -244,7 +270,7 @@ export function ResearchLab({
         });
     }, pollIntervalMs);
     return () => window.clearInterval(handle);
-  }, [job, loadSummary, pollIntervalMs, refreshPastList]);
+  }, [job, loadSummary, pollIntervalMs, refreshMlRegistry, refreshPastList]);
 
   const effectiveShareGrid = useMemo(() => {
     if (preset !== "custom") {
@@ -286,6 +312,41 @@ export function ResearchLab({
   const onOpenPast = (id: string) => {
     setError(null);
     void loadSummary(id);
+  };
+
+  const onTrainMl = async () => {
+    setError(null);
+    if (mlRegistry?.present) {
+      const ok = confirmFn(
+        "Уже есть frozen CatBoost в output/ml_frozen. Переобучить и перезаписать?",
+      );
+      if (!ok) {
+        return;
+      }
+    } else {
+      const ok = confirmFn(
+        "Обучить CatBoost на bootstrap rules-прогонах и сохранить в output/ml_frozen? Это займёт несколько минут.",
+      );
+      if (!ok) {
+        return;
+      }
+    }
+    setTraining(true);
+    try {
+      const accepted = await postTrainMl({});
+      setJob({
+        job_id: accepted.job_id,
+        experiment_id: accepted.experiment_id,
+        status: accepted.status,
+        done: 0,
+        total: 4,
+      });
+      setResultWarnings([]);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Не удалось запустить обучение");
+    } finally {
+      setTraining(false);
+    }
   };
 
   const onLaunch = async () => {
@@ -350,12 +411,49 @@ export function ResearchLab({
 
   return (
     <div className="h-screen overflow-y-auto overscroll-contain bg-slate-50 p-6 text-slate-900">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Лаборатория исследований</h1>
-        <p className="text-sm text-slate-600">
-          Сетка сценариев по доле ML-продавцов: прогоны, сводка, графики F1–F5.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Лаборатория исследований</h1>
+          <p className="text-sm text-slate-600">
+            Сетка сценариев по доле ML-продавцов: прогоны, сводка, графики F1–F5.
+          </p>
+        </div>
+        <a
+          href="#"
+          data-testid="nav-live-terminal"
+          className="text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+        >
+          ← Live terminal
+        </a>
       </header>
+
+      <section
+        className="mb-6 max-w-3xl rounded border border-slate-200 bg-white p-4"
+        data-testid="ml-train-panel"
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Frozen CatBoost
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Paper/smoke с ML используют registry из{" "}
+          <span className="font-mono text-xs">output/ml_frozen</span>. Без него — research stub.
+        </p>
+        <p className="mt-2 text-sm" data-testid="ml-registry-status">
+          {mlRegistry == null
+            ? "Статус registry: …"
+            : mlRegistry.present
+              ? `Готов · strategies: ${(mlRegistry.strategies ?? []).join(", ") || "—"} · ${mlRegistry.catboost_version ?? ""}`
+              : "Нет frozen registry — перед paper нажмите «Обучить CatBoost»."}
+        </p>
+        <button
+          type="button"
+          className="mt-3 rounded border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-40"
+          disabled={formLocked}
+          onClick={() => void onTrainMl()}
+        >
+          {training || (running && isTrainJob) ? "Обучение…" : "Обучить CatBoost"}
+        </button>
+      </section>
 
       <div className="mb-6 grid gap-6 lg:grid-cols-[minmax(0,28rem)_minmax(0,1fr)]">
         <section className="space-y-3 rounded border border-slate-200 bg-white p-4">
@@ -546,7 +644,8 @@ export function ResearchLab({
             Статус задачи
           </h2>
           <p className="mt-2 font-mono text-sm">
-            {statusLabel(job.status)} {job.done} / {job.total} прогонов — {job.experiment_id}
+            {statusLabel(job.status)} {job.done} / {job.total}{" "}
+            {isTrainJob ? "шагов обучения" : "прогонов"} — {job.experiment_id}
           </p>
           {typeof job.current_ml_share === "number" ? (
             <p className="text-xs text-slate-500">

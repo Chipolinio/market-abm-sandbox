@@ -16,6 +16,7 @@ from market_abm.ml.catboost_repricing import (
 # Env override: directory containing ml/registry.json, or the registry.json itself.
 _ENV_REGISTRY: str = "MARKET_ABM_ML_REGISTRY"
 # Default cached frozen root (run_root layout: <root>/ml/registry.json).
+_ENV_FROZEN_DIR: str = "MARKET_ABM_ML_FROZEN_DIR"
 _DEFAULT_FROZEN_ROOT: Path = Path("output") / "ml_frozen"
 
 # Constant log-δ used when no trained CatBoost is available.
@@ -79,7 +80,8 @@ def resolve_research_ml_registry() -> tuple[CatBoostModelRegistry, list[str]]:
         warnings.append("ml_registry=frozen_env")
         return registry, warnings
 
-    frozen = load_frozen_registry_for_run(_DEFAULT_FROZEN_ROOT)
+    frozen_root = Path(os.environ.get(_ENV_FROZEN_DIR, "").strip() or _DEFAULT_FROZEN_ROOT)
+    frozen = load_frozen_registry_for_run(frozen_root)
     if frozen is not None:
         warnings.append("ml_registry=frozen_default")
         return frozen, warnings

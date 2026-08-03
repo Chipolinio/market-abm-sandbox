@@ -323,3 +323,124 @@ def start_experiment_job_background(
         "experiment_id": experiment_id,
         "status": "RUNNING",
     }
+
+
+def execute_train_job(
+    job_id: str,
+    experiments_dir: Path,
+    request_body: dict[str, Any],
+) -> None:
+    """Bootstrap → fit CatBoost → freeze under frozen_root. Shares experiment job lock."""
+    from experiments.train_frozen import TRAIN_EXPERIMENT_ID, train_frozen_registry
+
+    experiment_id = str(request_body.get("experiment_id") or TRAIN_EXPERIMENT_ID)
+    frozen_root = Path(str(request_body.get("frozen_root") or "output/ml_frozen"))
+    n_runs = int(request_body.get("n_runs", 3))
+    total = n_runs + 1
+    warnings: list[str] = []
+    try:
+        update_job_status(
+            experiments_dir,
+            job_id,
+            status="RUNNING",
+            experiment_id=experiment_id,
+            done=0,
+            total=total,
+        )
+
+        def _on_progress(done: int, total_steps: int, _phase: str) -> None:
+            update_job_status(
+                experiments_dir,
+                job_id,
+                status="RUNNING",
+                experiment_id=experiment_id,
+                done=done,
+                total=total_steps,
+                warnings=warnings,
+            )
+
+        meta = train_frozen_registry(
+            frozen_root=frozen_root,
+            work_dir=experiments_dir / "_ml_bootstrap",
+            n_runs=n_runs,
+            n_ticks_per_run=int(request_body.get("n_ticks_per_run", 40)),
+            n_buyers=int(request_body.get("n_buyers", 80)),
+            n_sellers=int(request_body.get("n_sellers", 24)),
+            population_seed=int(request_body.get("population_seed", 42)),
+            min_rows_per_strategy=int(request_body.get("min_rows_per_strategy", 30)),
+            on_progress=_on_progress,
+        )
+        warnings.append(
+            f"ml_registry=frozen_trained rows={meta.get('n_training_rows')} "
+            f"path={meta.get('registry_path')}"
+        )
+        (experiments_dir / "_jobs" / "last_train.json").write_text(
+            json.dumps(meta, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        update_job_status(
+            experiments_dir,
+            job_id,
+            status="DONE",
+            experiment_id=experiment_id,
+            done=total,
+            total=total,
+            warnings=warnings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        update_job_status(
+            experiments_dir,
+            job_id,
+            status="FAILED",
+            experiment_id=experiment_id,
+            done=0,
+            total=total,
+            error=str(exc),
+            warnings=warnings,
+        )
+    finally:
+        release_job_lock()
+
+
+def start_train_job_background(
+    experiments_dir: Path,
+    request_body: dict[str, Any] | None = None,
+    *,
+    execute_fn: Callable[[str, Path, dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Acquire same research lock, spawn train daemon thread."""
+    from experiments.train_frozen import TRAIN_EXPERIMENT_ID
+
+    body = dict(request_body or {})
+    experiment_id = str(body.get("experiment_id") or TRAIN_EXPERIMENT_ID)
+    body["experiment_id"] = experiment_id
+    ok, busy_id = try_acquire_job_lock(experiment_id)
+    if not ok:
+        raise RuntimeError(busy_id or "unknown")
+
+    job_id = f"job_{uuid.uuid4().hex[:12]}"
+    bind_active_job(job_id, experiment_id)
+    n_runs = int(body.get("n_runs", 3))
+    total = n_runs + 1
+    update_job_status(
+        experiments_dir,
+        job_id,
+        status="RUNNING",
+        experiment_id=experiment_id,
+        done=0,
+        total=total,
+    )
+
+    worker = execute_fn or execute_train_job
+    thread = threading.Thread(
+        target=worker,
+        args=(job_id, experiments_dir, body),
+        daemon=True,
+        name=f"train-job-{job_id}",
+    )
+    thread.start()
+    return {
+        "job_id": job_id,
+        "experiment_id": experiment_id,
+        "status": "RUNNING",
+    }

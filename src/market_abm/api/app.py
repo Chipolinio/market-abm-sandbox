@@ -107,6 +107,7 @@ def create_app(
     artifacts_dir: str | None = None,
     analytics_store: Any = None,
     experiments_dir: str | None = None,
+    ml_frozen_dir: str | None = None,
     enable_cors: bool | None = None,
 ) -> FastAPI:
     """
@@ -120,6 +121,7 @@ def create_app(
     - artifacts_dir: корень Parquet-артефактов для analytics router (prod)
     - analytics_store: инжектированный AnalyticsStore (тесты)
     - experiments_dir: корень batch experiment outputs (Spec 015 Research Lab)
+    - ml_frozen_dir: frozen CatBoost root (default output/ml_frozen)
     - enable_cors: True при ENABLE_CORS=1 (vite dev); в Docker/Nginx — False
     """
     if enable_cors is None:
@@ -161,6 +163,9 @@ def create_app(
         "EXPERIMENTS_DIR", "output/experiments"
     )
     Path(app.state.experiments_dir).mkdir(parents=True, exist_ok=True)
+    app.state.ml_frozen_dir = ml_frozen_dir or os.getenv(
+        "MARKET_ABM_ML_FROZEN_DIR", "output/ml_frozen"
+    )
     try:
         from experiments.job_runner import mark_stale_running_jobs_failed
 

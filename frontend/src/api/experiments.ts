@@ -6,6 +6,7 @@ import type {
   ExperimentRunRequest,
   ExperimentSummaryResponse,
   JobStatus,
+  MlRegistryStatus,
 } from "@/types/experiments";
 
 export async function fetchExperimentList(): Promise<string[]> {
@@ -39,6 +40,17 @@ export async function postExperimentRun(
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export async function postTrainMl(body: Record<string, unknown> = {}): Promise<ExperimentRunAccepted> {
+  return apiFetch<ExperimentRunAccepted>("/api/v1/experiments/train-ml", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function fetchMlRegistryStatus(): Promise<MlRegistryStatus> {
+  return apiFetch<MlRegistryStatus>("/api/v1/experiments/ml-registry");
 }
 
 export async function fetchCurrentJob(): Promise<CurrentJobResponse> {

@@ -73,4 +73,13 @@ describe("TradingTerminalLayout", () => {
     expect(leftSidebar).not.toBeNull();
     expect(hasClass(leftSidebar!, "overflow-y-auto")).toBe(true);
   });
+
+  it("links to Research Lab from top bar", () => {
+    const { container } = render(
+      <TradingTerminalLayout metrics={null} connectionState="closed" workerState="IDLE" />,
+    );
+    const link = container.querySelector('[data-testid="nav-research-lab"]');
+    expect(link).not.toBeNull();
+    expect(link!.getAttribute("href")).toBe("#research");
+  });
 });

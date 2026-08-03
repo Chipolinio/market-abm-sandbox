@@ -16,7 +16,9 @@ from experiments.job_runner import (
     read_job_status,
     reset_job_lock_for_tests,
     start_experiment_job_background,
+    start_train_job_background,
 )
+from experiments.train_frozen import DEFAULT_FROZEN_ROOT, TRAIN_EXPERIMENT_ID, frozen_registry_status
 
 router = APIRouter(prefix="/api/v1/experiments", tags=["experiments"])
 
@@ -61,6 +63,25 @@ class ExperimentRunAccepted(BaseModel):
     status: str
 
 
+class TrainMlRequest(BaseModel):
+    n_runs: int = Field(default=3, ge=1, le=20)
+    n_ticks_per_run: int = Field(default=40, ge=5, le=500)
+    n_buyers: int = Field(default=80, ge=10)
+    n_sellers: int = Field(default=24, ge=4)
+    population_seed: int = 42
+    min_rows_per_strategy: int = Field(default=30, ge=5)
+
+
+class MlRegistryStatusResponse(BaseModel):
+    present: bool
+    frozen_root: str
+    registry_path: str
+    strategies: list[str] = Field(default_factory=list)
+    train_config_hash: str | None = None
+    catboost_version: str | None = None
+    corrupt: bool = False
+
+
 class JobStatusDTO(BaseModel):
     job_id: str
     experiment_id: str
@@ -86,6 +107,11 @@ def _experiments_root(request: Request) -> Path:
     root = Path(raw)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _frozen_root(request: Request) -> Path:
+    raw = getattr(request.app.state, "ml_frozen_dir", None)
+    return Path(raw) if raw else Path(DEFAULT_FROZEN_ROOT)
 
 
 def _validate_experiment_id(experiment_id: str) -> str:
@@ -117,6 +143,36 @@ def start_experiment_run(
             },
         )
     return ExperimentRunAccepted.model_validate(accepted)
+
+
+@router.post("/train-ml", status_code=202, response_model=ExperimentRunAccepted)
+def start_train_ml(
+    body: TrainMlRequest,
+    request: Request,
+) -> ExperimentRunAccepted | JSONResponse:
+    """Bootstrap rule runs → fit CatBoost → write frozen registry (shared job lock)."""
+    root = _experiments_root(request)
+    frozen = _frozen_root(request)
+    payload = body.model_dump()
+    payload["experiment_id"] = TRAIN_EXPERIMENT_ID
+    payload["frozen_root"] = str(frozen)
+    try:
+        accepted = start_train_job_background(root, payload)
+    except RuntimeError as exc:
+        busy = str(exc)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": f"Another experiment job ({busy}) is currently running.",
+            },
+        )
+    return ExperimentRunAccepted.model_validate(accepted)
+
+
+@router.get("/ml-registry", response_model=MlRegistryStatusResponse)
+def get_ml_registry_status(request: Request) -> MlRegistryStatusResponse:
+    status = frozen_registry_status(_frozen_root(request))
+    return MlRegistryStatusResponse.model_validate(status)
 
 
 @router.get("/jobs/current", response_model=CurrentJobResponse)

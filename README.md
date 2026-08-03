@@ -1,31 +1,88 @@
 # Market ABM
 
-Событийно-управляемый агентный симулятор рынка (Python DOD + React dashboard).
-
-Спецификации: [`specs/`](specs/). Текущий UI/Docker-инкремент: [`specs/007-frontend-and-docker.md`](specs/007-frontend-and-docker.md).
+Event-driven agent-based e-commerce market simulator: Python DOD/Polars core, FastAPI transport, React trading-terminal UI, and an offline Research Lab for paper grids.
 
 ---
 
-## Требования
+## What is this?
 
-| Компонент | Версия |
-|-----------|--------|
+**Market ABM** simulates a marketplace with heterogeneous buyers and sellers:
+
+- Buyers choose products under budget, engagement, and outside-option constraints.
+- Sellers reprice with rule strategies and optional CatBoost / hybrid ML policies.
+- Macro shocks (demand crash, recession narratives) feed stress, recovery, and segment dynamics.
+- The live UI is a **thin client**: charts and control state come from the backend (REST + WebSocket), not browser-side econometrics.
+- The **Research Lab** (`#research`) runs offline ML-share ablation batches and renders paper figures F1–F5 — separate from the live worker.
+
+---
+
+## What you can do with it
+
+| Mode | What you get |
+|------|----------------|
+| **Live terminal** | Start / pause / step / reset a simulation; watch prices, GMV, HHI, segments, sellers, shocks |
+| **Demand & crisis shocks** | Inject mild / standard / severe / recession protocols; read macro narratives in the cyber-log |
+| **Analytics** | Query Parquet + DuckDB-backed analytics (top listings, welfare, category ranking, …) |
+| **ML repricing** | Hybrid CatBoost policies for a share of sellers (optional `[ml]` extra) |
+| **Research Lab** | Smoke / paper / custom grids over ML share × seeds; summary table, robust stats, figure gallery |
+| **Docker stack** | Production-like Nginx + API with persisted run volume |
+
+---
+
+## Architecture
+
+```
+┌─────────────────┐     REST / WS      ┌──────────────────────────┐
+│  React SPA      │ ◄────────────────► │  FastAPI (stateless)     │
+│  Vite / Nginx   │                    │  + LiveSimulation worker │
+└─────────────────┘                    └────────────┬─────────────┘
+                                                    │
+                       Parquet artifacts            │  IPC / shared memory
+                       (runs/, experiments/)        ▼
+                                         ┌──────────────────────┐
+                                         │ Simulation core      │
+                                         │ (Polars DOD tick)    │
+                                         └──────────┬───────────┘
+                                                    │
+                                         ┌──────────▼───────────┐
+                                         │ AnalyticsStore       │
+                                         │ (DuckDB, read-only)  │
+                                         └──────────────────────┘
+
+Offline: experiments/batch_runner → aggregate → figures → output/experiments/<id>/
+```
+
+**Principles**
+
+- Simulation **writes** Parquet; analytics is **read-side**.
+- FastAPI does not own durable sim state — the worker process does.
+- React merges series by `tick_id` (REST backfill ↔ WS) to avoid duplicate points after refresh.
+- Research jobs run in a background thread under `/api/v1/experiments/*` (one job at a time).
+
+---
+
+## Requirements
+
+| Component | Version |
+|-----------|---------|
 | Python | 3.12+ |
 | Node.js | 22+ (frontend) |
-| Docker Compose | v2 (опционально, для production-like стека) |
+| Docker Compose | v2 (optional) |
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+# optional CatBoost for ML paths:
+# pip install -e ".[dev,ml]"
 cd frontend && npm ci
 ```
 
 ---
 
-## Локальная разработка (без Docker)
+## Run locally (no Docker)
 
-Backend и frontend запускаются отдельно. **CORS нужен только в этом режиме.**
+Backend and frontend are separate processes. **CORS is only for this mode.**
 
 ### Backend
 
@@ -33,12 +90,13 @@ Backend и frontend запускаются отдельно. **CORS нужен �
 ENABLE_CORS=1 .venv/bin/uvicorn market_abm.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-| Переменная | Значение | Назначение |
-|------------|----------|------------|
-| `ENABLE_CORS=1` | dev only | Разрешает запросы с `http://localhost:5173` (Vite) |
-| `SIMULATION_ARTIFACTS_DIR` | `runs/default` (default) | Каталог Parquet-артефактов |
-
-В Docker и production-like Compose **`ENABLE_CORS` не задавайте** — браузер ходит same-origin через Nginx.
+| Variable | Default / value | Role |
+|----------|-----------------|------|
+| `ENABLE_CORS=1` | unset in Docker | Allow Vite origin `http://localhost:5173` |
+| `SIMULATION_ARTIFACTS_DIR` | `runs/default` | Live Parquet run root |
+| `EXPERIMENTS_DIR` | `output/experiments` | Research Lab artifacts |
+| `MARKET_ABM_ML_REGISTRY` | unset → frozen dir / stub | Path to frozen CatBoost registry for experiments |
+| `MARKET_ABM_ML_FROZEN_DIR` | `output/ml_frozen` | Default train/load root (`…/ml/registry.json`) |
 
 ### Frontend
 
@@ -46,218 +104,101 @@ ENABLE_CORS=1 .venv/bin/uvicorn market_abm.main:app --reload --host 0.0.0.0 --po
 cd frontend && npm run dev
 ```
 
-Файл `frontend/.env.development` задаёт:
+`frontend/.env.development` points the SPA at:
 
 - `VITE_API_BASE_URL=http://localhost:8000`
 - `VITE_WS_BASE_URL=ws://localhost:8000`
 
-UI: [http://localhost:5173](http://localhost:5173)
+| URL | Purpose |
+|-----|---------|
+| [http://localhost:5173](http://localhost:5173) | Live trading terminal |
+| [http://localhost:5173/#research](http://localhost:5173/#research) | Research Lab |
 
 ---
 
-## Docker (production-like)
+## Run with Docker
 
-Из каталога `docker/`:
+From `docker/`:
 
 ```bash
 cd docker
 docker compose up --build
 ```
 
-### Порты
+| URL | Service | Notes |
+|-----|---------|--------|
+| [http://localhost:3000](http://localhost:3000) | Nginx frontend | **Use this in the browser** — same-origin `/api/` + WS |
+| [http://localhost:8000](http://localhost:8000) | Uvicorn | Direct API / health / debugging |
 
-| URL | Сервис | Назначение |
-|-----|--------|------------|
-| [http://localhost:3000](http://localhost:3000) | `market_abm_frontend` (Nginx) | React SPA + reverse-proxy `/api/` и WebSocket |
-| [http://localhost:8000](http://localhost:8000) | `market_abm_backend` (Uvicorn) | FastAPI напрямую (отладка, healthcheck) |
+Do **not** set `ENABLE_CORS` in Compose — the browser talks same-origin through Nginx.
 
-В браузере используйте **только `:3000`** — same-origin: API на `/api/v1/*`, WS на `/api/v1/stream/ws`.
-
-### Порядок старта
-
-1. Backend поднимается и проходит `GET /api/v1/health`.
-2. Frontend стартует после `depends_on: service_healthy` (без гонки 502).
-3. Nginx резолвит `market_abm_backend` через Docker DNS (`resolver 127.0.0.11`).
-
-### Dev override (bind-mount `runs/`)
-
-Чтобы инспектировать Parquet на хосте:
+### Dev override (inspect Parquet on the host)
 
 ```bash
 cd docker
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-Каталог `../runs` монтируется в `/data/runs`. На хосте он должен быть доступен UID **1000** (`chown 1000:1000 runs/` при ошибках записи).
+Host `../runs` mounts to `/data/runs`. If writes fail, ensure UID **1000** can write (`chown 1000:1000 runs/`).
 
-### Именованный volume и данные прогона
+### Data volume
 
-| Параметр | Значение |
-|----------|----------|
-| Volume | `market_abm_runs` (имя в Docker) |
-| Mount в backend | `/data/runs` |
+| Item | Value |
+|------|--------|
+| Volume | `market_abm_runs` |
+| Backend mount | `/data/runs` |
 | `SIMULATION_ARTIFACTS_DIR` | `/data/runs/default` |
-| Содержимое | `manifest.json`, `transactions/tick_*.parquet`, `products_snapshots/tick_*.parquet` |
-
-**Остановка без удаления данных:**
 
 ```bash
-docker compose down
+docker compose down          # keep volume
+docker compose down -v       # destroy run data
 ```
 
-Volume **сохраняется**. После `docker compose up` история графиков восстанавливается через REST backfill.
-
-**Полное уничтожение данных прогона:**
-
-```bash
-docker compose down -v
-```
-
-Флаг `-v` удаляет именованный volume `market_abm_runs`. Используйте осознанно — восстановление только из бэкапа.
-
-**Бэкап volume (операционная заметка):**
-
-```bash
-docker run --rm -v market_abm_runs:/data alpine tar czf - /data > market_abm_runs_backup.tar.gz
-```
-
-### Тестовый override (pytest)
-
-Автотесты используют `docker-compose.test.yml` — порты `18000`/`13000`, volume `market_abm_runs_pytest`, чтобы не конфликтовать с локальным стеком на `:3000`/`:8000`.
+Test Compose (`docker-compose.test.yml`) uses ports `18000` / `13000` and volume `market_abm_runs_pytest` so it does not clash with a local stack.
 
 ---
 
-## Тесты
+## Research Lab
+
+Offline batch experiments — **not** the live worker.
+
+Open from the live terminal via **Research Lab** in the top bar (`#research`), or go back with **← Live terminal**.
+
+1. **Обучить CatBoost** (once) — bootstrap rules runs → fit → `output/ml_frozen/ml/`. Shared job lock with experiment runs. Without this, grids use a deterministic stub and warn.
+2. Pick **Smoke** / **Paper** / **Custom** — IDs auto-suggest as `smoke-1`, `paper-1`, `custom-1`, …
+3. **Launch** → background job; after **DONE**: summary, warnings, figures F1–F5 under `output/experiments/<id>/`.
+
+Optional overrides: `MARKET_ABM_ML_REGISTRY` (path to registry), `MARKET_ABM_ML_FROZEN_DIR` (default `output/ml_frozen`). Needs `pip install -e ".[ml]"`.
+
+---
+
+## Tests
 
 ```bash
-# Python (без worker и docker)
+# Python (skip process/docker-heavy marks)
 .venv/bin/python -m pytest -m "not worker and not docker" -q
 
-# Docker volume smoke (нужен Docker daemon)
+# Worker / Docker / slow as needed
+.venv/bin/python -m pytest tests/worker/ -m worker -q
 .venv/bin/python -m pytest tests/docker/ -m docker -v
-
-# Bash smoke
-tests/docker/test_compose_smoke.sh
+.venv/bin/python -m pytest tests/simulation/test_recession_integration.py -m slow -q
 
 # Frontend
 cd frontend && npm test && npm run build
 ```
 
----
-
-## Ручной smoke — чеклист (слайс 7.6)
-
-Проверка через Docker UI на [http://localhost:3000](http://localhost:3000). Ориентир: ~10 минут.
-
-### Подготовка
-
-- [ ] `cd docker && docker compose up --build` — оба контейнера healthy
-- [ ] В статус-баре: badge **Connected**, state **IDLE**
-
-### Управление симуляцией
-
-- [ ] **Start** — state → `RUNNING`, `current_tick` растёт
-- [ ] Графики квантилей и GMV получают точки (stub-телеметрия в noop-режиме или данные из Parquet)
-- [ ] **Pause** — state → `PAUSED`, tick перестаёт расти
-- [ ] **Step** (в PAUSED) — tick +1
-- [ ] **Reset** — state → `IDLE`, tick → 0 (кнопка Reset disabled при `RUNNING`)
-
-### F5 и персистентность
-
-- [ ] Во время `RUNNING`: F5 — графики восстанавливаются (REST backfill + WS upsert), нет «колбасящихся» дублей
-- [ ] `docker compose restart market_abm_backend` — UI на `:3000` снова доступен; при наличии Parquet на volume backfill возвращает историю
-
-### Ошибки и пустые состояния
-
-- [ ] До Start: графики показывают «Waiting for simulation data…» / «Waiting for GMV data…»
-- [ ] При `FAILED`: красный баннер с `last_error`, Start disabled до Reset
-
-### Очистка (опционально)
-
-- [ ] `docker compose down` — данные на volume сохранены
-- [ ] `docker compose down -v` — графики пустые после следующего `up`
+Demand-shock smoke: `pytest tests/worker/test_demand_shock_smoke.py -q`.
 
 ---
 
-## Ручной smoke — demand shock (Spec 010)
+## Repository layout
 
-Проверка, что **«Запустить шок спроса»** даёт видимый отклик на графиках и в cyber-log. Ориентир: ~5 минут после базового чеклиста 7.6.
-
-Спека: [`specs/010-demand-shock-income-and-engagement.md`](specs/010-demand-shock-income-and-engagement.md).
-
-### Локальный стек (`:5173` + `:8000`)
-
-```bash
-ENABLE_CORS=1 .venv/bin/uvicorn market_abm.main:app --reload --host 0.0.0.0 --port 8000
-cd frontend && npm run dev
 ```
-
-### Подготовка
-
-- [ ] Configure: `n_buyers` ≥ 300, `n_sellers` ≥ 20 → **Start**
-- [ ] State `RUNNING`, `current_tick` растёт
-- [ ] Вкладка **Динамика рынка**: график **GMV** уже набирает точки (не пустой)
-
-### Шок спроса
-
-- [ ] Кнопка **«Запустить шок спроса»** (sidebar Zone A); сценарий mild / standard / severe — **без** `duration_ticks`
-- [ ] Cyber-log (Zone D): строка `DEMAND_SHOCK` с **macro narrative**, например:
-  - `Demand stress elevated (impulse=0.48, stress=0.52, est. half-life ~28 ticks). Budget/frequency curves active; low segment elasticity highest.`
-- [ ] В течение **1–3 тиков** после шока:
-  - [ ] GMV на графике **снижается** или стабилизируется ниже уровня непосредственно до шока
-  - [ ] (опционально) индекс цены может реагировать с лагом — главный сигнал — **GMV / число сделок**
-
-### Recession scenario (Spec 011)
-
-1. Configure **≥300 buyers**, **≥20 sellers** → **Start**
-2. Дождитесь **~30 тиков** baseline (график GMV стабилен)
-3. Sidebar → сценарий **«Рецессия»** → **Запустить шок спроса**
-4. Наблюдайте **90+ тиков**: GMV падает, recovery медленнее crash; после recovery plateau **ниже** pre-crisis
-5. Вкладки **Селлеры** (rank by tick revenue), **Demand matrix**, **Сегменты**, **Категории** — low×MaxVolume растёт в кризис; Ribbon / Zone A показывают `STRESS` + active shocks (Spec 014)
-
-Проверка автоматически: `pytest tests/simulation/test_recession_integration.py -m slow`
-
-### Регрессия thin client
-
-- [ ] Квантили цен **не** пересчитываются в браузере (значения = backend DTO)
-- [ ] После **Reset** → новый Start графики и cyber-log обновляются без stale данных
-
-### Автоматический smoke (CI / локально)
-
-```bash
-.venv/bin/python -m pytest tests/worker/test_demand_shock_smoke.py -q
+src/market_abm/     # simulation, analytics, API, worker, ML
+frontend/           # React trading terminal + Research Lab
+experiments/        # offline batch, aggregate, figures, job runner
+docker/             # Compose + Dockerfiles
+tests/              # pytest
+output/experiments/ # Research Lab artifacts (generated)
+runs/               # live Parquet runs (generated / Docker volume)
 ```
-
-Проверяет `LiveSimulationSession`: тик с `DEMAND_CRASH` → GMV и txn count ниже, чем на тике до шока; cyber-log message содержит frequency channel.
-
----
-
-## Research Lab (Spec 015 / 015.1)
-
-Offline batch experiments for paper grids (ML share ablation × seeds). **Not** the live trading terminal.
-
-1. Open UI: `http://localhost:5173/#research`
-2. Choose preset **Smoke** (fast) or **Paper** (confirm dialog — ~75k tick-sims)
-3. **Launch** → API `POST /api/v1/experiments/run` returns **202**; job runs in a background thread
-4. Status polls `GET /api/v1/experiments/jobs/current` (~2s); after **DONE**, summary table loads from artifacts
-5. Artifacts: `EXPERIMENTS_DIR` (default `output/experiments/{experiment_id}/`)
-
-One research job at a time (**409** if busy). Cancel is not in v1. Live Start/Pause worker is unrelated.
-
----
-
-## Архитектура (кратко)
-
-- **Симуляция** пишет Parquet; **AnalyticsStore** (DuckDB) — read-only query-side.
-- **FastAPI** stateless; состояние воркера — shared memory + IPC.
-- **React** — thin client: квантили/GMV не считаются в браузере; merge серий по `tick_id` (anti-race REST ↔ WS).
-
-Подробнее: [`specs/007-frontend-and-docker.md`](specs/007-frontend-and-docker.md).
-
-### Dense-графики (топ-N SKU, слайс 7.7)
-
-Дашборд показывает до **10 listing** по суммарному GMV — три dense-графика (price, GMV, volume):
-
-- REST: `GET /api/v1/analytics/top-listings?limit=10`
-- Буфер: `DENSE_SERIES_CAP=600`, рендер: downsample до 600 точек
-- Данные появляются после записи Parquet (noop-воркер без runner — секция пустая)

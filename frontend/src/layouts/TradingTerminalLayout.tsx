@@ -69,8 +69,15 @@ export function TradingTerminalLayout({
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-white text-foreground">
       <header
         data-testid="zone-top-bar"
-        className="flex h-14 w-full shrink-0 items-center border-b border-border bg-white px-4"
+        className="flex h-14 w-full shrink-0 items-center gap-4 border-b border-border bg-white px-4"
       >
+        <a
+          href="#research"
+          data-testid="nav-research-lab"
+          className="shrink-0 text-sm font-medium text-slate-700 underline-offset-4 hover:underline"
+        >
+          Research Lab
+        </a>
         <TickerRibbon
           metrics={metrics}
           connectionState={connectionState}

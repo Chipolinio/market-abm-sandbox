@@ -42,6 +42,16 @@ export type ExperimentRunAccepted = {
   status: string;
 };
 
+export type MlRegistryStatus = {
+  present: boolean;
+  frozen_root: string;
+  registry_path: string;
+  strategies?: string[];
+  train_config_hash?: string | null;
+  catboost_version?: string | null;
+  corrupt?: boolean;
+};
+
 export type JobStatus = {
   job_id: string;
   experiment_id: string;
