@@ -133,7 +133,8 @@ def test_step_returns_products_and_transactions_with_expected_columns() -> None:
     products = _products_df([0], [100.0])
     products_next, transactions, _ = step(buyers, sellers, products, _step_config())
     assert products_next.height == products.height
-    assert products_next.columns == list(PRODUCTS_COLUMNS)
+    # Spec 013: ranking_score is an ephemeral extra column on live products_next
+    assert set(PRODUCTS_COLUMNS).issubset(products_next.columns)
     assert transactions.columns == list(TRANSACTIONS_COLUMNS)
 
 

@@ -76,7 +76,8 @@ def test_smoke_three_ticks_end_to_end() -> None:
         products, transactions, _ = step(buyers, sellers, products, config)
 
         assert products.height == n_sellers
-        assert products.columns == list(PRODUCTS_COLUMNS)
+        # Spec 013: ranking_score is an ephemeral extra column on live products
+        assert set(PRODUCTS_COLUMNS).issubset(products.columns)
         assert transactions.columns == list(TRANSACTIONS_COLUMNS)
         assert products[COL_LISTING_ID].equals(products[COL_SELLER_ID])
 

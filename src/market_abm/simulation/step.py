@@ -24,6 +24,7 @@ from market_abm.domain.constants import (
     COL_PRICE,
     COL_PRICE_PAID,
     COL_PURCHASE_FREQUENCY,
+    COL_RANKING_SCORE,
     COL_RATING_VALUE,
     COL_SELLER_ID,
     COL_TICK_ID,
@@ -40,6 +41,7 @@ from market_abm.analytics.features import build_repricing_feature_matrix
 from market_abm.analytics.store import AnalyticsStore
 from market_abm.simulation.buyers_baseline import ensure_budget_baseline, ensure_buyer_economic_columns
 from market_abm.simulation.choice import choose_listings_for_all_buyers
+from market_abm.simulation.ranking import compute_ranking_scores
 from market_abm.simulation.rating import update_rating_ema
 from market_abm.simulation.repricing import (
     apply_ml_repricing_tick,
@@ -324,8 +326,18 @@ def _reprice_to_products(
             on=COL_LISTING_ID,
             how="left",
         )
+    # Spec 013 §4.1: ranking_score is ephemeral per tick but must survive reprice join
+    if (
+        COL_RANKING_SCORE in products_with_demand.columns
+        and COL_RANKING_SCORE not in merged.columns
+    ):
+        merged = merged.join(
+            products_with_demand.select([COL_LISTING_ID, COL_RANKING_SCORE]),
+            on=COL_LISTING_ID,
+            how="left",
+        )
     merged = apply_marketplace_promotion_caps(merged, simulation_context, catalog)
-    # Preserve extra columns (category_id, etc.) carried through repricing (Spec 012 §7.1)
+    # Preserve extra columns (category_id, ranking_score, etc.) (Spec 012 §7.1 / Spec 013)
     select_cols = list(PRODUCTS_COLUMNS)
     extra_from_products = [
         c for c in products_with_demand.columns
@@ -414,21 +426,37 @@ def step(
             sellers_state_df, empty_tx, config
         )
 
+    # Spec 013 §4: one ranking precompute/tick → consideration Top-K ∪ Sample-M
+    # Sales window cold-start: None → zeros inside compute_ranking_scores (w3).
+    ranked = compute_ranking_scores(
+        products_pool,
+        config.choice.ranking,
+        sales_volume_by_listing=None,
+    )
+    ranking_scores = ranked[COL_RANKING_SCORE].to_numpy()
+    if COL_CATEGORY_ID in ranked.columns:
+        category_ids = ranked[COL_CATEGORY_ID].to_numpy()
+    else:
+        # Spec 013 §4.3 / §17#5: rating-only scores; still activate consideration path
+        category_ids = np.zeros(ranked.height, dtype=np.int32)
+
     choices = choose_listings_for_all_buyers(
         active_buyers,
-        products_pool,
+        ranked,
         seed=config.seed,
         config=config.choice,
         segment_elasticity=(
             macro_config.segment_elasticity if macro_config is not None else None
         ),
+        category_ids=category_ids,
+        ranking_scores=ranking_scores,
     )
     transactions = _build_transactions_df(
-        choices, products_pool, tick_id=config.tick_id
+        choices, ranked, tick_id=config.tick_id
     )
     # Spec 012 §6: EMA rating update from seed-aware reviews after settle
     products_rated = update_rating_ema(
-        products_pool,
+        ranked,
         transactions,
         seed=config.seed,
         tick_id=config.tick_id,
