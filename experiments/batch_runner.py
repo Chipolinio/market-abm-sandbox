@@ -101,10 +101,15 @@ def _execute_one_run(task: dict[str, Any]) -> dict[str, Any]:
             update={"ml_seller_share": 0.0}
         )
 
+    # Match live SimulationSession choice scale: card utilities are ~−50…−90
+    # (β_price≈−2 × price≈35). Default config bias −1.5 always picks outside →
+    # zero n_tx/GMV/HHI; −8 is still above typical U. Live uses −100 + segment map.
     config = SimulationRunConfig(
         seed=seed,
         choice=ChoiceModelConfig(
             engine="numpy_softmax",
+            outside_utility_bias=-100.0,
+            outside_utility_bias_by_pvd_segment=ChoiceModelConfig.default_segment_biases(),
             max_products_per_choice_set=min(50, max(n_sellers * 2, 8)),
             buyers_batch_size=max(n_buyers, 200),
         ),
@@ -146,10 +151,12 @@ def run_experiment(
     manifest: ExperimentManifest,
     *,
     jobs: int | None = None,
+    on_progress: Any | None = None,
 ) -> dict[str, Any]:
     """
     Run full ml_share × seed grid. jobs=1 sequential; jobs>1 ProcessPoolExecutor.
     Returns index dict with experiment_id and runs[].
+    on_progress(done, total, ml_share, run_index) optional callback after each run.
     """
     n_jobs = 1 if jobs is None else int(jobs)
     if n_jobs < 1:
@@ -175,15 +182,29 @@ def run_experiment(
                 }
             )
 
+    total = len(tasks)
     results: list[dict[str, Any]] = []
     if n_jobs == 1:
-        for task in tasks:
-            results.append(_execute_one_run(task))
+        for i, task in enumerate(tasks, start=1):
+            meta = _execute_one_run(task)
+            results.append(meta)
+            if on_progress is not None:
+                on_progress(i, total, float(task["ml_share"]), int(task["run_index"]))
     else:
         with ProcessPoolExecutor(max_workers=n_jobs) as pool:
-            futures = [pool.submit(_execute_one_run, task) for task in tasks]
-            for fut in as_completed(futures):
+            future_map = {pool.submit(_execute_one_run, task): task for task in tasks}
+            done_count = 0
+            for fut in as_completed(future_map):
+                task = future_map[fut]
                 results.append(fut.result())
+                done_count += 1
+                if on_progress is not None:
+                    on_progress(
+                        done_count,
+                        total,
+                        float(task["ml_share"]),
+                        int(task["run_index"]),
+                    )
 
     # Stable index order: ml_share then run_index (not completion order).
     results.sort(key=lambda r: (float(r["ml_share"]), int(r["run_index"])))

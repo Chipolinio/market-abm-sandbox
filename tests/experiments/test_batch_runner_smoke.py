@@ -98,3 +98,21 @@ def test_15_1_t6_batch_jobs_flag_smoke(tmp_path: Path) -> None:
     assert by_key[(0.0, 0)] == by_key[(0.5, 0)]
     assert by_key[(0.0, 1)] == by_key[(0.5, 1)]
 
+
+def test_batch_choice_calibration_produces_transactions(tmp_path: Path) -> None:
+    """Research batch must match live choice scale or GMV/HHI collapse to 0."""
+    manifest = _smoke_manifest(
+        tmp_path,
+        n_runs=1,
+        n_ticks=10,
+        n_buyers=80,
+        n_sellers=8,
+        base_seed=10000,
+    )
+    run_experiment(manifest, jobs=1)
+    metrics = pl.read_parquet(
+        Path(manifest.output_dir) / "ml_0.00" / "run_000" / "tick_metrics.parquet"
+    )
+    assert int(metrics["n_tx"].sum()) > 0
+    assert float(metrics["gmv"].sum()) > 0.0
+

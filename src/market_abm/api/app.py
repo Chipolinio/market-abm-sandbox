@@ -7,6 +7,7 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -159,6 +160,13 @@ def create_app(
     app.state.experiments_dir = experiments_dir or os.getenv(
         "EXPERIMENTS_DIR", "output/experiments"
     )
+    Path(app.state.experiments_dir).mkdir(parents=True, exist_ok=True)
+    try:
+        from experiments.job_runner import mark_stale_running_jobs_failed
+
+        mark_stale_running_jobs_failed(Path(app.state.experiments_dir))
+    except Exception:
+        pass
     app.include_router(health_router)
     app.include_router(control_router)
     app.include_router(analytics_router)

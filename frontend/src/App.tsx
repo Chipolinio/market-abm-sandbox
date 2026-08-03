@@ -12,8 +12,6 @@ import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
 import { ResearchLab } from "@/pages/ResearchLab";
 import type { WorkerState } from "@/api/types";
 import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
-import type { ExperimentSummaryRow } from "@/types/experiments";
-import { fetchExperimentSummary } from "@/api/experiments";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
 import { markerLabelForShock, mergeEventMarker } from "@/utils/eventMarkers";
 import { resolveSimulationTick } from "@/utils/simulationTick";
@@ -25,8 +23,6 @@ function isResearchHash(): boolean {
 
 export default function App() {
   const [researchMode, setResearchMode] = useState(isResearchHash);
-  const [researchRows, setResearchRows] = useState<ExperimentSummaryRow[]>([]);
-  const researchId = "paper_grid_v1";
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
@@ -42,27 +38,6 @@ export default function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-
-  useEffect(() => {
-    if (!researchMode) {
-      return;
-    }
-    let cancelled = false;
-    void fetchExperimentSummary(researchId)
-      .then((res) => {
-        if (!cancelled) {
-          setResearchRows(res.rows);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setResearchRows([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [researchMode, researchId]);
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
 
@@ -213,7 +188,7 @@ export default function App() {
   return (
     <>
       {researchMode ? (
-        <ResearchLab experimentId={researchId} summaryRows={researchRows} />
+        <ResearchLab />
       ) : (
         <>
       {showFailed ? (

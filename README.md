@@ -232,6 +232,20 @@ cd frontend && npm run dev
 
 ---
 
+## Research Lab (Spec 015 / 015.1)
+
+Offline batch experiments for paper grids (ML share ablation × seeds). **Not** the live trading terminal.
+
+1. Open UI: `http://localhost:5173/#research`
+2. Choose preset **Smoke** (fast) or **Paper** (confirm dialog — ~75k tick-sims)
+3. **Launch** → API `POST /api/v1/experiments/run` returns **202**; job runs in a background thread
+4. Status polls `GET /api/v1/experiments/jobs/current` (~2s); after **DONE**, summary table loads from artifacts
+5. Artifacts: `EXPERIMENTS_DIR` (default `output/experiments/{experiment_id}/`)
+
+One research job at a time (**409** if busy). Cancel is not in v1. Live Start/Pause worker is unrelated.
+
+---
+
 ## Архитектура (кратко)
 
 - **Симуляция** пишет Parquet; **AnalyticsStore** (DuckDB) — read-only query-side.
