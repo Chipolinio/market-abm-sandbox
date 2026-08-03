@@ -12,6 +12,7 @@ from market_abm.analytics.store import AnalyticsStore
 from market_abm.domain.constants import (
     COL_IS_BANKRUPT,
     COL_SELLER_ID,
+    COL_STOCK_UNITS,
     COL_STRATEGY_TYPE,
     COL_TICK_ID,
     COL_WORKING_CAPITAL,
@@ -64,9 +65,27 @@ def _logic_status_for_strategy(strategy: str, *, is_bankrupt: bool) -> str:
 
 
 def _inventory_by_seller(store: AnalyticsStore, tick_id: int) -> dict[int, int]:
-    products = store.products_snapshot_at_tick(tick_id)
+    """
+    Spec 012.1 §7 / §13.4-T1: inventory_stock = sum(stock_units) per seller.
+
+    Falls back to listing count when stock_units is absent (legacy snapshots).
+    """
+    resolved = _resolved_tick_id(store, tick_id, "products_snapshots")
+    path = store._run_root / "products_snapshots" / f"tick_{resolved:06d}.parquet"
+    if not path.is_file():
+        return {}
+    products = pl.read_parquet(path)
     if products.height == 0:
         return {}
+    if COL_STOCK_UNITS in products.columns:
+        summed = products.group_by(COL_SELLER_ID).agg(
+            pl.col(COL_STOCK_UNITS).sum().alias("_stock")
+        )
+        return {
+            int(row[COL_SELLER_ID]): int(row["_stock"])
+            for row in summed.iter_rows(named=True)
+        }
+    # Legacy: no stock ledger → keep prior stub (count of listings)
     counts = products.group_by(COL_SELLER_ID).len()
     return {int(row[COL_SELLER_ID]): int(row["len"]) for row in counts.iter_rows(named=True)}
 
