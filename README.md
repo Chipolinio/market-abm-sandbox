@@ -213,7 +213,7 @@ cd frontend && npm run dev
 2. Дождитесь **~30 тиков** baseline (график GMV стабилен)
 3. Sidebar → сценарий **«Рецессия»** → **Запустить шок спроса**
 4. Наблюдайте **90+ тиков**: GMV падает, recovery медленнее crash; после recovery plateau **ниже** pre-crisis
-5. Вкладки **Селлеры** (rank by tick revenue) и **Demand matrix** — low×MaxVolume растёт в кризис
+5. Вкладки **Селлеры** (rank by tick revenue), **Demand matrix**, **Сегменты**, **Категории** — low×MaxVolume растёт в кризис; Ribbon / Zone A показывают `STRESS` + active shocks (Spec 014)
 
 Проверка автоматически: `pytest tests/simulation/test_recession_integration.py -m slow`
 

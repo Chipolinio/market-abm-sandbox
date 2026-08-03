@@ -82,17 +82,24 @@ def make_payload_fn(store: object) -> Callable[[int], TickStreamPayload]:
         macro_state = None
         active_shocks: list[ActiveShockDTO] = []
         ref_price: float | None = None
-        memory = store.macro_memory() if hasattr(store, "macro_memory") else None  # type: ignore[union-attr]
-        if memory is not None:
+        memory_fn = getattr(store, "macro_memory", None)
+        memory = memory_fn() if callable(memory_fn) else None
+        if memory is not None and hasattr(memory, "read"):
             snap = memory.read(as_of_tick)  # type: ignore[union-attr]
             if snap is None:
                 snap = memory.read(None)  # type: ignore[union-attr]
-            if snap is not None:
-                macro_state = MacroStateDTO.model_validate(snap.macro_state)
-                active_shocks = [
-                    ActiveShockDTO.model_validate(row) for row in snap.active_shocks
-                ]
-                ref_price = snap.ref_price
+            raw_macro = getattr(snap, "macro_state", None) if snap is not None else None
+            if isinstance(raw_macro, dict):
+                macro_state = MacroStateDTO.model_validate(raw_macro)
+                raw_shocks = getattr(snap, "active_shocks", None) or []
+                if isinstance(raw_shocks, list):
+                    active_shocks = [
+                        ActiveShockDTO.model_validate(row) for row in raw_shocks
+                    ]
+                ref = getattr(snap, "ref_price", None)
+                ref_price = (
+                    float(ref) if isinstance(ref, (int, float)) else None
+                )
 
         return TickStreamPayload(
             tick_id=next_tick,
