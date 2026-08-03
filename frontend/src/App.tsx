@@ -59,10 +59,13 @@ export default function App() {
         if (event.display_code !== "DEMAND_SHOCK") {
           continue;
         }
+        const isBoom =
+          (event.payload as Record<string, unknown> | null | undefined)
+            ?.shock_type === "demand_boom";
         setCrashMarkers((prev) =>
           mergeEventMarker(prev, {
             tickId: event.tick_id,
-            label: "ШОК",
+            label: isBoom ? "БУМ" : "ШОК",
             payload: event.payload ?? null,
           }),
         );

@@ -60,7 +60,7 @@ describe("ControlPanel", () => {
     expect((screen.getByRole("button", { name: "Запустить — Шок спроса" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
-    expect(screen.getByText("Шоки доступны только после запуска симуляции.")).toBeTruthy();
+    expect(screen.getByText("События доступны только после запуска симуляции.")).toBeTruthy();
   });
 
   it("disables_start_when_running", () => {

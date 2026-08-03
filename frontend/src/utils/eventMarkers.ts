@@ -30,12 +30,13 @@ export function mergeEventMarker(prev: EventMarker[], marker: EventMarker): Even
   return next.slice(-8);
 }
 
-export function markerLabelForShock(
-  shockType: string,
-): "ШОК" | "АКЦИЯ" | null {
-  // Demand shocks are marked from WS DEMAND_SHOCK only (avoid double lines).
-  if (shockType === "marketplace_promotion") {
-    return "АКЦИЯ";
-  }
+export type MarkerLabel = "ШОК" | "БУМ" | "АКЦИЯ" | "СКИДКА";
+
+export function markerLabelForShock(shockType: string): MarkerLabel | null {
+  if (shockType === "marketplace_promotion") return "АКЦИЯ";
+  if (shockType === "platform_fee_cut") return "СКИДКА";
+  // Demand shocks (crash/boom) are confirmed via WS DEMAND_SHOCK events to
+  // avoid duplicate optimistic + server markers. Return null here so the
+  // caller does not add an optimistic marker.
   return null;
 }

@@ -103,8 +103,11 @@ export function GmvChart({ data, eventMarkers = [] }: Props) {
             name="gmv"
           />
           {eventMarkers.map((marker) => {
-            const isPromo = marker.label === "АКЦИЯ";
-            const stroke = isPromo ? "#059669" : "#B91C1C";
+            const isPositive =
+              marker.label === "АКЦИЯ" ||
+              marker.label === "БУМ" ||
+              marker.label === "СКИДКА";
+            const stroke = isPositive ? "#059669" : "#B91C1C";
             return (
               <ReferenceLine
                 key={`${marker.label}-${marker.tickId}`}
