@@ -9,14 +9,24 @@ import { useSimulationStatus } from "@/hooks/useSimulationStatus";
 import { useTickStream } from "@/hooks/useTickStream";
 import type { SimulationAction } from "@/components/sidebar/SimulationControlStrip";
 import { TradingTerminalLayout } from "@/layouts/TradingTerminalLayout";
+import { ResearchLab } from "@/pages/ResearchLab";
 import type { WorkerState } from "@/api/types";
 import type { ActiveShockDTO, MacroStateDTO } from "@/types/macro";
+import type { ExperimentSummaryRow } from "@/types/experiments";
+import { fetchExperimentSummary } from "@/api/experiments";
 import { toLastCompletedTick } from "@/utils/analyticsTick";
 import { markerLabelForShock, mergeEventMarker } from "@/utils/eventMarkers";
 import { resolveSimulationTick } from "@/utils/simulationTick";
 import type { SimulationShockRequest } from "@/types/shock";
 
+function isResearchHash(): boolean {
+  return typeof window !== "undefined" && window.location.hash.includes("research");
+}
+
 export default function App() {
+  const [researchMode, setResearchMode] = useState(isResearchHash);
+  const [researchRows, setResearchRows] = useState<ExperimentSummaryRow[]>([]);
+  const researchId = "paper_grid_v1";
   const [activeTab, setActiveTab] = useState<TerminalTabId>("dynamics");
   const [cyberLogBackfillKey, setCyberLogBackfillKey] = useState(0);
   const [highlightedSellerId, setHighlightedSellerId] = useState<number | null>(null);
@@ -26,6 +36,33 @@ export default function App() {
   const [activeShocks, setActiveShocks] = useState<ActiveShockDTO[]>([]);
   const [refPrice, setRefPrice] = useState<number | null>(null);
   const { status, refresh } = useSimulationStatus();
+
+  useEffect(() => {
+    const onHash = () => setResearchMode(isResearchHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    if (!researchMode) {
+      return;
+    }
+    let cancelled = false;
+    void fetchExperimentSummary(researchId)
+      .then((res) => {
+        if (!cancelled) {
+          setResearchRows(res.rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResearchRows([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [researchMode, researchId]);
 
   const { connectionState, lastPayload, reconnectAttempt } = useTickStream();
 
@@ -175,6 +212,10 @@ export default function App() {
 
   return (
     <>
+      {researchMode ? (
+        <ResearchLab experimentId={researchId} summaryRows={researchRows} />
+      ) : (
+        <>
       {showFailed ? (
         <div
           className="fixed left-0 right-0 top-0 z-50 border-b border-red-200 bg-red-50 px-4 py-2 text-center text-sm text-red-800"
@@ -208,6 +249,8 @@ export default function App() {
         highlightedSellerId={highlightedSellerId}
         onHighlightSeller={setHighlightedSellerId}
       />
+        </>
+      )}
     </>
   );
 }

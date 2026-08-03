@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from market_abm.api.broadcaster import ConnectionManager, broadcaster_loop
 from market_abm.api.routers.analytics import router as analytics_router
 from market_abm.api.routers.control import router as control_router
+from market_abm.api.routers.experiments import router as experiments_router
 from market_abm.api.routers.health import router as health_router
 from market_abm.api.routers.stream import router as stream_router
 from market_abm.api.schemas.stream import TickStreamPayload
@@ -104,6 +105,7 @@ def create_app(
     start_worker: bool = False,
     artifacts_dir: str | None = None,
     analytics_store: Any = None,
+    experiments_dir: str | None = None,
     enable_cors: bool | None = None,
 ) -> FastAPI:
     """
@@ -116,6 +118,7 @@ def create_app(
     - start_worker: если True, lifespan вызывает worker.process.start() при старте
     - artifacts_dir: корень Parquet-артефактов для analytics router (prod)
     - analytics_store: инжектированный AnalyticsStore (тесты)
+    - experiments_dir: корень batch experiment outputs (Spec 015 Research Lab)
     - enable_cors: True при ENABLE_CORS=1 (vite dev); в Docker/Nginx — False
     """
     if enable_cors is None:
@@ -153,8 +156,12 @@ def create_app(
     app.state.ws_manager = ws_manager
     app.state.artifacts_dir = artifacts_dir
     app.state.analytics_store = analytics_store
+    app.state.experiments_dir = experiments_dir or os.getenv(
+        "EXPERIMENTS_DIR", "output/experiments"
+    )
     app.include_router(health_router)
     app.include_router(control_router)
     app.include_router(analytics_router)
+    app.include_router(experiments_router)
     app.include_router(stream_router)
     return app
