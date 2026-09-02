@@ -16,3 +16,5 @@ services:
 volumes:
   market_abm_runs:
     name: market_abm_runs_pytest
+  market_abm_experiments:
+    name: market_abm_experiments_pytest

@@ -148,6 +148,9 @@ Host `../runs` mounts to `/data/runs`. If writes fail, ensure UID **1000** can w
 | Volume | `market_abm_runs` |
 | Backend mount | `/data/runs` |
 | `SIMULATION_ARTIFACTS_DIR` | `/data/runs/default` |
+| Volume | `market_abm_experiments` |
+| Experiments mount | `/data/experiments` |
+| `EXPERIMENTS_DIR` | `/data/experiments` |
 
 ```bash
 docker compose down          # keep volume

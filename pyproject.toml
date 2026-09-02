@@ -27,7 +27,8 @@ dev = ["pytest>=8.0"]
 ml = ["catboost>=1.2"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["market_abm*", "experiments*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

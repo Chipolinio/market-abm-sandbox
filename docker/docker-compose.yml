@@ -9,8 +9,11 @@ services:
     container_name: market_abm_backend
     environment:
       SIMULATION_ARTIFACTS_DIR: /data/runs/default
+      EXPERIMENTS_DIR: /data/experiments
+      MARKET_ABM_ML_FROZEN_DIR: /data/ml_frozen
     volumes:
       - market_abm_runs:/data/runs
+      - market_abm_experiments:/data/experiments
     ports:
       - "8000:8000"
     healthcheck:
@@ -36,3 +39,5 @@ services:
 volumes:
   market_abm_runs:
     name: market_abm_runs
+  market_abm_experiments:
+    name: market_abm_experiments
